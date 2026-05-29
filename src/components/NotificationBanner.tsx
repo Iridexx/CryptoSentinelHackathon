@@ -1,18 +1,18 @@
 import { useState, type FC } from 'react';
-import { requestNotificationPermission } from '../utils/notifications';
 
 interface Props {
   permission: NotificationPermission;
   onPermissionChange: (p: NotificationPermission) => void;
+  onRequest: () => Promise<NotificationPermission>;
 }
 
-const NotificationBanner: FC<Props> = ({ permission, onPermissionChange }) => {
+const NotificationBanner: FC<Props> = ({ permission, onPermissionChange, onRequest }) => {
   const [dismissed, setDismissed] = useState(false);
 
   if (permission === 'granted' || dismissed) return null;
 
   const handleRequest = async () => {
-    const result = await requestNotificationPermission();
+    const result = await onRequest();
     onPermissionChange(result);
     if (result !== 'default') setDismissed(true);
   };
@@ -23,11 +23,11 @@ const NotificationBanner: FC<Props> = ({ permission, onPermissionChange }) => {
       <div className="flex-1 min-w-0">
         {permission === 'denied' ? (
           <p className="text-xs text-gray-300">
-            Le notifiche sono bloccate. Abilitale nelle impostazioni del browser per ricevere gli allarmi.
+            Le notifiche sono bloccate. Abilitale nelle impostazioni del telefono.
           </p>
         ) : (
           <p className="text-xs text-gray-300">
-            Abilita le notifiche per ricevere gli allarmi di prezzo anche a schermo bloccato.
+            Abilita le notifiche per ricevere gli allarmi anche a schermo bloccato.
           </p>
         )}
       </div>

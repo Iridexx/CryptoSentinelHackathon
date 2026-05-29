@@ -1,9 +1,13 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Coin } from './types';
 import { useCryptoData } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
-import { getNotificationPermission } from './utils/notifications';
+import {
+  getNotificationPermission,
+  getNotificationPermissionAsync,
+  requestNotificationPermission,
+} from './utils/notifications';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
@@ -15,6 +19,11 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission);
+
+  // Su piattaforma nativa, richiede i permessi subito e aggiorna lo stato
+  useEffect(() => {
+    getNotificationPermissionAsync().then(setNotifPerm);
+  }, []);
 
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData();
   const { favorites, toggle: toggleFavorite, isFavorite } = useFavorites();
@@ -52,10 +61,14 @@ export default function App() {
 
   const triggeredCount = alerts.filter((a) => a.triggered).length;
 
+  const handlePermissionChange = useCallback((p: NotificationPermission) => {
+    setNotifPerm(p);
+  }, []);
+
   return (
     <div className="flex flex-col h-full bg-dark-900">
       {/* Header */}
-      <header className="bg-dark-900 border-b border-dark-700 px-4 pt-safe sticky top-0 z-40">
+      <header className="bg-dark-900 border-b border-dark-700 px-4 sticky top-0 z-40">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-2">
@@ -65,7 +78,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               {lastUpdated && (
                 <span className="text-gray-600 text-xs hidden sm:block">
-                  Aggiornato {lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  {lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               )}
               <button
@@ -102,7 +115,11 @@ export default function App() {
       {/* Contenuto principale */}
       <main className="flex-1 overflow-y-auto pb-20">
         <div className="max-w-lg mx-auto px-4 py-3">
-          <NotificationBanner permission={notifPerm} onPermissionChange={setNotifPerm} />
+          <NotificationBanner
+            permission={notifPerm}
+            onPermissionChange={handlePermissionChange}
+            onRequest={requestNotificationPermission}
+          />
 
           {error && (
             <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-2 text-xs text-accent-red mb-3">
@@ -110,7 +127,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab Dashboard */}
           {tab === 'dashboard' && (
             <div>
               {loading ? (
@@ -140,7 +156,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab Preferiti */}
           {tab === 'favorites' && (
             <div>
               {favoriteCoins.length === 0 ? (
@@ -167,7 +182,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab Allarmi */}
           {tab === 'alerts' && (
             <AlertsTab alerts={alerts} onRemove={removeAlert} onReset={resetAlert} />
           )}
