@@ -38,28 +38,13 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Configura ANDROID_HOME
-        run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-
-      - name: Installa Android 35
-        run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Prepara gradlew
-        run: |
-          sed -i 's/\r$//' android/gradlew
-          chmod +x android/gradlew
-          java -version
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls android/
-
       - name: Build APK debug
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
