@@ -250,17 +250,15 @@ const SettingsTab: FC<Props> = ({
               <span className="text-xs font-semibold text-accent-red bg-accent-red/10 px-2.5 py-1 rounded-full">Bloccate</span>
             )}
           </div>
-          {notifPerm !== 'granted' && (
-            <button
-              onClick={openNotificationSettings}
-              className="w-full px-4 py-3 flex items-center justify-between text-accent-blue hover:bg-dark-700 transition-colors rounded-b-xl"
-            >
-              <span className="text-sm">Apri impostazioni telefono</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          )}
+          <button
+            onClick={openNotificationSettings}
+            className="w-full px-4 py-3 flex items-center justify-between text-accent-blue hover:bg-dark-700 transition-colors rounded-b-xl"
+          >
+            <span className="text-sm">Apri impostazioni notifiche</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
       </section>
 
