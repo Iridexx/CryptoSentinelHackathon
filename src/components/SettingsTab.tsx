@@ -106,6 +106,9 @@ const SettingsTab: FC<Props> = ({
   };
 
   const handleDownload = async (url: string) => {
+    if (updateInfo?.publishedAt) {
+      localStorage.setItem('cryptowatch_last_installed_release', updateInfo.publishedAt);
+    }
     onDownloadStart();
     await downloadAndInstall(url);
   };
