@@ -1,5 +1,5 @@
 import { useState, type FC } from 'react';
-import { requestNotificationPermission } from '../utils/notifications';
+import { requestNotificationPermission, openNotificationSettings } from '../utils/notifications';
 
 interface Props {
   permission: NotificationPermission;
@@ -23,7 +23,13 @@ const NotificationBanner: FC<Props> = ({ permission, onPermissionChange }) => {
       <div className="flex-1 min-w-0">
         {permission === 'denied' ? (
           <p className="text-xs text-gray-300">
-            Le notifiche sono bloccate. Abilitale nelle impostazioni del browser per ricevere gli allarmi.
+            Le notifiche sono bloccate.{' '}
+            <button
+              onClick={openNotificationSettings}
+              className="text-accent-blue underline underline-offset-2"
+            >
+              Abilitale nelle impostazioni del telefono
+            </button>
           </p>
         ) : (
           <p className="text-xs text-gray-300">

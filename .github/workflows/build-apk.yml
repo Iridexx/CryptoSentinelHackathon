@@ -1,0 +1,99 @@
+name: Build CryptoWatch APK
+
+on:
+  push:
+    branches:
+      - claude/crypto-price-monitor-app-RpMFm
+      - claude/gradlew-missing-build-pYXQT
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Installa dipendenze npm
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync Capacitor assets in Android
+        run: npx cap sync android
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build APK debug
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Rinomina APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoWatch-debug.apk
+
+      - name: Pubblica release latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          sleep 3
+          gh release create latest \
+            --title "CryptoWatch - Build ${{ github.run_number }}" \
+            --notes "Aggiornamento automatico del $(date '+%d/%m/%Y alle %H:%M')" \
+            --latest \
+            CryptoWatch-debug.apk
+
+      - name: Upload APK come artefatto CI
+        uses: actions/upload-artifact@v6
+        with:
+          name: CryptoWatch-debug.apk
+          path: CryptoWatch-debug.apk
+          retention-days: 30
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Scarica APK dall'artefatto
+        uses: actions/download-artifact@v4
+        with:
+          name: CryptoWatch-debug.apk
+
+      - name: Prepara cartella Pages
+        run: mkdir -p pages-dist && cp CryptoWatch-debug.apk pages-dist/
+
+      - name: Upload artefatto Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-dist
+
+      - name: Deploy su GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

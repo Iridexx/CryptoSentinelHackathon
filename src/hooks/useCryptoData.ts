@@ -4,7 +4,6 @@ import type { Coin } from '../types';
 const API_URL =
   'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&sparkline=false&price_change_percentage=24h';
 
-const REFRESH_INTERVAL = 30_000;
 const CACHE_KEY = 'cryptowatch_coins_cache';
 
 function loadCachedCoins(): Coin[] {
@@ -17,7 +16,7 @@ function loadCachedCoins(): Coin[] {
   }
 }
 
-export function useCryptoData() {
+export function useCryptoData(intervalMs = 30_000) {
   const [coins, setCoins] = useState<Coin[]>(loadCachedCoins);
   const [loading, setLoading] = useState(coins.length === 0);
   const [error, setError] = useState<string | null>(null);
@@ -47,12 +46,12 @@ export function useCryptoData() {
 
   useEffect(() => {
     fetchCoins();
-    const timer = setInterval(fetchCoins, REFRESH_INTERVAL);
+    const timer = setInterval(fetchCoins, intervalMs);
     return () => {
       clearInterval(timer);
       abortRef.current?.abort();
     };
-  }, [fetchCoins]);
+  }, [fetchCoins, intervalMs]);
 
   return { coins, loading, error, lastUpdated, refresh: fetchCoins };
 }

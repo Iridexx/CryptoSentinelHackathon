@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 
-export type Tab = 'dashboard' | 'favorites' | 'alerts';
+export type Tab = 'dashboard' | 'favorites' | 'alerts' | 'settings';
 
 interface Props {
   activeTab: Tab;
@@ -14,6 +14,7 @@ const Navbar: FC<Props> = ({ activeTab, onTabChange, alertCount, favoriteCount }
     { id: 'dashboard', label: 'Mercato', icon: '📈' },
     { id: 'favorites', label: 'Preferiti', icon: '⭐' },
     { id: 'alerts', label: 'Allarmi', icon: '🔔' },
+    { id: 'settings', label: 'Impostazioni', icon: '⚙️' },
   ];
 
   return (

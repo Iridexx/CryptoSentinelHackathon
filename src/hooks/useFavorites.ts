@@ -36,5 +36,10 @@ export function useFavorites() {
 
   const isFavorite = useCallback((coinId: string) => favorites.has(coinId), [favorites]);
 
-  return { favorites, toggle, isFavorite };
+  const clear = useCallback(() => {
+    setFavorites(new Set());
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
+  return { favorites, toggle, isFavorite, clear };
 }

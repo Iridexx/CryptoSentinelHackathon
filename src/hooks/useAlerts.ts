@@ -103,5 +103,11 @@ export function useAlerts(coins: Coin[]) {
     }
   }, [coins]);
 
-  return { alerts, addAlert, removeAlert, resetAlert };
+  const clearAlerts = useCallback(() => {
+    setAlerts([]);
+    localStorage.removeItem(STORAGE_KEY);
+    lastTriggeredRef.current.clear();
+  }, []);
+
+  return { alerts, addAlert, removeAlert, resetAlert, clearAlerts };
 }

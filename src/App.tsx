@@ -9,16 +9,27 @@ import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
 import AlertsTab from './components/AlertsTab';
 import NotificationBanner from './components/NotificationBanner';
+import SettingsTab from './components/SettingsTab';
+
+const INTERVAL_KEY = 'cryptowatch_refresh_interval';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [search, setSearch] = useState('');
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission);
+  const [refreshInterval, setRefreshInterval] = useState<number>(() => {
+    return parseInt(localStorage.getItem(INTERVAL_KEY) || '30000', 10);
+  });
 
-  const { coins, loading, error, lastUpdated, refresh } = useCryptoData();
-  const { favorites, toggle: toggleFavorite, isFavorite } = useFavorites();
-  const { alerts, addAlert, removeAlert, resetAlert } = useAlerts(coins);
+  const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval);
+  const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
+  const { alerts, addAlert, removeAlert, resetAlert, clearAlerts } = useAlerts(coins);
+
+  const handleIntervalChange = useCallback((ms: number) => {
+    setRefreshInterval(ms);
+    localStorage.setItem(INTERVAL_KEY, String(ms));
+  }, []);
 
   const filteredCoins = useMemo(() => {
     if (!search.trim()) return coins;
@@ -170,6 +181,18 @@ export default function App() {
           {/* Tab Allarmi */}
           {tab === 'alerts' && (
             <AlertsTab alerts={alerts} onRemove={removeAlert} onReset={resetAlert} />
+          )}
+
+          {/* Tab Impostazioni */}
+          {tab === 'settings' && (
+            <SettingsTab
+              refreshInterval={refreshInterval}
+              onIntervalChange={handleIntervalChange}
+              favoritesCount={favorites.size}
+              alertsCount={alerts.length}
+              onClearFavorites={clearFavorites}
+              onClearAlerts={clearAlerts}
+            />
           )}
         </div>
       </main>
