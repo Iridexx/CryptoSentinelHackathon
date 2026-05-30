@@ -1,6 +1,6 @@
-import { useState, type FC } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { openNotificationSettings } from '../utils/notifications';
-import { checkForUpdates, downloadAndInstall, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
+import { checkForUpdates, downloadAndInstall, openDownloadsFolder, onDownloadComplete, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
 
 const INTERVALS = [
   { label: '30 sec', ms: 30_000 },
@@ -45,6 +45,12 @@ const SettingsTab: FC<Props> = ({
   const [showToken, setShowToken] = useState(false);
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
   const [mergeError, setMergeError] = useState('');
+  const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
+
+  useEffect(() => {
+    const unsubscribe = onDownloadComplete(() => setDlState('done'));
+    return () => { unsubscribe.then(fn => fn()); };
+  }, []);
 
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
@@ -95,6 +101,11 @@ const SettingsTab: FC<Props> = ({
     } catch {
       setDevLoadState('error');
     }
+  };
+
+  const handleDownload = async (url: string) => {
+    setDlState('downloading');
+    await downloadAndInstall(url);
   };
 
   const handleClearFavorites = () => {
@@ -163,10 +174,11 @@ const SettingsTab: FC<Props> = ({
 
           {updateState === 'available' ? (
             <button
-              onClick={() => downloadAndInstall(APK_PAGES_URL)}
-              className="w-full py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+              onClick={() => handleDownload(APK_PAGES_URL)}
+              disabled={dlState === 'downloading'}
+              className="w-full py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
             >
-              Scarica e installa
+              {dlState === 'downloading' ? 'Download in corso…' : 'Scarica e installa'}
             </button>
           ) : (
             <button
@@ -186,6 +198,35 @@ const SettingsTab: FC<Props> = ({
                 'Controlla aggiornamenti'
               )}
             </button>
+          )}
+
+          {/* Banner stato download aggiornamento */}
+          {updateState === 'available' && dlState !== 'idle' && (
+            <div className={`rounded-lg px-3 py-2.5 flex items-center justify-between gap-3 ${
+              dlState === 'done'
+                ? 'bg-accent-green/10 border border-accent-green/20'
+                : 'bg-accent-blue/10 border border-accent-blue/20'
+            }`}>
+              <div className="flex items-center gap-2">
+                {dlState === 'downloading' ? (
+                  <svg className="w-4 h-4 text-accent-blue animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                ) : (
+                  <span className="text-accent-green text-sm">✓</span>
+                )}
+                <p className="text-xs text-gray-300">
+                  {dlState === 'downloading' ? 'Download in corso…' : 'Download completato'}
+                </p>
+              </div>
+              <button
+                onClick={openDownloadsFolder}
+                className="text-xs text-accent-blue underline underline-offset-2 whitespace-nowrap"
+              >
+                📁 Apri Download
+              </button>
+            </div>
           )}
         </div>
       </section>
@@ -410,13 +451,43 @@ const SettingsTab: FC<Props> = ({
                     </button>
                     {devBuildInfo.downloadUrl && (
                       <button
-                        onClick={() => downloadAndInstall(devBuildInfo.downloadUrl!)}
-                        className="flex-1 py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                        onClick={() => handleDownload(devBuildInfo.downloadUrl!)}
+                        disabled={dlState === 'downloading'}
+                        className="flex-1 py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
                       >
-                        Scarica build #{devBuildInfo.buildNumber}
+                        {dlState === 'downloading' ? 'Download in corso…' : `Scarica build #${devBuildInfo.buildNumber}`}
                       </button>
                     )}
                   </div>
+
+                  {/* Banner stato download */}
+                  {dlState !== 'idle' && (
+                    <div className={`rounded-lg px-3 py-2.5 flex items-center justify-between gap-3 ${
+                      dlState === 'done'
+                        ? 'bg-accent-green/10 border border-accent-green/20'
+                        : 'bg-accent-blue/10 border border-accent-blue/20'
+                    }`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {dlState === 'downloading' ? (
+                          <svg className="w-4 h-4 text-accent-blue flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                        ) : (
+                          <span className="text-accent-green text-sm flex-shrink-0">✓</span>
+                        )}
+                        <p className="text-xs text-gray-300 truncate">
+                          {dlState === 'downloading' ? 'Download in corso…' : 'Download completato'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={openDownloadsFolder}
+                        className="flex-shrink-0 text-xs text-accent-blue underline underline-offset-2 whitespace-nowrap"
+                      >
+                        📁 Apri Download
+                      </button>
+                    </div>
+                  )}
 
                   {/* Merge in main */}
                   <div className="border-t border-dark-600 pt-3 space-y-2">

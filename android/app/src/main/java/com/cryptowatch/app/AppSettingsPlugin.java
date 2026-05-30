@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.Settings;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -52,6 +53,12 @@ public class AppSettingsPlugin extends Plugin {
                 long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
                 if (id != downloadId) return;
                 ctx.unregisterReceiver(this);
+
+                // Notifica il layer JavaScript che il download è completato
+                JSObject data = new JSObject();
+                data.put("status", "completed");
+                notifyListeners("downloadComplete", data);
+
                 Uri apkUri = dm.getUriForDownloadedFile(downloadId);
                 if (apkUri == null) return;
                 Intent install = new Intent(Intent.ACTION_VIEW);
@@ -69,6 +76,14 @@ public class AppSettingsPlugin extends Plugin {
             getContext().registerReceiver(receiver, filter);
         }
 
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void openDownloads(PluginCall call) {
+        Intent intent = new Intent(DownloadManager.ACTION_VIEW_DOWNLOADS);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
         call.resolve();
     }
 
