@@ -1,6 +1,6 @@
 import { useState, type FC } from 'react';
 import { getNotificationPermission, openNotificationSettings } from '../utils/notifications';
-import { checkForUpdates, downloadAndInstall, APK_PAGES_URL, type UpdateResult } from '../utils/update';
+import { checkForUpdates, downloadAndInstall, getDevBuildInfo, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
 
 const INTERVALS = [
   { label: '30 sec', ms: 30_000 },
@@ -8,7 +8,11 @@ const INTERVALS = [
   { label: '5 min', ms: 300_000 },
 ];
 
+const DEV_PIN = '6878';
+
 type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
+type DevState = 'locked' | 'pin-entry' | 'unlocked';
+type DevLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 interface Props {
   refreshInterval: number;
@@ -30,6 +34,11 @@ const SettingsTab: FC<Props> = ({
   const notifPerm = getNotificationPermission();
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
+  const [devState, setDevState] = useState<DevState>('locked');
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  const [devLoadState, setDevLoadState] = useState<DevLoadState>('idle');
+  const [devBuildInfo, setDevBuildInfo] = useState<DevBuildInfo | null>(null);
 
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
@@ -39,6 +48,28 @@ const SettingsTab: FC<Props> = ({
       setUpdateState(result.available ? 'available' : 'up-to-date');
     } catch {
       setUpdateState('error');
+    }
+  };
+
+  const handlePinSubmit = () => {
+    if (pinInput === DEV_PIN) {
+      setDevState('unlocked');
+      setPinError(false);
+      setPinInput('');
+    } else {
+      setPinError(true);
+      setPinInput('');
+    }
+  };
+
+  const handleLoadDevBuild = async () => {
+    setDevLoadState('loading');
+    try {
+      const info = await getDevBuildInfo();
+      setDevBuildInfo(info);
+      setDevLoadState('loaded');
+    } catch {
+      setDevLoadState('error');
     }
   };
 
@@ -248,6 +279,126 @@ const SettingsTab: FC<Props> = ({
       <p className="text-center text-xs text-gray-600 pb-2">
         I dati di mercato sono forniti da CoinGecko API (gratuita).
       </p>
+
+      {/* Modalità Sviluppatore */}
+      <section>
+        {devState === 'locked' && (
+          <button
+            onClick={() => { setDevState('pin-entry'); setPinError(false); setPinInput(''); }}
+            className="w-full text-center text-xs text-gray-700 hover:text-gray-500 transition-colors py-2"
+          >
+            🔒 Modalità Sviluppatore
+          </button>
+        )}
+
+        {devState === 'pin-entry' && (
+          <div className="bg-dark-800 rounded-xl px-4 py-4">
+            <p className="text-sm text-white font-medium text-center mb-3">Inserisci PIN</p>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={pinInput}
+              onChange={(e) => { setPinInput(e.target.value.replace(/\D/g, '')); setPinError(false); }}
+              onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
+              placeholder="• • • •"
+              className={`w-full bg-dark-700 border rounded-lg px-4 py-2.5 text-center text-white text-xl tracking-widest outline-none transition-colors mb-3 ${
+                pinError ? 'border-accent-red' : 'border-dark-600 focus:border-accent-blue'
+              }`}
+              autoFocus
+            />
+            {pinError && <p className="text-xs text-accent-red text-center mb-3">PIN errato</p>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDevState('locked')}
+                className="flex-1 py-2 bg-dark-700 text-gray-400 text-sm rounded-lg"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handlePinSubmit}
+                disabled={pinInput.length !== 4}
+                className="flex-1 py-2 bg-accent-blue text-white text-sm font-semibold rounded-lg disabled:opacity-40"
+              >
+                Sblocca
+              </button>
+            </div>
+          </div>
+        )}
+
+        {devState === 'unlocked' && (
+          <div className="bg-dark-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 bg-accent-blue/10 border-b border-dark-700 flex items-center justify-between">
+              <span className="text-sm font-semibold text-accent-blue">⚙️ Modalità Sviluppatore</span>
+              <button onClick={() => setDevState('locked')} className="text-gray-500 text-lg">×</button>
+            </div>
+
+            <div className="px-4 py-4 space-y-3">
+              {devLoadState === 'idle' && (
+                <button
+                  onClick={handleLoadDevBuild}
+                  className="w-full py-2.5 bg-dark-700 text-gray-300 text-sm rounded-lg hover:bg-dark-600 transition-colors"
+                >
+                  Controlla ultima dev build
+                </button>
+              )}
+
+              {devLoadState === 'loading' && (
+                <div className="flex items-center justify-center gap-2 py-2 text-gray-400 text-sm">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Caricamento…
+                </div>
+              )}
+
+              {devLoadState === 'error' && (
+                <p className="text-xs text-accent-red text-center">Errore nel caricamento. Nessuna dev build disponibile.</p>
+              )}
+
+              {devLoadState === 'loaded' && devBuildInfo && (
+                <>
+                  <div className="bg-dark-700 rounded-lg divide-y divide-dark-600">
+                    <div className="px-3 py-2 flex justify-between">
+                      <span className="text-xs text-gray-500">Build</span>
+                      <span className="text-xs text-white font-mono">#{devBuildInfo.buildNumber ?? '—'}</span>
+                    </div>
+                    <div className="px-3 py-2 flex justify-between">
+                      <span className="text-xs text-gray-500">Branch</span>
+                      <span className="text-xs text-accent-blue font-mono truncate max-w-[60%] text-right">{devBuildInfo.branch ?? '—'}</span>
+                    </div>
+                    <div className="px-3 py-2 flex justify-between">
+                      <span className="text-xs text-gray-500">Data</span>
+                      <span className="text-xs text-white">{devBuildInfo.buildDate}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleLoadDevBuild}
+                      className="p-2.5 bg-dark-700 text-gray-400 rounded-lg hover:text-white transition-colors"
+                      title="Aggiorna"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                    {devBuildInfo.downloadUrl && (
+                      <button
+                        onClick={() => downloadAndInstall(devBuildInfo.downloadUrl!)}
+                        className="flex-1 py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                      >
+                        Scarica build #{devBuildInfo.buildNumber}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
     </div>
   );

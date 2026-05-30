@@ -1,11 +1,27 @@
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+interface AppSettingsPlugin {
+  openWithChooser(options: { url: string; title?: string }): Promise<void>;
+}
+const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
+
 const RELEASES_API = 'https://api.github.com/repos/iridexx/test_app_cloude/releases/latest';
-// L'APK è pubblicato su GitHub Pages, nessun login richiesto
+const DEV_RELEASES_API = 'https://api.github.com/repos/iridexx/test_app_cloude/releases/tags/dev';
+
+// L'APK produzione è pubblicato su GitHub Pages, nessun login richiesto
 export const APK_PAGES_URL = 'https://iridexx.github.io/test_app_cloude/CryptoWatch-debug.apk';
 
 export interface UpdateResult {
   available: boolean;
   releaseDate: string;
   buildNumber: string | null;
+  downloadUrl: string | null;
+}
+
+export interface DevBuildInfo {
+  buildNumber: string | null;
+  branch: string | null;
+  buildDate: string;
   downloadUrl: string | null;
 }
 
@@ -22,7 +38,6 @@ export async function checkForUpdates(currentBuildDate: string): Promise<UpdateR
 
   const apkAsset = (release.assets as { name: string; browser_download_url: string }[])
     ?.find((a) => a.name.endsWith('.apk'));
-
   const buildMatch = (release.name as string)?.match(/Build (\d+)/);
 
   return {
@@ -36,12 +51,28 @@ export async function checkForUpdates(currentBuildDate: string): Promise<UpdateR
   };
 }
 
-import { Capacitor, registerPlugin } from '@capacitor/core';
+export async function getDevBuildInfo(): Promise<DevBuildInfo> {
+  const res = await fetch(DEV_RELEASES_API, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`GitHub API: ${res.status}`);
+  const release = await res.json();
 
-interface AppSettingsPlugin {
-  openWithChooser(options: { url: string; title?: string }): Promise<void>;
+  const buildMatch = (release.name as string)?.match(/#(\d+)/);
+  const branchMatch = (release.body as string)?.match(/Branch: ([^\s|]+)/);
+  const apkAsset = (release.assets as { name: string; browser_download_url: string }[])
+    ?.find((a) => a.name.endsWith('.apk'));
+
+  return {
+    buildNumber: buildMatch?.[1] ?? null,
+    branch: branchMatch?.[1] ?? null,
+    buildDate: new Date(release.published_at as string).toLocaleDateString('it-IT', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }),
+    downloadUrl: apkAsset?.browser_download_url ?? null,
+  };
 }
-const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 
 export async function downloadAndInstall(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
