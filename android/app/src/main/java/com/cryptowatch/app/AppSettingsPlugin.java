@@ -27,6 +27,25 @@ public class AppSettingsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void openBatterySettings(PluginCall call) {
+        try {
+            String pkg = getContext().getPackageName();
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + pkg));
+            getActivity().startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            try {
+                Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                getActivity().startActivity(fallback);
+                call.resolve();
+            } catch (Exception e2) {
+                call.reject("Impossibile aprire le impostazioni risparmio energetico");
+            }
+        }
+    }
+
+    @PluginMethod
     public void downloadApk(PluginCall call) {
         String url = call.getString("url");
         if (url == null) { call.reject("url mancante"); return; }

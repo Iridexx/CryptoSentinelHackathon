@@ -4,12 +4,14 @@ import { useCryptoData } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
 import { getNotificationPermission, initNotifications } from './utils/notifications';
+import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete } from './utils/update';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
 import AlertsTab from './components/AlertsTab';
 import NotificationBanner from './components/NotificationBanner';
+import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
 
 const INTERVAL_KEY = 'cryptowatch_refresh_interval';
@@ -19,6 +21,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
+  const [batteryDismissed, setBatteryDismissed] = useState(isBatteryBannerDismissed);
   const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
 
   useEffect(() => {
@@ -137,6 +140,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-20">
         <div className="max-w-lg mx-auto px-4 py-3">
           <NotificationBanner permission={notifPerm} onPermissionChange={setNotifPerm} />
+          <EnergySavingBanner dismissed={batteryDismissed} onDismiss={() => setBatteryDismissed(true)} />
 
           {error && (
             <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-2 text-xs text-accent-red mb-3">
@@ -217,6 +221,7 @@ export default function App() {
               onClearAlerts={clearAlerts}
               notifPerm={notifPerm}
               onPermissionChange={setNotifPerm}
+              batteryDismissed={batteryDismissed}
               dlState={dlState}
               onDownloadStart={() => setDlState('downloading')}
             />
