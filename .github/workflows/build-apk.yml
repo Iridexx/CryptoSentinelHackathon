@@ -28,6 +28,8 @@ jobs:
         run: npm ci
 
       - name: Build web app
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
         run: npm run build
 
       - name: Sync Capacitor assets in Android

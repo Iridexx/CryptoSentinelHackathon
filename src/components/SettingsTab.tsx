@@ -323,6 +323,12 @@ const SettingsTab: FC<Props> = ({
             <span className="text-sm text-white font-medium">CryptoWatch</span>
           </div>
           <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-400">Versione</span>
+            <span className="text-sm text-white font-medium font-mono">
+              v{__APP_VERSION__} · build&nbsp;{__APP_BUILD_NUMBER__}
+            </span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Sviluppatore</span>
             <span className="text-sm text-white font-medium">Iridexx</span>
           </div>
