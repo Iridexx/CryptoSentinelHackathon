@@ -1,14 +1,17 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { Coin } from './types';
 import { useCryptoData } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
-import { getNotificationPermission } from './utils/notifications';
+import { getNotificationPermission, initNotifications } from './utils/notifications';
+import { isBatteryBannerDismissed } from './utils/energySaving';
+import { onDownloadComplete } from './utils/update';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
 import AlertsTab from './components/AlertsTab';
 import NotificationBanner from './components/NotificationBanner';
+import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
 
 const INTERVAL_KEY = 'cryptowatch_refresh_interval';
@@ -17,7 +20,30 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [search, setSearch] = useState('');
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
-  const [notifPerm, setNotifPerm] = useState<NotificationPermission>(getNotificationPermission);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
+  const [batteryDismissed, setBatteryDismissed] = useState(isBatteryBannerDismissed);
+  const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
+
+  useEffect(() => {
+    initNotifications();
+    getNotificationPermission().then(setNotifPerm);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        getNotificationPermission().then(setNotifPerm);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Listener download a livello App — persiste anche cambiando tab
+    let unsubDl: (() => void) | null = null;
+    onDownloadComplete(() => setDlState('done')).then((fn) => { unsubDl = fn; });
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      unsubDl?.();
+    };
+  }, []);
   const [refreshInterval, setRefreshInterval] = useState<number>(() => {
     return parseInt(localStorage.getItem(INTERVAL_KEY) || '30000', 10);
   });
@@ -114,6 +140,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto pb-20">
         <div className="max-w-lg mx-auto px-4 py-3">
           <NotificationBanner permission={notifPerm} onPermissionChange={setNotifPerm} />
+          <EnergySavingBanner dismissed={batteryDismissed} onDismiss={() => setBatteryDismissed(true)} />
 
           {error && (
             <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-2 text-xs text-accent-red mb-3">
@@ -192,6 +219,11 @@ export default function App() {
               alertsCount={alerts.length}
               onClearFavorites={clearFavorites}
               onClearAlerts={clearAlerts}
+              notifPerm={notifPerm}
+              onPermissionChange={setNotifPerm}
+              batteryDismissed={batteryDismissed}
+              dlState={dlState}
+              onDownloadStart={() => setDlState('downloading')}
             />
           )}
         </div>

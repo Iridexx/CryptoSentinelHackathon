@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 interface AppSettingsPlugin {
   openNotifications(): Promise<void>;
@@ -7,24 +8,36 @@ interface AppSettingsPlugin {
 
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 
+export async function initNotifications(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalNotifications.createChannel({
+    id: 'price_alerts',
+    name: 'Allarmi Prezzi',
+    description: 'Notifiche per gli allarmi di prezzo crypto',
+    importance: 5,
+    vibration: true,
+    sound: 'default',
+    visibility: 1,
+  });
+}
+
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
-  if (!('Notification' in window)) return 'denied';
-  if (Notification.permission === 'granted') return 'granted';
-  if (Notification.permission === 'denied') return 'denied';
-  return await Notification.requestPermission();
-}
-
-export function getNotificationPermission(): NotificationPermission {
-  if (!('Notification' in window)) return 'denied';
-  return Notification.permission;
-}
-
-export function openNotificationSettings(): void {
-  if (Capacitor.isNativePlatform()) {
-    AppSettings.openNotifications().catch(() => {
-      window.open('app-settings:', '_system');
-    });
+  if (!Capacitor.isNativePlatform()) {
+    if (!('Notification' in window)) return 'denied';
+    if (Notification.permission !== 'default') return Notification.permission;
+    return await Notification.requestPermission();
   }
+  const result = await LocalNotifications.requestPermissions();
+  return result.display === 'granted' ? 'granted' : 'denied';
+}
+
+export async function getNotificationPermission(): Promise<NotificationPermission> {
+  if (!Capacitor.isNativePlatform()) {
+    if (!('Notification' in window)) return 'denied';
+    return Notification.permission;
+  }
+  const status = await LocalNotifications.checkPermissions();
+  return status.display === 'granted' ? 'granted' : 'denied';
 }
 
 export async function sendAlertNotification(params: {
@@ -33,14 +46,32 @@ export async function sendAlertNotification(params: {
   threshold: number;
   currentPrice: number;
 }): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') return;
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: Math.floor(Math.random() * 2_000_000),
+          channelId: 'price_alerts',
+          title: `🚨 ${params.coinName}`,
+          body: `Prezzo ${params.direction === 'above' ? 'sopra' : 'sotto'} $${params.threshold.toLocaleString()} · Attuale: $${params.currentPrice.toLocaleString()}`,
+          sound: 'default',
+          smallIcon: 'ic_launcher',
+          autoCancel: true,
+        }],
+      });
+    } catch {
+      // notifica fallita silenziosamente
+    }
+    return;
+  }
+}
 
-  const reg = await navigator.serviceWorker.ready;
-  if (!reg.active) return;
-
-  // Invia al SW il messaggio per mostrare la notifica
-  reg.active.postMessage({
-    type: 'PRICE_ALERT',
-    ...params,
-  });
+export function openNotificationSettings(): void {
+  if (Capacitor.isNativePlatform()) {
+    AppSettings.openNotifications().catch(() => {
+      window.open('app-settings:', '_system');
+    });
+  }
 }

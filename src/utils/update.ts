@@ -1,7 +1,12 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 
 interface AppSettingsPlugin {
+  downloadApk(options: { url: string }): Promise<void>;
+  openDownloads(): Promise<void>;
+  syncAlerts(options: { json: string }): Promise<void>;
   openWithChooser(options: { url: string; title?: string }): Promise<void>;
+  addListener(event: 'downloadComplete', handler: (data: { status: string }) => void): Promise<PluginListenerHandle>;
 }
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 
@@ -95,8 +100,25 @@ export async function mergeToMain(branch: string, token: string): Promise<void> 
 
 export async function downloadAndInstall(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
-    await AppSettings.openWithChooser({ url, title: 'Scarica APK con' });
+    await AppSettings.downloadApk({ url });
   } else {
     window.open(url, '_blank');
   }
+}
+
+export async function syncAlertsToNative(alerts: unknown[]): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try { await AppSettings.syncAlerts({ json: JSON.stringify(alerts) }); } catch { /* ignore */ }
+}
+
+export async function openDownloadsFolder(): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    await AppSettings.openDownloads();
+  }
+}
+
+export async function onDownloadComplete(handler: () => void): Promise<() => void> {
+  if (!Capacitor.isNativePlatform()) return () => {};
+  const handle = await AppSettings.addListener('downloadComplete', handler);
+  return () => handle.remove();
 }

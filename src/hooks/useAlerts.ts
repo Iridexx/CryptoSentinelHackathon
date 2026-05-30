@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Coin, PriceAlert } from '../types';
 import { sendAlertNotification } from '../utils/notifications';
 import { playAlertBeep } from '../utils/audio';
+import { syncAlertsToNative } from '../utils/update';
 
 const STORAGE_KEY = 'cryptowatch_alerts';
 
@@ -19,11 +20,15 @@ function saveAlerts(alerts: PriceAlert[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
   } catch { /* quota */ }
+  syncAlertsToNative(alerts);
 }
 
 export function useAlerts(coins: Coin[]) {
   const [alerts, setAlerts] = useState<PriceAlert[]>(loadAlerts);
   const lastTriggeredRef = useRef<Set<string>>(new Set());
+  // Ref per accedere sempre agli alert più recenti senza dipendenze stale
+  const alertsRef = useRef<PriceAlert[]>(alerts);
+  alertsRef.current = alerts;
 
   const addAlert = useCallback((alert: Omit<PriceAlert, 'id' | 'triggered' | 'createdAt'>) => {
     const newAlert: PriceAlert = {
@@ -57,50 +62,42 @@ export function useAlerts(coins: Coin[]) {
     });
   }, []);
 
-  // Controlla gli allarmi ogni volta che i prezzi si aggiornano
   useEffect(() => {
     if (coins.length === 0) return;
 
-    // Raccogli gli allarmi da scattare senza side-effect nell'updater
-    const toFire: { coinName: string; direction: 'above' | 'below'; threshold: number; currentPrice: number }[] = [];
+    // Calcola toFire PRIMA di setAlerts usando il ref (non la closure stale)
+    // Il problema precedente: toFire era popolato dentro l'updater di setAlerts
+    // che React esegue in modo asincrono — quando il controllo avveniva, toFire era vuoto
+    type FireItem = { coinName: string; direction: 'above' | 'below'; threshold: number; currentPrice: number };
+    const toFire: FireItem[] = [];
+    const toTriggerIds = new Set<string>();
+
+    for (const alert of alertsRef.current) {
+      const coin = coins.find((c) => c.id === alert.coinId);
+      if (!coin || alert.triggered || lastTriggeredRef.current.has(alert.id)) continue;
+
+      const price = coin.current_price;
+      const fires =
+        (alert.direction === 'above' && price >= alert.threshold) ||
+        (alert.direction === 'below' && price <= alert.threshold);
+
+      if (fires) {
+        lastTriggeredRef.current.add(alert.id);
+        toTriggerIds.add(alert.id);
+        toFire.push({ coinName: alert.coinName, direction: alert.direction, threshold: alert.threshold, currentPrice: price });
+      }
+    }
+
+    if (toFire.length === 0) return;
 
     setAlerts((prev) => {
-      let changed = false;
-      const next = prev.map((alert) => {
-        const coin = coins.find((c) => c.id === alert.coinId);
-        if (!coin || alert.triggered || lastTriggeredRef.current.has(alert.id)) return alert;
-
-        const price = coin.current_price;
-        const shouldTrigger =
-          (alert.direction === 'above' && price >= alert.threshold) ||
-          (alert.direction === 'below' && price <= alert.threshold);
-
-        if (shouldTrigger) {
-          lastTriggeredRef.current.add(alert.id);
-          changed = true;
-          toFire.push({
-            coinName: alert.coinName,
-            direction: alert.direction,
-            threshold: alert.threshold,
-            currentPrice: price,
-          });
-          return { ...alert, triggered: true };
-        }
-        return alert;
-      });
-
-      if (changed) {
-        saveAlerts(next);
-        return next;
-      }
-      return prev;
+      const next = prev.map((a) => toTriggerIds.has(a.id) ? { ...a, triggered: true } : a);
+      saveAlerts(next);
+      return next;
     });
 
-    // Effetti collaterali fuori dall'updater
-    if (toFire.length > 0) {
-      playAlertBeep();
-      toFire.forEach((params) => sendAlertNotification(params));
-    }
+    playAlertBeep();
+    toFire.forEach((params) => sendAlertNotification(params));
   }, [coins]);
 
   const clearAlerts = useCallback(() => {

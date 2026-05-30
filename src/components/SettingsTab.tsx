@@ -1,6 +1,8 @@
 import { useState, type FC } from 'react';
-import { getNotificationPermission, openNotificationSettings } from '../utils/notifications';
-import { checkForUpdates, downloadAndInstall, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
+import { Capacitor } from '@capacitor/core';
+import { openNotificationSettings } from '../utils/notifications';
+import { openBatterySettings } from '../utils/energySaving';
+import { checkForUpdates, downloadAndInstall, openDownloadsFolder, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
 
 const INTERVALS = [
   { label: '30 sec', ms: 30_000 },
@@ -21,6 +23,11 @@ interface Props {
   alertsCount: number;
   onClearFavorites: () => void;
   onClearAlerts: () => void;
+  notifPerm: NotificationPermission;
+  onPermissionChange: (p: NotificationPermission) => void;
+  batteryDismissed: boolean;
+  dlState: 'idle' | 'downloading' | 'done';
+  onDownloadStart: () => void;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -30,8 +37,11 @@ const SettingsTab: FC<Props> = ({
   alertsCount,
   onClearFavorites,
   onClearAlerts,
+  notifPerm,
+  batteryDismissed,
+  dlState,
+  onDownloadStart,
 }) => {
-  const notifPerm = getNotificationPermission();
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
   const [devState, setDevState] = useState<DevState>('locked');
@@ -93,6 +103,11 @@ const SettingsTab: FC<Props> = ({
     } catch {
       setDevLoadState('error');
     }
+  };
+
+  const handleDownload = async (url: string) => {
+    onDownloadStart();
+    await downloadAndInstall(url);
   };
 
   const handleClearFavorites = () => {
@@ -161,10 +176,11 @@ const SettingsTab: FC<Props> = ({
 
           {updateState === 'available' ? (
             <button
-              onClick={() => downloadAndInstall(APK_PAGES_URL)}
-              className="w-full py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+              onClick={() => handleDownload(APK_PAGES_URL)}
+              disabled={dlState === 'downloading'}
+              className="w-full py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
             >
-              Scarica e installa
+              {dlState === 'downloading' ? 'Download in corso…' : 'Scarica e installa'}
             </button>
           ) : (
             <button
@@ -184,6 +200,35 @@ const SettingsTab: FC<Props> = ({
                 'Controlla aggiornamenti'
               )}
             </button>
+          )}
+
+          {/* Banner stato download aggiornamento */}
+          {updateState === 'available' && dlState !== 'idle' && (
+            <div className={`rounded-lg px-3 py-2.5 flex items-center justify-between gap-3 ${
+              dlState === 'done'
+                ? 'bg-accent-green/10 border border-accent-green/20'
+                : 'bg-accent-blue/10 border border-accent-blue/20'
+            }`}>
+              <div className="flex items-center gap-2">
+                {dlState === 'downloading' ? (
+                  <svg className="w-4 h-4 text-accent-blue animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                ) : (
+                  <span className="text-accent-green text-sm">✓</span>
+                )}
+                <p className="text-xs text-gray-300">
+                  {dlState === 'downloading' ? 'Download in corso…' : 'Download completato'}
+                </p>
+              </div>
+              <button
+                onClick={openDownloadsFolder}
+                className="text-xs text-accent-blue underline underline-offset-2 whitespace-nowrap"
+              >
+                📁 Apri Download
+              </button>
+            </div>
           )}
         </div>
       </section>
@@ -218,6 +263,37 @@ const SettingsTab: FC<Props> = ({
           )}
         </div>
       </section>
+
+      {/* Risparmio energetico */}
+      {Capacitor.isNativePlatform() && (
+        <section>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">Risparmio energetico</h2>
+          <div className="bg-dark-800 rounded-xl divide-y divide-dark-700">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white">Ottimizzazione batteria</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {batteryDismissed ? 'Impostazione verificata' : 'Potrebbe bloccare gli aggiornamenti'}
+                </p>
+              </div>
+              {batteryDismissed ? (
+                <span className="text-xs font-semibold text-accent-green bg-accent-green/10 px-2.5 py-1 rounded-full">OK</span>
+              ) : (
+                <span className="text-xs font-semibold text-accent-yellow bg-accent-yellow/10 px-2.5 py-1 rounded-full">Attenzione</span>
+              )}
+            </div>
+            <button
+              onClick={openBatterySettings}
+              className="w-full px-4 py-3 flex items-center justify-between text-accent-yellow hover:bg-dark-700 transition-colors rounded-b-xl"
+            >
+              <span className="text-sm">Apri impostazioni batteria</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Aggiornamento prezzi */}
       <section>
@@ -278,6 +354,12 @@ const SettingsTab: FC<Props> = ({
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Applicazione</span>
             <span className="text-sm text-white font-medium">CryptoWatch</span>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-400">Versione</span>
+            <span className="text-sm text-white font-medium font-mono">
+              v{__APP_VERSION__} · build&nbsp;{__APP_BUILD_NUMBER__}
+            </span>
           </div>
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Sviluppatore</span>
@@ -408,13 +490,43 @@ const SettingsTab: FC<Props> = ({
                     </button>
                     {devBuildInfo.downloadUrl && (
                       <button
-                        onClick={() => downloadAndInstall(devBuildInfo.downloadUrl!)}
-                        className="flex-1 py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                        onClick={() => handleDownload(devBuildInfo.downloadUrl!)}
+                        disabled={dlState === 'downloading'}
+                        className="flex-1 py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
                       >
-                        Scarica build #{devBuildInfo.buildNumber}
+                        {dlState === 'downloading' ? 'Download in corso…' : `Scarica build #${devBuildInfo.buildNumber}`}
                       </button>
                     )}
                   </div>
+
+                  {/* Banner stato download */}
+                  {dlState !== 'idle' && (
+                    <div className={`rounded-lg px-3 py-2.5 flex items-center justify-between gap-3 ${
+                      dlState === 'done'
+                        ? 'bg-accent-green/10 border border-accent-green/20'
+                        : 'bg-accent-blue/10 border border-accent-blue/20'
+                    }`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {dlState === 'downloading' ? (
+                          <svg className="w-4 h-4 text-accent-blue flex-shrink-0 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                        ) : (
+                          <span className="text-accent-green text-sm flex-shrink-0">✓</span>
+                        )}
+                        <p className="text-xs text-gray-300 truncate">
+                          {dlState === 'downloading' ? 'Download in corso…' : 'Download completato'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={openDownloadsFolder}
+                        className="flex-shrink-0 text-xs text-accent-blue underline underline-offset-2 whitespace-nowrap"
+                      >
+                        📁 Apri Download
+                      </button>
+                    </div>
+                  )}
 
                   {/* Merge in main */}
                   <div className="border-t border-dark-600 pt-3 space-y-2">

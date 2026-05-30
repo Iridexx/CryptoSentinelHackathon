@@ -1,7 +1,7 @@
 {
   "name": "test_app_cloude",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
     "@capacitor/android": "^8.3.4",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
+    "@capacitor/local-notifications": "^8.2.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

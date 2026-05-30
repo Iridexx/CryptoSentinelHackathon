@@ -3,13 +3,14 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 
-// Registra il Service Worker
+// Rimuove il service worker (non necessario in Capacitor — causa stale cache dopo aggiornamenti APK)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // SW non supportato in questo contesto
-    });
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister());
   });
+}
+if ('caches' in window) {
+  caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
 }
 
 createRoot(document.getElementById('root')!).render(
