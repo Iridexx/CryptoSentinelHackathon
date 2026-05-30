@@ -57,7 +57,7 @@ const SettingsTab: FC<Props> = ({
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     try {
-      const result = await checkForUpdates(__APP_BUILD_DATE__);
+      const result = await checkForUpdates(__APP_BUILD_NUMBER__);
       setUpdateInfo(result);
       setUpdateState(result.available ? 'available' : 'up-to-date');
     } catch {
@@ -106,9 +106,6 @@ const SettingsTab: FC<Props> = ({
   };
 
   const handleDownload = async (url: string) => {
-    if (updateInfo?.publishedAt) {
-      localStorage.setItem('cryptowatch_last_installed_release', updateInfo.publishedAt);
-    }
     onDownloadStart();
     await downloadAndInstall(url);
   };

@@ -20,7 +20,6 @@ export const APK_PAGES_URL = 'https://iridexx.github.io/test_app_cloude/CryptoWa
 export interface UpdateResult {
   available: boolean;
   releaseDate: string;
-  publishedAt: string;
   buildNumber: string | null;
   downloadUrl: string | null;
 }
@@ -32,7 +31,7 @@ export interface DevBuildInfo {
   downloadUrl: string | null;
 }
 
-export async function checkForUpdates(currentBuildDate: string): Promise<UpdateResult> {
+export async function checkForUpdates(currentBuildNumber: string): Promise<UpdateResult> {
   const res = await fetch(RELEASES_API, {
     headers: { Accept: 'application/vnd.github+json' },
   });
@@ -40,14 +39,14 @@ export async function checkForUpdates(currentBuildDate: string): Promise<UpdateR
   const release = await res.json();
 
   const releaseDate = new Date(release.published_at as string);
-  const appDate = new Date(currentBuildDate);
-  const lastInstalledIso = localStorage.getItem('cryptowatch_last_installed_release');
-  const lastInstalled = lastInstalledIso ? new Date(lastInstalledIso) : null;
-  const available = releaseDate > appDate && (!lastInstalled || releaseDate > lastInstalled);
-
   const apkAsset = (release.assets as { name: string; browser_download_url: string }[])
     ?.find((a) => a.name.endsWith('.apk'));
   const buildMatch = (release.name as string)?.match(/Build (\d+)/);
+  const releaseBuildNumber = buildMatch ? parseInt(buildMatch[1], 10) : 0;
+  const currentBuildNum = parseInt(currentBuildNumber, 10);
+  const available = !isNaN(currentBuildNum) && !isNaN(releaseBuildNumber)
+    ? releaseBuildNumber > currentBuildNum
+    : false;
 
   return {
     available,
@@ -55,7 +54,6 @@ export async function checkForUpdates(currentBuildDate: string): Promise<UpdateR
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     }),
-    publishedAt: release.published_at as string,
     buildNumber: buildMatch ? buildMatch[1] : null,
     downloadUrl: apkAsset?.browser_download_url ?? null,
   };
