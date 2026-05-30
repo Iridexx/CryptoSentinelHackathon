@@ -74,6 +74,25 @@ export async function getDevBuildInfo(): Promise<DevBuildInfo> {
   };
 }
 
+export async function mergeToMain(branch: string, token: string): Promise<void> {
+  const res = await fetch('https://api.github.com/repos/iridexx/test_app_cloude/merges', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/vnd.github+json',
+    },
+    body: JSON.stringify({
+      base: 'main',
+      head: branch,
+      commit_message: `Merge ${branch} → main (da app)`,
+    }),
+  });
+  if (res.status === 201 || res.status === 204) return;
+  const data = await res.json().catch(() => ({}));
+  throw new Error((data as { message?: string }).message ?? `Errore ${res.status}`);
+}
+
 export async function downloadAndInstall(url: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     await AppSettings.openWithChooser({ url, title: 'Scarica APK con' });

@@ -1,6 +1,6 @@
 import { useState, type FC } from 'react';
 import { getNotificationPermission, openNotificationSettings } from '../utils/notifications';
-import { checkForUpdates, downloadAndInstall, getDevBuildInfo, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
+import { checkForUpdates, downloadAndInstall, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
 
 const INTERVALS = [
   { label: '30 sec', ms: 30_000 },
@@ -39,6 +39,10 @@ const SettingsTab: FC<Props> = ({
   const [pinError, setPinError] = useState(false);
   const [devLoadState, setDevLoadState] = useState<DevLoadState>('idle');
   const [devBuildInfo, setDevBuildInfo] = useState<DevBuildInfo | null>(null);
+  const [ghToken, setGhToken] = useState(() => localStorage.getItem('cryptowatch_dev_token') ?? '');
+  const [showToken, setShowToken] = useState(false);
+  const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
+  const [mergeError, setMergeError] = useState('');
 
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
@@ -59,6 +63,24 @@ const SettingsTab: FC<Props> = ({
     } else {
       setPinError(true);
       setPinInput('');
+    }
+  };
+
+  const handleSaveToken = (val: string) => {
+    setGhToken(val);
+    localStorage.setItem('cryptowatch_dev_token', val);
+  };
+
+  const handleMerge = async () => {
+    if (!devBuildInfo?.branch || !ghToken) return;
+    setMergeState('merging');
+    setMergeError('');
+    try {
+      await mergeToMain(devBuildInfo.branch, ghToken);
+      setMergeState('done');
+    } catch (e) {
+      setMergeError((e as Error).message);
+      setMergeState('error');
     }
   };
 
@@ -391,6 +413,53 @@ const SettingsTab: FC<Props> = ({
                       >
                         Scarica build #{devBuildInfo.buildNumber}
                       </button>
+                    )}
+                  </div>
+
+                  {/* Merge in main */}
+                  <div className="border-t border-dark-600 pt-3 space-y-2">
+                    <p className="text-xs text-gray-500">GitHub Token (PAT con scope repo)</p>
+                    <div className="flex gap-2">
+                      <input
+                        type={showToken ? 'text' : 'password'}
+                        value={ghToken}
+                        onChange={(e) => handleSaveToken(e.target.value)}
+                        placeholder="ghp_xxxxxxxxxxxx"
+                        className="flex-1 bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-accent-blue font-mono"
+                      />
+                      <button
+                        onClick={() => setShowToken(v => !v)}
+                        className="px-2.5 bg-dark-700 text-gray-400 rounded-lg text-xs"
+                      >
+                        {showToken ? 'Nascondi' : 'Mostra'}
+                      </button>
+                    </div>
+
+                    {mergeState === 'done' ? (
+                      <div className="py-2.5 bg-accent-green/10 border border-accent-green/20 rounded-lg text-center text-xs text-accent-green font-semibold">
+                        ✓ Merge completato su main
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleMerge}
+                        disabled={!ghToken || !devBuildInfo.branch || mergeState === 'merging'}
+                        className="w-full py-2.5 bg-accent-green/20 text-accent-green text-sm font-semibold rounded-lg hover:bg-accent-green/30 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                      >
+                        {mergeState === 'merging' ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                            Merge in corso…
+                          </>
+                        ) : (
+                          `Valida e merga in main`
+                        )}
+                      </button>
+                    )}
+                    {mergeState === 'error' && (
+                      <p className="text-xs text-accent-red">{mergeError}</p>
                     )}
                   </div>
                 </>
