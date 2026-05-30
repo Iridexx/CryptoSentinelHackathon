@@ -27,10 +27,12 @@ public class MainActivity extends BridgeActivity {
             long last = prefs.getLong(KEY_VER, -1);
 
             if (current != last) {
-                // Solo cache HTTP — localStorage/IndexedDB (token, allarmi, preferiti) restano intatti
+                // Cache HTTP + Service Worker (causa schermata bianca dopo aggiornamento)
+                // localStorage/IndexedDB (token, allarmi, preferiti) restano intatti
                 deleteDir(new File(getCacheDir(), "WebView"));
                 deleteDir(new File(getDataDir(), "app_webview/Default/Cache"));
                 deleteDir(new File(getDataDir(), "app_webview/Default/Code Cache"));
+                deleteDir(new File(getDataDir(), "app_webview/Default/Service Worker"));
                 prefs.edit().putLong(KEY_VER, current).apply();
             }
         } catch (Exception ignored) {}
