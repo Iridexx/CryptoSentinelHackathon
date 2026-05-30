@@ -227,6 +227,7 @@ export default function App() {
               batteryDismissed={batteryDismissed}
               dlState={dlState}
               onDownloadStart={() => setDlState('downloading')}
+              onDownloadDone={() => setDlState('done')}
             />
           )}
         </div>

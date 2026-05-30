@@ -28,6 +28,7 @@ interface Props {
   batteryDismissed: boolean;
   dlState: 'idle' | 'downloading' | 'done';
   onDownloadStart: () => void;
+  onDownloadDone: () => void;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -41,6 +42,7 @@ const SettingsTab: FC<Props> = ({
   batteryDismissed,
   dlState,
   onDownloadStart,
+  onDownloadDone,
 }) => {
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
@@ -108,6 +110,7 @@ const SettingsTab: FC<Props> = ({
   const handleDownload = async (url: string) => {
     onDownloadStart();
     await downloadAndInstall(url);
+    onDownloadDone();
   };
 
   const handleClearFavorites = () => {
