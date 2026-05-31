@@ -82,10 +82,19 @@ export default function App() {
 
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
-  const { containerRef: mainRef, indicatorRef: ptrRef, isRefreshing: ptrRefreshing } = usePullToRefresh(refresh);
   const { results: searchResults, searching } = useSearch(search, currency);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
   const { alerts, addAlert, removeAlert, resetAlert, editAlert, clearAlerts, history, clearHistory } = useAlerts(coins);
+
+  const [refreshFlash, setRefreshFlash] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    await refresh();
+    setRefreshFlash(true);
+    setTimeout(() => setRefreshFlash(false), 1500);
+  }, [refresh]);
+
+  const { containerRef: mainRef, indicatorRef: ptrRef, isRefreshing: ptrRefreshing } = usePullToRefresh(handleRefresh);
 
   const handleIntervalChange = useCallback((ms: number) => {
     setRefreshInterval(ms);
@@ -174,12 +183,12 @@ export default function App() {
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && (
-                <span className="text-gray-600 text-xs hidden sm:block">
-                  Aggiornato {lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                <span className={`text-xs transition-colors ${refreshFlash ? 'text-accent-green font-medium' : 'text-gray-600'}`}>
+                  {refreshFlash ? '✓ Aggiornato' : lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               )}
               <button
-                onClick={refresh}
+                onClick={handleRefresh}
                 className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-dark-700"
                 aria-label="Aggiorna prezzi"
               >
