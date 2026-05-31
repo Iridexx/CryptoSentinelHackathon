@@ -13,12 +13,43 @@ function formatPrice(price: number): string {
   return price.toFixed(6);
 }
 
+function parsePrice(input: string): number {
+  let s = input.trim();
+  const dotCount = (s.match(/\./g) || []).length;
+  const commaCount = (s.match(/,/g) || []).length;
+
+  if (dotCount > 1) {
+    // "1.234.567" → dots as thousands (Italian)
+    s = s.replace(/\./g, '');
+    if (commaCount === 1) s = s.replace(',', '.');
+  } else if (commaCount > 1) {
+    // "1,234,567" → commas as thousands
+    s = s.replace(/,/g, '');
+  } else if (dotCount === 1 && commaCount === 1) {
+    // both present: last separator is decimal
+    s = s.lastIndexOf(',') > s.lastIndexOf('.')
+      ? s.replace(/\./g, '').replace(',', '.')
+      : s.replace(/,/g, '');
+  } else if (commaCount === 1) {
+    const parts = s.split(',');
+    // comma as thousands if followed by exactly 3 digits: "63,600"
+    s = parts[1].length === 3 ? s.replace(',', '') : s.replace(',', '.');
+  }
+  // single dot or no separator: standard parseFloat
+
+  return parseFloat(s);
+}
+
 type Mode = 'price' | 'percent';
 
 const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
   const [mode, setMode] = useState<Mode>('price');
   const [direction, setDirection] = useState<AlertDirection>('above');
-  const [priceValue, setPriceValue] = useState(formatPrice(coin.current_price));
+  const [priceValue, setPriceValue] = useState(() => {
+    const p = coin.current_price;
+    if (p >= 1) return p.toFixed(2);
+    return p.toFixed(6);
+  });
   const [pctValue, setPctValue] = useState('5');
   const [error, setError] = useState('');
 
@@ -31,7 +62,7 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
 
   const handleSubmit = () => {
     if (mode === 'price') {
-      const num = parseFloat(priceValue.trim().replace(',', '.'));
+      const num = parsePrice(priceValue);
       if (isNaN(num) || num <= 0) {
         setError('Inserisci un prezzo valido maggiore di zero');
         return;
@@ -115,14 +146,13 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
             <div className="flex items-center bg-dark-700 rounded-lg px-3 border border-dark-600 focus-within:border-accent-blue">
               <span className="text-gray-500 mr-1">$</span>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={priceValue}
                 onChange={(e) => { setPriceValue(e.target.value); setError(''); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                 className="flex-1 bg-transparent text-white py-2.5 outline-none text-sm"
                 placeholder="0.00"
-                step="any"
-                min="0"
                 autoFocus
               />
             </div>
