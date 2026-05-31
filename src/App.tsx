@@ -184,10 +184,11 @@ export default function App() {
             </div>
           )}
 
-          {/* Notifica aggiornamento disponibile */}
-          {tab === 'dashboard' && availableUpdate && !updateDismissed && (
+          {/* Notifica aggiornamento disponibile — il floating button è fuori dal flusso, sempre visibile */}
+          {availableUpdate && !updateDismissed && (
             <UpdateNotification
               update={availableUpdate}
+              dlState={dlState}
               onDismiss={() => setUpdateDismissed(true)}
               onDownloadStart={() => setDlState('downloading')}
             />
