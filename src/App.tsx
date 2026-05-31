@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Coin } from './types';
 import { useCryptoData } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
@@ -30,6 +30,15 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateResult | null>(null);
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const lastUpdateCheckRef = useRef<number>(0);
+
+  const runUpdateCheck = useCallback(async () => {
+    lastUpdateCheckRef.current = Date.now();
+    try {
+      const result = await checkForUpdates(__APP_BUILD_NUMBER__);
+      if (result.available) setAvailableUpdate(result);
+    } catch { /* silent */ }
+  }, []);
 
   useEffect(() => {
     initNotifications();
@@ -38,29 +47,29 @@ export default function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         getNotificationPermission().then(setNotifPerm);
+        // Ricontrolla aggiornamenti se sono passati più di 30 min dall'ultimo check
+        if (Date.now() - lastUpdateCheckRef.current > 30 * 60 * 1000) {
+          runUpdateCheck();
+        }
       } else {
         triggerImmediateCheck();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Listener download a livello App — persiste anche cambiando tab
     let unsubDl: (() => void) | null = null;
     onDownloadComplete(() => setDlState('done')).then((fn) => { unsubDl = fn; });
 
-    const updateTimer = setTimeout(async () => {
-      try {
-        const result = await checkForUpdates(__APP_BUILD_NUMBER__);
-        if (result.available) setAvailableUpdate(result);
-      } catch { /* silent */ }
-    }, 3000);
+    // Check aggiornamenti silenzioso all'avvio (dopo 3s per non rallentare il render)
+    const updateTimer = setTimeout(runUpdateCheck, 3000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       unsubDl?.();
       clearTimeout(updateTimer);
     };
-  }, []);
-
+  }, [runUpdateCheck]);
   const [refreshInterval, setRefreshInterval] = useState<number>(() => {
     return parseInt(localStorage.getItem(INTERVAL_KEY) || '30000', 10);
   });
@@ -113,10 +122,12 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full bg-dark-900">
+      {/* Overlay safe area: copre la fascia della status bar con il colore dell'app */}
       <div
         className="fixed inset-x-0 top-0 bg-dark-900 z-50 pointer-events-none"
         style={{ height: 'env(safe-area-inset-top)' }}
       />
+      {/* Header */}
       <header className="bg-dark-900 border-b border-dark-700 px-4 pt-safe sticky top-0 z-40">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center justify-between py-3">
@@ -161,6 +172,7 @@ export default function App() {
         </div>
       </header>
 
+      {/* Contenuto principale */}
       <main className="flex-1 overflow-y-auto pb-20">
         <div className="max-w-lg mx-auto px-4 py-3">
           <NotificationBanner permission={notifPerm} onPermissionChange={setNotifPerm} />
@@ -172,6 +184,7 @@ export default function App() {
             </div>
           )}
 
+          {/* Notifica aggiornamento disponibile */}
           {tab === 'dashboard' && availableUpdate && !updateDismissed && (
             <UpdateNotification
               update={availableUpdate}
@@ -180,8 +193,10 @@ export default function App() {
             />
           )}
 
+          {/* Tab Dashboard */}
           {tab === 'dashboard' && (
             <div>
+              {/* Controlli pagina (visibili solo se non si sta cercando) */}
               {!isSearching && (
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex gap-1">
@@ -249,6 +264,7 @@ export default function App() {
             </div>
           )}
 
+          {/* Tab Preferiti */}
           {tab === 'favorites' && (
             <div>
               {favoriteCoins.length === 0 ? (
@@ -276,10 +292,12 @@ export default function App() {
             </div>
           )}
 
+          {/* Tab Allarmi */}
           {tab === 'alerts' && (
             <AlertsTab alerts={alerts} onRemove={removeAlert} onReset={resetAlert} coins={coins} onEdit={editAlert} />
           )}
 
+          {/* Tab Impostazioni */}
           {tab === 'settings' && (
             <SettingsTab
               refreshInterval={refreshInterval}
