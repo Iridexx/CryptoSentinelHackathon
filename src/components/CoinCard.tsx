@@ -26,6 +26,9 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert })
 
   return (
     <div className="flex items-center gap-3 bg-dark-800 rounded-xl p-3 hover:bg-dark-700 transition-colors">
+      <span className="text-xs text-gray-600 font-mono w-6 text-right flex-shrink-0 tabular-nums">
+        {coin.market_cap_rank ?? '—'}
+      </span>
       <img src={coin.image} alt={coin.name} className="w-9 h-9 rounded-full flex-shrink-0" loading="lazy" />
 
       <div className="flex-1 min-w-0">

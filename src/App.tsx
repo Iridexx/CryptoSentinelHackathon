@@ -6,6 +6,7 @@ import { useAlerts } from './hooks/useAlerts';
 import { getNotificationPermission, initNotifications } from './utils/notifications';
 import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, triggerImmediateCheck } from './utils/update';
+import { useSearch } from './hooks/useSearch';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
@@ -23,6 +24,8 @@ export default function App() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
   const [batteryDismissed, setBatteryDismissed] = useState(isBatteryBannerDismissed);
   const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
+  const [perPage, setPerPage] = useState<50 | 100>(50);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     initNotifications();
@@ -51,7 +54,8 @@ export default function App() {
     return parseInt(localStorage.getItem(INTERVAL_KEY) || '30000', 10);
   });
 
-  const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval);
+  const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page);
+  const { results: searchResults, searching } = useSearch(search);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
   const { alerts, addAlert, removeAlert, resetAlert, editAlert, clearAlerts } = useAlerts(coins);
 
@@ -60,11 +64,14 @@ export default function App() {
     localStorage.setItem(INTERVAL_KEY, String(ms));
   }, []);
 
-  const filteredCoins = useMemo(() => {
-    if (!search.trim()) return coins;
-    const q = search.toLowerCase().trim();
-    return coins.filter((c) => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q));
-  }, [coins, search]);
+  const handlePerPageChange = useCallback((n: 50 | 100) => {
+    setPerPage(n);
+    setPage(1);
+  }, []);
+
+  const isSearching = search.trim().length > 0;
+  const displayCoins = isSearching ? searchResults : coins;
+  const displayLoading = isSearching ? searching : loading;
 
   const favoriteCoins = useMemo(
     () => coins.filter((c) => isFavorite(c.id)),
@@ -154,20 +161,60 @@ export default function App() {
           {/* Tab Dashboard */}
           {tab === 'dashboard' && (
             <div>
-              {loading ? (
+              {/* Controlli pagina (visibili solo se non si sta cercando) */}
+              {!isSearching && (
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex gap-1">
+                    {([50, 100] as const).map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => handlePerPageChange(n)}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          perPage === n ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="px-2.5 py-1 rounded-lg bg-dark-700 text-gray-400 hover:text-white disabled:opacity-30 text-sm transition-colors"
+                    >
+                      ←
+                    </button>
+                    <span className="text-xs text-gray-500 tabular-nums">Pag. {page}</span>
+                    <button
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={coins.length < perPage}
+                      className="px-2.5 py-1 rounded-lg bg-dark-700 text-gray-400 hover:text-white disabled:opacity-30 text-sm transition-colors"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {displayLoading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-16 bg-dark-800 rounded-xl animate-pulse" />
                   ))}
                 </div>
-              ) : filteredCoins.length === 0 ? (
+              ) : displayCoins.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-4xl mb-3">🔍</div>
-                  <p className="text-gray-500 text-sm">Nessuna criptovaluta trovata per "{search}"</p>
+                  <p className="text-gray-500 text-sm">
+                    {isSearching
+                      ? `Nessuna criptovaluta trovata per "${search}"`
+                      : 'Nessuna criptovaluta disponibile'}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {filteredCoins.map((coin) => (
+                  {displayCoins.map((coin) => (
                     <CoinCard
                       key={coin.id}
                       coin={coin}
