@@ -21,6 +21,7 @@ export interface UpdateResult {
   available: boolean;
   releaseDate: string;
   buildNumber: string | null;
+  releaseNotes: string | null;
   downloadUrl: string | null;
 }
 
@@ -48,6 +49,8 @@ export async function checkForUpdates(currentBuildNumber: string): Promise<Updat
     ? releaseBuildNumber > currentBuildNum
     : false;
 
+  const rawNotes = (release.body as string | null)?.trim() ?? null;
+
   return {
     available,
     releaseDate: releaseDate.toLocaleDateString('it-IT', {
@@ -55,6 +58,7 @@ export async function checkForUpdates(currentBuildNumber: string): Promise<Updat
       hour: '2-digit', minute: '2-digit',
     }),
     buildNumber: buildMatch ? buildMatch[1] : null,
+    releaseNotes: rawNotes && rawNotes.length > 0 ? rawNotes : null,
     downloadUrl: apkAsset?.browser_download_url ?? null,
   };
 }

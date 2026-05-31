@@ -5,8 +5,9 @@ import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
 import { getNotificationPermission, initNotifications } from './utils/notifications';
 import { isBatteryBannerDismissed } from './utils/energySaving';
-import { onDownloadComplete, triggerImmediateCheck } from './utils/update';
+import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
+import UpdateNotification from './components/UpdateNotification';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
@@ -26,6 +27,8 @@ export default function App() {
   const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
   const [perPage, setPerPage] = useState<50 | 100>(50);
   const [page, setPage] = useState(1);
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateResult | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
 
   useEffect(() => {
     initNotifications();
@@ -45,9 +48,18 @@ export default function App() {
     let unsubDl: (() => void) | null = null;
     onDownloadComplete(() => setDlState('done')).then((fn) => { unsubDl = fn; });
 
+    // Check aggiornamenti silenzioso all'avvio (dopo 3s per non rallentare il render)
+    const updateTimer = setTimeout(async () => {
+      try {
+        const result = await checkForUpdates(__APP_BUILD_NUMBER__);
+        if (result.available) setAvailableUpdate(result);
+      } catch { /* silent */ }
+    }, 3000);
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       unsubDl?.();
+      clearTimeout(updateTimer);
     };
   }, []);
   const [refreshInterval, setRefreshInterval] = useState<number>(() => {
@@ -161,6 +173,15 @@ export default function App() {
             <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-2 text-xs text-accent-red mb-3">
               {error}
             </div>
+          )}
+
+          {/* Notifica aggiornamento disponibile */}
+          {tab === 'dashboard' && availableUpdate && !updateDismissed && (
+            <UpdateNotification
+              update={availableUpdate}
+              onDismiss={() => setUpdateDismissed(true)}
+              onDownloadStart={() => setDlState('downloading')}
+            />
           )}
 
           {/* Tab Dashboard */}
