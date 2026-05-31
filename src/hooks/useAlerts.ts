@@ -4,7 +4,7 @@ import { sendAlertNotification } from '../utils/notifications';
 import { playAlertBeep } from '../utils/audio';
 import { syncAlertsToNative } from '../utils/update';
 
-const STORAGE_KEY = 'cryptowatch_alerts';
+const STORAGE_KEY = 'cryptosentinel_alerts';
 
 function loadAlerts(): PriceAlert[] {
   try {

@@ -3,10 +3,10 @@ apply plugin: 'com.android.application'
 def buildNumber = project.hasProperty('buildNumber') ? project.buildNumber.toInteger() : 1
 
 android {
-    namespace = "com.cryptowatch.app"
+    namespace = "com.cryptosentinel.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.cryptowatch.app"
+        applicationId "com.cryptosentinel.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode buildNumber

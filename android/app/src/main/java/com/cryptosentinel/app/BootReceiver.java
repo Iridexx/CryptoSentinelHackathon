@@ -1,4 +1,4 @@
-package com.cryptowatch.app;
+package com.cryptosentinel.app;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

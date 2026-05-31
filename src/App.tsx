@@ -16,7 +16,7 @@ import NotificationBanner from './components/NotificationBanner';
 import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
 
-const INTERVAL_KEY = 'cryptowatch_refresh_interval';
+const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -124,7 +124,7 @@ export default function App() {
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-2">
               <span className="text-2xl">₿</span>
-              <h1 className="text-white font-bold text-lg tracking-tight">CryptoWatch</h1>
+              <h1 className="text-white font-bold text-lg tracking-tight">CryptoSentinel</h1>
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && (

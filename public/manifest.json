@@ -1,6 +1,6 @@
 {
-  "name": "CryptoWatch - Monitor Prezzi",
-  "short_name": "CryptoWatch",
+  "name": "CryptoSentinel - Monitor Prezzi",
+  "short_name": "CryptoSentinel",
   "description": "Monitora i prezzi delle criptovalute con allarmi in tempo reale",
   "start_url": "/",
   "display": "standalone",

@@ -15,7 +15,7 @@ const RELEASES_API = 'https://api.github.com/repos/iridexx/test_app_cloude/relea
 const DEV_RELEASES_API = 'https://api.github.com/repos/iridexx/test_app_cloude/releases/tags/dev';
 
 // L'APK produzione è pubblicato su GitHub Pages, nessun login richiesto
-export const APK_PAGES_URL = 'https://iridexx.github.io/test_app_cloude/CryptoWatch-debug.apk';
+export const APK_PAGES_URL = 'https://iridexx.github.io/test_app_cloude/CryptoSentinel-debug.apk';
 
 export interface UpdateResult {
   available: boolean;

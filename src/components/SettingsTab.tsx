@@ -127,7 +127,7 @@ const SettingsTab: FC<Props> = ({
   const [pinError, setPinError] = useState(false);
   const [devLoadState, setDevLoadState] = useState<DevLoadState>('idle');
   const [devBuildInfo, setDevBuildInfo] = useState<DevBuildInfo | null>(null);
-  const [ghToken, setGhToken] = useState(() => localStorage.getItem('cryptowatch_dev_token') ?? '');
+  const [ghToken, setGhToken] = useState(() => localStorage.getItem('cryptosentinel_dev_token') ?? '');
   const [showToken, setShowToken] = useState(false);
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
   const [mergeError, setMergeError] = useState('');
@@ -156,7 +156,7 @@ const SettingsTab: FC<Props> = ({
 
   const handleSaveToken = (val: string) => {
     setGhToken(val);
-    localStorage.setItem('cryptowatch_dev_token', val);
+    localStorage.setItem('cryptosentinel_dev_token', val);
   };
 
   const handleMerge = async () => {
@@ -208,7 +208,7 @@ const SettingsTab: FC<Props> = ({
         <div className="bg-dark-800 rounded-xl px-4 py-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-white font-medium">CryptoWatch</p>
+              <p className="text-sm text-white font-medium">CryptoSentinel</p>
               <p className="text-xs text-gray-500 mt-0.5">
                 Build: {new Date(__APP_BUILD_DATE__).toLocaleDateString('it-IT', {
                   day: '2-digit', month: '2-digit', year: 'numeric',
@@ -430,7 +430,7 @@ const SettingsTab: FC<Props> = ({
         <div className="bg-dark-800 rounded-xl divide-y divide-dark-700">
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Applicazione</span>
-            <span className="text-sm text-white font-medium">CryptoWatch</span>
+            <span className="text-sm text-white font-medium">CryptoSentinel</span>
           </div>
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Versione</span>

@@ -50,7 +50,7 @@ jobs:
           ./gradlew assembleDebug --no-daemon --stacktrace -PbuildNumber=${{ github.run_number }}
 
       - name: Rinomina APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoWatch-debug.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoSentinel-debug.apk
 
       - name: Aggiorna release dev (tutti i branch)
         env:
@@ -59,10 +59,10 @@ jobs:
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           sleep 2
           gh release create dev \
-            --title "Dev Build #${{ github.run_number }}" \
+            --title "CryptoSentinel Dev #${{ github.run_number }}" \
             --notes "Branch: ${{ github.ref_name }} | Build #${{ github.run_number }} del $(date '+%d/%m/%Y %H:%M')" \
             --prerelease \
-            CryptoWatch-debug.apk
+            CryptoSentinel-debug.apk
 
       - name: Pubblica release latest (solo main)
         if: github.ref == 'refs/heads/main'
@@ -72,16 +72,16 @@ jobs:
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           sleep 3
           gh release create latest \
-            --title "CryptoWatch v1.0.${{ github.run_number }}" \
+            --title "CryptoSentinel v1.0.${{ github.run_number }}" \
             --notes "Aggiornamento automatico del $(date '+%d/%m/%Y alle %H:%M')" \
             --latest \
-            CryptoWatch-debug.apk
+            CryptoSentinel-debug.apk
 
       - name: Upload APK come artefatto CI
         uses: actions/upload-artifact@v6
         with:
-          name: CryptoWatch-debug.apk
-          path: CryptoWatch-debug.apk
+          name: CryptoSentinel-debug.apk
+          path: CryptoSentinel-debug.apk
           retention-days: 30
 
   deploy-pages:
@@ -104,10 +104,10 @@ jobs:
       - name: Scarica APK dall'artefatto
         uses: actions/download-artifact@v7
         with:
-          name: CryptoWatch-debug.apk
+          name: CryptoSentinel-debug.apk
 
       - name: Prepara cartella Pages
-        run: mkdir -p pages-dist && cp CryptoWatch-debug.apk pages-dist/
+        run: mkdir -p pages-dist && cp CryptoSentinel-debug.apk pages-dist/
 
       - name: Upload artefatto Pages
         uses: actions/upload-pages-artifact@v3

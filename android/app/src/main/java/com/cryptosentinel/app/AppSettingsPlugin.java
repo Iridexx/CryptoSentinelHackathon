@@ -1,4 +1,4 @@
-package com.cryptowatch.app;
+package com.cryptosentinel.app;
 
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
@@ -54,13 +54,13 @@ public class AppSettingsPlugin extends Plugin {
             .getSystemService(Context.DOWNLOAD_SERVICE);
 
         DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-        request.setTitle("CryptoWatch");
+        request.setTitle("CryptoSentinel");
         request.setDescription("Download aggiornamento in corso...");
         request.setNotificationVisibility(
             DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
         );
         request.setDestinationInExternalPublicDir(
-            Environment.DIRECTORY_DOWNLOADS, "CryptoWatch-update.apk"
+            Environment.DIRECTORY_DOWNLOADS, "CryptoSentinel-update.apk"
         );
         request.setMimeType("application/vnd.android.package-archive");
 
@@ -115,7 +115,7 @@ public class AppSettingsPlugin extends Plugin {
     @PluginMethod
     public void syncAlerts(PluginCall call) {
         String json = call.getString("json", "[]");
-        getContext().getSharedPreferences("cryptowatch_prefs", android.content.Context.MODE_PRIVATE)
+        getContext().getSharedPreferences("cryptosentinel_prefs", android.content.Context.MODE_PRIVATE)
             .edit().putString("alerts_json", json).apply();
         call.resolve();
     }

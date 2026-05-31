@@ -1,4 +1,4 @@
-package com.cryptowatch.app;
+package com.cryptosentinel.app;
 
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
@@ -8,7 +8,7 @@ import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
-    private static final String PREFS = "cryptowatch_prefs";
+    private static final String PREFS = "cryptosentinel_prefs";
     private static final String KEY_VER = "last_version_code";
 
     @Override

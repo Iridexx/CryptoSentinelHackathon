@@ -1,4 +1,4 @@
-package com.cryptowatch.app;
+package com.cryptosentinel.app;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class PriceCheckWorker extends Worker {
-    private static final String PREFS   = "cryptowatch_prefs";
+    private static final String PREFS   = "cryptosentinel_prefs";
     private static final String KEY     = "alerts_json";
     private static final String CHANNEL = "price_alerts";
     private static final String TAG     = "PriceCheckWorker";

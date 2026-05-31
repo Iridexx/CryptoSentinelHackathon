@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Coin } from '../types';
 
-const CACHE_KEY = 'cryptowatch_coins_cache';
+const CACHE_KEY = 'cryptosentinel_coins_cache';
 
 function buildUrl(perPage: 50 | 100, page: number): string {
   return `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${page}&sparkline=false&price_change_percentage=24h`;
