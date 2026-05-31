@@ -8,6 +8,7 @@ import { getNotificationPermission, initNotifications } from './utils/notificati
 import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 import UpdateNotification from './components/UpdateNotification';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
@@ -80,6 +81,7 @@ export default function App() {
 
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
+  const { containerRef: mainRef, pullY, isRefreshing } = usePullToRefresh(refresh);
   const { results: searchResults, searching } = useSearch(search, currency);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
   const { alerts, addAlert, removeAlert, resetAlert, editAlert, clearAlerts, history, clearHistory } = useAlerts(coins);
@@ -206,7 +208,27 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-20">
+      <main ref={mainRef} className="flex-1 overflow-y-auto pb-20">
+        {/* Pull-to-refresh indicator */}
+        <div
+          className="flex items-center justify-center overflow-hidden transition-[height] duration-150"
+          style={{ height: isRefreshing ? 48 : pullY }}
+        >
+          {isRefreshing ? (
+            <svg className="w-5 h-5 text-accent-blue animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : pullY > 0 ? (
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform duration-150 ${pullY >= 60 ? 'rotate-180 text-accent-blue' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          ) : null}
+        </div>
+
         <div className="max-w-lg mx-auto px-4 py-3">
           <NotificationBanner permission={notifPerm} onPermissionChange={setNotifPerm} />
           <EnergySavingBanner dismissed={batteryDismissed} onDismiss={() => setBatteryDismissed(true)} />
