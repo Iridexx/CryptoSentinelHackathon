@@ -22,6 +22,7 @@ export interface PriceAlert {
   coinImage: string;
   direction: AlertDirection;
   threshold: number;
+  percentChange?: number; // impostato se creato come alert percentuale
   triggered: boolean;
   createdAt: number;
 }

@@ -115,7 +115,6 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
     ? Math.max(0, Math.min(100, ((coin.current_price - sliderMin) / (sliderMax - sliderMin)) * 100))
     : null;
 
-  // Pallino: grigio se al centro, verde se alzato, rosso se abbassato
   const deviation = sliderValue - 50;
   const thumbColor = deviation === 0 ? '#6b7280' : deviation > 0 ? '#22c55e' : '#ef4444';
 
@@ -123,7 +122,6 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
     <div className={`rounded-xl mb-2 border overflow-hidden transition-all ${
       alert.triggered ? 'bg-dark-700 border-accent-yellow/30' : 'bg-dark-800 border-dark-600'
     }`}>
-      {/* Riga principale — click per aprire editor */}
       <div
         className="flex items-center gap-3 p-3 cursor-pointer select-none"
         onClick={() => !editing && handleOpenEdit()}
@@ -136,8 +134,13 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
               <span className="text-xs bg-accent-yellow/20 text-accent-yellow px-1.5 py-0.5 rounded-full">Scattato</span>
             )}
           </div>
-          <div className={`text-xs mt-0.5 ${isAbove ? 'text-accent-green' : 'text-accent-red'}`}>
+          <div className={`text-xs mt-0.5 flex items-center gap-1.5 ${isAbove ? 'text-accent-green' : 'text-accent-red'}`}>
             {isAbove ? '▲ Sopra' : '▼ Sotto'} ${formatPrice(alert.threshold)}
+            {alert.percentChange != null && (
+              <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${isAbove ? 'bg-accent-green/10' : 'bg-accent-red/10'}`}>
+                {isAbove ? '+' : '-'}{alert.percentChange.toFixed(1)}%
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -163,10 +166,8 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
         </div>
       </div>
 
-      {/* Editor inline con slider */}
       {editing && (
         <div className="px-3 pb-3 border-t border-dark-600">
-          {/* Soglia live + % rispetto al prezzo attuale */}
           <div className="flex items-center justify-between pt-2.5 pb-2">
             <div className="flex items-center gap-2">
               <span className={`text-sm font-bold tabular-nums ${draftDirection === 'above' ? 'text-accent-green' : 'text-accent-red'}`}>
@@ -189,7 +190,6 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
             )}
           </div>
 
-          {/* Slider + marker prezzo attuale */}
           <div className="relative mb-1">
             <input
               type="range"
@@ -204,7 +204,6 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
                 accentColor: thumbColor,
               }}
             />
-            {/* Linea blu = prezzo attuale coin */}
             {currentPricePercent !== null && (
               <div
                 className="absolute top-0 h-full w-px bg-accent-blue/70 rounded-full pointer-events-none"
@@ -213,14 +212,12 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
             )}
           </div>
 
-          {/* Etichette range */}
           <div className="flex justify-between text-xs text-gray-600 mb-3 mt-1">
             <span>${formatPrice(sliderMin)}</span>
             <span className="text-gray-700">−50% · +50%</span>
             <span>${formatPrice(sliderMax)}</span>
           </div>
 
-          {/* Bottoni */}
           <div className="flex gap-2">
             <button
               onClick={() => setEditing(false)}
