@@ -43,7 +43,7 @@ export async function checkForUpdates(currentBuildNumber: string): Promise<Updat
   const releaseDate = new Date(release.published_at as string);
   const apkAsset = (release.assets as { name: string; browser_download_url: string }[])
     ?.find((a) => a.name.endsWith('.apk'));
-  const buildMatch = (release.name as string)?.match(/Build (\d+)/);
+  const buildMatch = (release.name as string)?.match(/v\d+\.\d+\.(\d+)/);
   const releaseBuildNumber = buildMatch ? parseInt(buildMatch[1], 10) : 0;
   const currentBuildNum = parseInt(currentBuildNumber, 10);
   const available = !isNaN(currentBuildNum) && !isNaN(releaseBuildNumber)

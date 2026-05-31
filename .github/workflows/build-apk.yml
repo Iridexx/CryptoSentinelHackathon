@@ -72,7 +72,7 @@ jobs:
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           sleep 3
           gh release create latest \
-            --title "CryptoWatch - Build ${{ github.run_number }}" \
+            --title "CryptoWatch v1.0.${{ github.run_number }}" \
             --notes "Aggiornamento automatico del $(date '+%d/%m/%Y alle %H:%M')" \
             --latest \
             CryptoWatch-debug.apk
