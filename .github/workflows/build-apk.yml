@@ -8,6 +8,7 @@ on:
       - claude/energy-saving-toggle-AsdD9
       - Fix_001
       - main
+      - release/**
   workflow_dispatch:
 
 jobs:
