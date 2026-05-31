@@ -1,5 +1,6 @@
 import { useState, type FC } from 'react';
 import type { PriceAlert, Coin, AlertDirection, AlertHistoryEntry } from '../types';
+import { hapticMedium, hapticLight } from '../utils/haptics';
 
 interface Props {
   alerts: PriceAlert[];
@@ -186,7 +187,7 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
           )}
           {alert.triggered && (
             <button
-              onClick={() => onReset(alert.id)}
+              onClick={() => { hapticLight(); onReset(alert.id); }}
               className="text-xs px-2 py-1 rounded-lg bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors"
               aria-label="Riattiva allarme"
             >
@@ -194,7 +195,7 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin })
             </button>
           )}
           <button
-            onClick={() => onRemove(alert.id)}
+            onClick={() => { hapticMedium(); onRemove(alert.id); }}
             className="text-xs px-2 py-1 rounded-lg bg-accent-red/10 text-accent-red hover:bg-accent-red/20 transition-colors"
             aria-label="Elimina allarme"
           >

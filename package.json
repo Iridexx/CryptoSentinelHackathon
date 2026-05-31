@@ -13,6 +13,7 @@
     "@capacitor/android": "^8.3.4",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
+    "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.2.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

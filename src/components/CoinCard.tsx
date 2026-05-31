@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import type { Coin } from '../types';
 import type { Currency } from '../hooks/useCurrency';
+import { hapticMedium, hapticLight } from '../utils/haptics';
 
 const SYMBOL: Record<Currency, string> = { usd: '$', eur: '€', btc: '₿' };
 
@@ -76,14 +77,14 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, c
 
       <div className="flex flex-col gap-1 flex-shrink-0 ml-1">
         <button
-          onClick={() => onToggleFavorite(coin.id)}
+          onClick={() => { hapticMedium(); onToggleFavorite(coin.id); }}
           className={`text-lg leading-none transition-transform active:scale-75 ${isFavorite ? 'text-accent-yellow' : 'text-gray-600 hover:text-gray-400'}`}
           aria-label={isFavorite ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}
         >
           ★
         </button>
         <button
-          onClick={() => onAddAlert(coin)}
+          onClick={() => { hapticLight(); onAddAlert(coin); }}
           className="text-lg leading-none text-gray-600 hover:text-accent-blue transition-colors active:scale-75"
           aria-label="Imposta allarme"
         >

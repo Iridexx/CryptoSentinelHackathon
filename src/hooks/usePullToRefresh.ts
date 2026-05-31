@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { hapticMedium } from '../utils/haptics';
 
 const TRIGGER_THRESHOLD = 60;
 const MAX_PULL = 88;
@@ -39,6 +40,7 @@ export function usePullToRefresh(onRefresh: () => Promise<void> | void) {
     if (dist >= TRIGGER_THRESHOLD && !isRefreshingRef.current) {
       isRefreshingRef.current = true;
       setIsRefreshing(true);
+      hapticMedium();
       try { await onRefresh(); } finally {
         isRefreshingRef.current = false;
         setIsRefreshing(false);

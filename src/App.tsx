@@ -9,6 +9,7 @@ import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { hapticLight } from './utils/haptics';
 import UpdateNotification from './components/UpdateNotification';
 import Navbar, { type Tab } from './components/Navbar';
 import CoinCard from './components/CoinCard';
@@ -312,7 +313,7 @@ export default function App() {
                     ]).map(({ key, label }) => (
                       <button
                         key={key}
-                        onClick={() => handleSort(key)}
+                        onClick={() => { hapticLight(); handleSort(key); }}
                         className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                           sortBy === key ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/30' : 'bg-dark-700 text-gray-400 hover:text-white border border-transparent'
                         }`}

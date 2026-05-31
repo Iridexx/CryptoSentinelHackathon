@@ -1,5 +1,6 @@
 import { useState, type FC } from 'react';
 import type { Coin, AlertDirection } from '../types';
+import { hapticMedium, hapticLight } from '../utils/haptics';
 
 interface Props {
   coin: Coin;
@@ -122,7 +123,7 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
         {/* Direzione */}
         <div className="flex gap-2 mb-4">
           <button
-            onClick={() => setDirection('above')}
+            onClick={() => { hapticLight(); setDirection('above'); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
               direction === 'above' ? 'bg-accent-green text-white' : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
             }`}
@@ -130,7 +131,7 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
             ▲ Sopra
           </button>
           <button
-            onClick={() => setDirection('below')}  
+            onClick={() => { hapticLight(); setDirection('below'); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
               direction === 'below' ? 'bg-accent-red text-white' : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
             }`}
@@ -212,10 +213,10 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
         </p>
 
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg bg-dark-700 text-gray-300 hover:bg-dark-600 text-sm font-medium transition-colors">
+          <button onClick={() => { hapticLight(); onClose(); }} className="flex-1 py-2.5 rounded-lg bg-dark-700 text-gray-300 hover:bg-dark-600 text-sm font-medium transition-colors">
             Annulla
           </button>
-          <button onClick={handleSubmit} className="flex-1 py-2.5 rounded-lg bg-accent-blue text-white hover:opacity-90 text-sm font-semibold transition-opacity">
+          <button onClick={() => { hapticMedium(); handleSubmit(); }} className="flex-1 py-2.5 rounded-lg bg-accent-blue text-white hover:opacity-90 text-sm font-semibold transition-opacity">
             Crea Allarme
           </button>
         </div>
