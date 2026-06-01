@@ -70,27 +70,26 @@ jobs:
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: |
+            Novità di questa versione:
+
+            • Pull-to-refresh — trascina verso il basso per aggiornare i prezzi
+            • Flash prezzo verde/rosso quando i valori cambiano dopo l'aggiornamento
+            • Timeframe 1h / 24h / 7g per le variazioni di prezzo
+            • Ordinamento lista per rank, variazione %, volume, prezzo
+            • Feedback aptico su tap preferiti, allarmi, ordinamento e pull-to-refresh
+            • Notifiche corrette — nessun duplicato, nessun falso all'apertura app
+            • Icona notifica dedicata nella barra di stato; tap apre direttamente l'app
+            • Modifica allarme con input diretto prezzo o percentuale (oltre allo slider)
+            • Slider allarmi fluido (pointer events, zero jank) centrato sul prezzo di mercato
+            • Impostazione range variazione slider in Impostazioni (±5% ±10% ±20% ±30% ±50%)
+            • Note personalizzate per ogni allarme — visibili nella notifica e nell'elenco
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           sleep 3
           gh release create latest \
             --title "CryptoSentinel v1.0.${{ github.run_number }}" \
-            --notes "$(cat <<'NOTES'
-Novità di questa versione:
-
-• Pull-to-refresh — trascina verso il basso per aggiornare i prezzi
-• Flash prezzo verde/rosso quando i valori cambiano dopo l'aggiornamento
-• Timeframe 1h / 24h / 7g per le variazioni di prezzo
-• Ordinamento lista per rank, variazione %, volume, prezzo
-• Feedback aptico su tap preferiti, allarmi, ordinamento e pull-to-refresh
-• Notifiche corrette — nessun duplicato, nessun falso all'apertura app
-• Icona notifica dedicata nella barra di stato; tap apre direttamente l'app
-• Modifica allarme con input diretto prezzo o percentuale (oltre allo slider)
-• Slider allarmi fluido (pointer events, zero jank) centrato sul prezzo di mercato
-• Impostazione range variazione slider in Impostazioni (±5% ±10% ±20% ±30% ±50%)
-• Note personalizzate per ogni allarme — visibili nella notifica e nell'elenco
-NOTES
-)" \
+            --notes "$RELEASE_NOTES" \
             --latest \
             CryptoSentinel-debug.apk
 
