@@ -75,6 +75,41 @@ export async function sendAlertNotification(params: {
   }
 }
 
+export async function sendRangeNotification(params: {
+  coinName: string;
+  minPrice: number;
+  maxPrice: number;
+  currentPrice: number;
+  entered: boolean;
+  note?: string;
+}): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') return;
+      const fmt = (v: number) => v >= 1000 ? v.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : v >= 1 ? v.toFixed(2) : v.toFixed(6);
+      const status = params.entered ? '↔ Entrato nel range' : '↗ Uscito dal range';
+      const title = `${status} — ${params.coinName}`;
+      const bodyBase = `Range: $${fmt(params.minPrice)} – $${fmt(params.maxPrice)}  ·  Ora: $${fmt(params.currentPrice)}`;
+      const body = params.note ? `${bodyBase}\n📝 ${params.note}` : bodyBase;
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: (Date.now() % 2_000_000) | 0,
+          channelId: 'price_alerts',
+          title,
+          body,
+          sound: 'default',
+          smallIcon: 'ic_notification',
+          autoCancel: true,
+        }],
+      });
+    } catch {
+      // notifica fallita silenziosamente
+    }
+    return;
+  }
+}
+
 export function openNotificationSettings(): void {
   if (Capacitor.isNativePlatform()) {
     AppSettings.openNotifications().catch(() => {
