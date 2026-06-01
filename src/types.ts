@@ -41,3 +41,17 @@ export interface AlertHistoryEntry {
   triggeredPrice: number;
   triggeredAt: number;
 }
+
+export interface RangeAlert {
+  id: string;
+  coinId: string;
+  coinName: string;
+  coinSymbol: string;
+  coinImage: string;
+  minPrice: number;
+  maxPrice: number;
+  note?: string;
+  isInsideRange: boolean | null;
+  lastNotifiedAt: number | null;
+  createdAt: number;
+}
