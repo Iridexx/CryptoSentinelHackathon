@@ -47,15 +47,50 @@ export function useAlerts(coins: Coin[]) {
   const lastTriggeredRef = useRef<Set<string>>(new Set());
   const prevPricesRef = useRef<Map<string, number>>(new Map());
   const alertsRef = useRef<PriceAlert[]>(alerts);
+  const coinsRef = useRef<Coin[]>(coins);
   alertsRef.current = alerts;
+  coinsRef.current = coins;
 
-  const addAlert = useCallback((alert: Omit<PriceAlert, 'id' | 'triggered' | 'createdAt'>) => {
+  const addAlert = useCallback((alertData: Omit<PriceAlert, 'id' | 'triggered' | 'createdAt'>) => {
     const newAlert: PriceAlert = {
-      ...alert,
+      ...alertData,
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       triggered: false,
       createdAt: Date.now(),
     };
+
+    // Verifica immediata: se il prezzo è già oltre la soglia, scatta subito senza aspettare il prossimo refresh
+    const coin = coinsRef.current.find(c => c.id === alertData.coinId);
+    if (coin) {
+      const price = coin.current_price;
+      const alreadyMet =
+        (alertData.direction === 'above' && price >= alertData.threshold) ||
+        (alertData.direction === 'below' && price <= alertData.threshold);
+      if (alreadyMet) {
+        newAlert.triggered = true;
+        lastTriggeredRef.current.add(newAlert.id);
+        const now = Date.now();
+        const entry: AlertHistoryEntry = {
+          id: `${now}-${newAlert.id}`,
+          coinId: alertData.coinId,
+          coinName: alertData.coinName,
+          coinSymbol: alertData.coinSymbol,
+          coinImage: alertData.coinImage,
+          direction: alertData.direction,
+          threshold: alertData.threshold,
+          triggeredPrice: price,
+          triggeredAt: now,
+        };
+        setHistory(prev => {
+          const next = [entry, ...prev].slice(0, MAX_HISTORY);
+          saveHistory(next);
+          return next;
+        });
+        playAlertBeep();
+        sendAlertNotification({ alert: newAlert, coinName: alertData.coinName, direction: alertData.direction, threshold: alertData.threshold, currentPrice: price, note: alertData.note });
+      }
+    }
+
     setAlerts((prev) => {
       const next = [...prev, newAlert];
       saveAlerts(next);
@@ -128,7 +163,7 @@ export function useAlerts(coins: Coin[]) {
       const crossed =
         (alert.direction === 'above' && prevPrice !== undefined && prevPrice < alert.threshold && price >= alert.threshold) ||
         (alert.direction === 'below' && prevPrice !== undefined && prevPrice > alert.threshold && price <= alert.threshold);
-      // Scatta anche se l'alert è appena stato creato e il prezzo è già oltre la soglia
+      // Fallback: scatta se l'alert è recente e la condizione è già soddisfatta (editAlert senza cambio prezzo)
       const isNew = Date.now() - alert.createdAt < 10 * 60 * 1000;
       const fires = crossed || (isNew && conditionMet);
 
@@ -198,12 +233,48 @@ export function useAlerts(coins: Coin[]) {
   }, [coins]);
 
   const editAlert = useCallback((id: string, threshold: number, direction: AlertDirection, percentChange?: number, note?: string) => {
+    const existing = alertsRef.current.find(a => a.id === id);
+    let firedNow = false;
+
+    if (existing) {
+      const coin = coinsRef.current.find(c => c.id === existing.coinId);
+      if (coin) {
+        const price = coin.current_price;
+        const alreadyMet =
+          (direction === 'above' && price >= threshold) ||
+          (direction === 'below' && price <= threshold);
+        if (alreadyMet) {
+          firedNow = true;
+          lastTriggeredRef.current.add(id);
+          const now = Date.now();
+          const entry: AlertHistoryEntry = {
+            id: `${now}-${id}`,
+            coinId: existing.coinId,
+            coinName: existing.coinName,
+            coinSymbol: existing.coinSymbol,
+            coinImage: existing.coinImage,
+            direction,
+            threshold,
+            triggeredPrice: price,
+            triggeredAt: now,
+          };
+          setHistory(prev => {
+            const next = [entry, ...prev].slice(0, MAX_HISTORY);
+            saveHistory(next);
+            return next;
+          });
+          playAlertBeep();
+          sendAlertNotification({ alert: { ...existing, threshold, direction }, coinName: existing.coinName, direction, threshold, currentPrice: price, note: note !== undefined ? note : existing.note });
+        }
+      }
+    }
+
     setAlerts((prev) => {
-      const next = prev.map((a) => a.id === id ? { ...a, threshold, direction, percentChange, note: note !== undefined ? note : a.note, triggered: false } : a);
+      const next = prev.map((a) => a.id === id ? { ...a, threshold, direction, percentChange, note: note !== undefined ? note : a.note, triggered: firedNow } : a);
       saveAlerts(next);
       return next;
     });
-    lastTriggeredRef.current.delete(id);
+    if (!firedNow) lastTriggeredRef.current.delete(id);
   }, []);
 
   const clearAlerts = useCallback(() => {
