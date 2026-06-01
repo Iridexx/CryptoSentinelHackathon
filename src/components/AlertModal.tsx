@@ -5,6 +5,7 @@ import { hapticMedium, hapticLight } from '../utils/haptics';
 interface Props {
   coin: Coin;
   onConfirm: (direction: AlertDirection, threshold: number, percentChange?: number, note?: string) => void;
+  onConfirmRange: (minPrice: number, maxPrice: number, note?: string) => void;
   onClose: () => void;
 }
 
@@ -41,9 +42,9 @@ function parsePrice(input: string): number {
   return parseFloat(s);
 }
 
-type Mode = 'price' | 'percent';
+type Mode = 'price' | 'percent' | 'range';
 
-const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
+const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => {
   const [mode, setMode] = useState<Mode>('price');
   const [direction, setDirection] = useState<AlertDirection>('above');
   const [priceValue, setPriceValue] = useState(() => {
@@ -52,6 +53,14 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
     return p.toFixed(6);
   });
   const [pctValue, setPctValue] = useState('5');
+  const [rangeMin, setRangeMin] = useState(() => {
+    const p = coin.current_price * 0.95;
+    return p >= 1 ? p.toFixed(2) : p.toFixed(6);
+  });
+  const [rangeMax, setRangeMax] = useState(() => {
+    const p = coin.current_price * 1.05;
+    return p >= 1 ? p.toFixed(2) : p.toFixed(6);
+  });
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
@@ -64,6 +73,16 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
 
   const handleSubmit = () => {
     const trimmedNote = note.trim() || undefined;
+    if (mode === 'range') {
+      const min = parsePrice(rangeMin);
+      const max = parsePrice(rangeMax);
+      if (isNaN(min) || min <= 0) { setError('Inserisci un prezzo minimo valido'); return; }
+      if (isNaN(max) || max <= 0) { setError('Inserisci un prezzo massimo valido'); return; }
+      if (min >= max) { setError('Il prezzo minimo deve essere inferiore al massimo'); return; }
+      onConfirmRange(min, max, trimmedNote);
+      onClose();
+      return;
+    }
     if (mode === 'price') {
       const num = parsePrice(priceValue);
       if (isNaN(num) || num <= 0) {
@@ -106,24 +125,32 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
         <div className="flex gap-1 bg-dark-700 rounded-lg p-1 mb-4">
           <button
             onClick={() => { setMode('price'); setError(''); }}
-            className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
               mode === 'price' ? 'bg-dark-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
-            $ Prezzo fisso
+            $ Fisso
           </button>
           <button
             onClick={() => { setMode('percent'); setError(''); }}
-            className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
               mode === 'percent' ? 'bg-dark-600 text-white' : 'text-gray-400 hover:text-white'
             }`}
           >
-            % Variazione
+            % Variaz.
+          </button>
+          <button
+            onClick={() => { setMode('range'); setError(''); }}
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              mode === 'range' ? 'bg-dark-600 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            ↔ Range
           </button>
         </div>
 
-        {/* Direzione */}
-        <div className="flex gap-2 mb-4">
+        {/* Direzione — nascosta in modalità range */}
+        <div className={`flex gap-2 mb-4 ${mode === 'range' ? 'hidden' : ''}`}>
           <button
             onClick={() => { hapticLight(); setDirection('above'); }}
             className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
@@ -199,6 +226,43 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
           </div>
         )}
 
+        {/* Input range price */}
+        {mode === 'range' && (
+          <div className="mb-2 space-y-2">
+            <div>
+              <label className="text-gray-400 text-xs mb-1 block">Prezzo minimo (USD)</label>
+              <div className="flex items-center bg-dark-700 rounded-lg px-3 border border-dark-600 focus-within:border-accent-blue">
+                <span className="text-gray-500 mr-1">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={rangeMin}
+                  onChange={(e) => { setRangeMin(e.target.value); setError(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  className="flex-1 bg-transparent text-white py-2.5 outline-none text-sm"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-gray-400 text-xs mb-1 block">Prezzo massimo (USD)</label>
+              <div className="flex items-center bg-dark-700 rounded-lg px-3 border border-dark-600 focus-within:border-accent-blue">
+                <span className="text-gray-500 mr-1">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={rangeMax}
+                  onChange={(e) => { setRangeMax(e.target.value); setError(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                  className="flex-1 bg-transparent text-white py-2.5 outline-none text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && <p className="text-accent-red text-xs mt-1 mb-1">{error}</p>}
 
         {/* Nota opzionale */}
@@ -215,15 +279,24 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onClose }) => {
 
         {/* Anteprima */}
         <p className="text-gray-500 text-xs mb-4 mt-2">
-          Notifica quando {coin.name} andrà{' '}
-          <span className={direction === 'above' ? 'text-accent-green' : 'text-accent-red'}>
-            {direction === 'above' ? 'sopra' : 'sotto'}
-          </span>{' '}
-          {mode === 'percent'
-            ? calcThreshold !== null && pctNum > 0
-              ? `$${formatPrice(calcThreshold)} (${direction === 'above' ? '+' : '-'}${pctValue}%)`
-              : '…'
-            : `$${priceValue || '…'}`}
+          {mode === 'range' ? (
+            <>
+              Notifica quando <span className="text-white">{coin.name}</span> entra o esce dal range{' '}
+              <span className="text-accent-blue">${rangeMin || '…'} – ${rangeMax || '…'}</span>
+            </>
+          ) : (
+            <>
+              Notifica quando {coin.name} andrà{' '}
+              <span className={direction === 'above' ? 'text-accent-green' : 'text-accent-red'}>
+                {direction === 'above' ? 'sopra' : 'sotto'}
+              </span>{' '}
+              {mode === 'percent'
+                ? calcThreshold !== null && pctNum > 0
+                  ? `$${formatPrice(calcThreshold)} (${direction === 'above' ? '+' : '-'}${pctValue}%)`
+                  : '…'
+                : `$${priceValue || '…'}`}
+            </>
+          )}
         </p>
 
         <div className="flex gap-2">
