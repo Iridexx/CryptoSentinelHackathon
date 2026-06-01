@@ -5,13 +5,15 @@ import { APK_PAGES_URL, downloadAndInstall, openDownloadsFolder } from '../utils
 interface Props {
   update: UpdateResult;
   dlState: 'idle' | 'downloading' | 'done';
-  onDismiss: () => void;
+  onIgnore: () => void;       // ignora questa versione (riappare solo con build più nuovo)
+  onSnooze: () => void;       // rimanda di 4 ore
+  onDismiss: () => void;      // chiudi dopo download completato
   onDownloadStart: () => void;
 }
 
 const APK_FILENAME = 'CryptoSentinel-debug.apk';
 
-const UpdateNotification: FC<Props> = ({ update, dlState, onDismiss, onDownloadStart }) => {
+const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, onDismiss, onDownloadStart }) => {
   const [showModal, setShowModal] = useState(false);
 
   // Auto-apri il popup quando il download termina
@@ -68,7 +70,7 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onDismiss, onDownloadS
       {showModal && (
         <div
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-          onClick={dlState === 'done' ? handleDismissDone : () => setShowModal(false)}
+          onClick={dlState === 'done' ? handleDismissDone : onSnooze}
         >
           <div
             className="bg-dark-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl border border-dark-600 flex flex-col max-h-[85vh]"
@@ -126,7 +128,7 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onDismiss, onDownloadS
                     </span>
                     <h2 className="text-white font-bold text-base">Aggiornamento disponibile</h2>
                   </div>
-                  <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
+                  <button onClick={() => { setShowModal(false); onSnooze(); }} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
                 </div>
 
                 <div className="bg-dark-700 rounded-xl px-4 py-3 mb-4">
@@ -155,7 +157,14 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onDismiss, onDownloadS
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setShowModal(false); onDismiss(); }}
+                    onClick={() => { setShowModal(false); onIgnore(); }}
+                    className="flex-1 py-2.5 rounded-xl text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                    style={{ background: 'rgba(255,255,255,0.04)' }}
+                  >
+                    Ignora
+                  </button>
+                  <button
+                    onClick={() => { setShowModal(false); onSnooze(); }}
                     className="flex-1 py-2.5 bg-dark-700 text-gray-300 text-sm rounded-xl hover:bg-dark-600 transition-colors"
                   >
                     Dopo
