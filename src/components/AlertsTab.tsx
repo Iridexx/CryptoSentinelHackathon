@@ -239,8 +239,10 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
   const [pctInput, setPctInput] = useState('');
 
   const isAbove = alert.direction === 'above';
-  const sliderMin = alert.threshold * (1 - sliderRange / 100);
-  const sliderMax = alert.threshold * (1 + sliderRange / 100);
+  // Centra lo slider sul prezzo di mercato attuale — la stanghetta blu è sempre a 50%
+  const pivotPrice = coin?.current_price ?? alert.threshold;
+  const sliderMin = pivotPrice * (1 - sliderRange / 100);
+  const sliderMax = pivotPrice * (1 + sliderRange / 100);
 
   const thresholdToSlider = (t: number) =>
     Math.max(0, Math.min(100, ((t - sliderMin) / (sliderMax - sliderMin)) * 100));
@@ -252,7 +254,7 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
   };
 
   const handleOpenEdit = () => {
-    setSliderValue(50);
+    setSliderValue(thresholdToSlider(alert.threshold));
     setDraftThreshold(alert.threshold);
     setDraftDirection(alert.direction);
     setEditField(null);
@@ -288,9 +290,8 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
     setEditField('percent');
   };
 
-  const currentPricePercent = coin
-    ? Math.max(0, Math.min(100, ((coin.current_price - sliderMin) / (sliderMax - sliderMin)) * 100))
-    : null;
+  // Con sliderMin/Max centrati sul prezzo corrente, la stanghetta è sempre a 50%
+  const currentPricePercent = coin ? 50 : null;
 
   const pct = coin ? ((draftThreshold - coin.current_price) / coin.current_price) * 100 : null;
 
