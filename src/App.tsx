@@ -13,6 +13,7 @@ import { usePullToRefresh } from './hooks/usePullToRefresh';
 import { hapticLight } from './utils/haptics';
 import UpdateNotification from './components/UpdateNotification';
 import Navbar, { type Tab } from './components/Navbar';
+import LogoLighthouse from './components/LogoLighthouse';
 import CoinCard from './components/CoinCard';
 import AlertModal from './components/AlertModal';
 import AlertsTab from './components/AlertsTab';
@@ -255,18 +256,35 @@ export default function App() {
         className="fixed inset-x-0 top-0 bg-dark-900 z-50 pointer-events-none"
         style={{ height: 'env(safe-area-inset-top)' }}
       />
-      <header className="bg-dark-900 border-b border-dark-700 px-4 pt-safe sticky top-0 z-40">
+      <header
+        className="px-4 pt-safe sticky top-0 z-40"
+        style={{
+          background: 'linear-gradient(180deg, #07101F 0%, #0A1628 70%, #0D1A2E 100%)',
+          borderBottom: '1px solid rgba(59,130,246,0.18)',
+        }}
+      >
         <div className="max-w-lg mx-auto">
-          <div className="flex items-center justify-between py-3">
+          <div className="flex items-center justify-between py-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-2xl">₿</span>
-              <h1 className="text-white font-bold text-lg tracking-tight">CryptoSentinel</h1>
+              <LogoLighthouse />
+              <h1
+                className="text-white font-bold text-xl tracking-tight"
+                style={{ textShadow: '0 0 22px rgba(96,165,250,0.38), 0 0 48px rgba(59,130,246,0.12)' }}
+              >
+                CryptoSentinel
+              </h1>
             </div>
             <div className="flex items-center gap-2">
               {lastUpdated && (
-                <span className={`text-xs transition-colors ${refreshFlash ? 'text-accent-green font-medium' : 'text-gray-600'}`}>
-                  {refreshFlash ? '✓ Aggiornato' : lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: '#3B82F6', boxShadow: '0 0 6px rgba(59,130,246,0.9)' }}
+                  />
+                  <span className={`text-xs tabular-nums transition-colors ${refreshFlash ? 'text-accent-green font-medium' : 'text-gray-500'}`}>
+                    {refreshFlash ? '✓ OK' : lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
               )}
             </div>
           </div>
