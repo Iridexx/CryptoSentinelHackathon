@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type FC } from 'react';
-import type { PriceAlert, Coin, AlertDirection, AlertHistoryEntry } from '../types';
+import type { PriceAlert, Coin, AlertDirection, AlertHistoryEntry, RangeAlert } from '../types';
 import { hapticMedium, hapticLight } from '../utils/haptics';
 
 // Slider personalizzato con pointer events — aggiornamento DOM diretto durante drag
@@ -106,6 +106,9 @@ interface Props {
   history: AlertHistoryEntry[];
   onClearHistory: () => void;
   sliderRange: number;
+  rangeAlerts: RangeAlert[];
+  onRemoveRange: (id: string) => void;
+  onEditRange: (id: string, minPrice: number, maxPrice: number, note?: string) => void;
 }
 
 function formatPrice(price: number): string {
@@ -129,13 +132,14 @@ function parseNum(s: string): number {
   return parseFloat(clean);
 }
 
-const AlertsTab: FC<Props> = ({ alerts, onRemove, onReset, coins, onEdit, history, onClearHistory, sliderRange }) => {
+const AlertsTab: FC<Props> = ({ alerts, onRemove, onReset, coins, onEdit, history, onClearHistory, sliderRange, rangeAlerts, onRemoveRange, onEditRange }) => {
   const [showHistory, setShowHistory] = useState(false);
+  const [showRangeAlerts, setShowRangeAlerts] = useState(true);
 
   const active = alerts.filter((a) => !a.triggered);
   const triggered = alerts.filter((a) => a.triggered);
 
-  if (alerts.length === 0 && history.length === 0) {
+  if (alerts.length === 0 && history.length === 0 && rangeAlerts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center px-8">
         <div className="text-5xl mb-4">🔔</div>
@@ -184,6 +188,34 @@ const AlertsTab: FC<Props> = ({ alerts, onRemove, onReset, coins, onEdit, histor
               sliderRange={sliderRange}
             />
           ))}
+        </div>
+      )}
+
+      {rangeAlerts.length > 0 && (
+        <div className="mt-2">
+          <button
+            onClick={() => setShowRangeAlerts((v) => !v)}
+            className="flex items-center justify-between w-full px-1 mb-2 group"
+          >
+            <h3 className="text-accent-blue text-xs font-semibold uppercase tracking-wide group-hover:text-blue-300 transition-colors">
+              ↔ Alert Range Price ({rangeAlerts.length})
+            </h3>
+            <span className="text-gray-600 text-xs">{showRangeAlerts ? '▲' : '▼'}</span>
+          </button>
+
+          {showRangeAlerts && (
+            <div className="space-y-2">
+              {rangeAlerts.map((alert) => (
+                <RangeAlertRow
+                  key={alert.id}
+                  alert={alert}
+                  onRemove={onRemoveRange}
+                  onEdit={onEditRange}
+                  coin={coins.find((c) => c.id === alert.coinId)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -454,6 +486,163 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
             />
           </div>
 
+          <div className="flex gap-2">
+            <button
+              onClick={() => setEditing(false)}
+              className="flex-1 py-2 bg-dark-700 text-gray-400 text-sm rounded-lg hover:bg-dark-600 transition-colors"
+            >Annulla</button>
+            <button
+              onClick={handleSave}
+              className="flex-1 py-2 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+            >Salva</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface RangeAlertRowProps {
+  alert: RangeAlert;
+  onRemove: (id: string) => void;
+  onEdit: (id: string, minPrice: number, maxPrice: number, note?: string) => void;
+  coin?: Coin;
+}
+
+const RangeAlertRow: FC<RangeAlertRowProps> = ({ alert, onRemove, onEdit, coin }) => {
+  const [editing, setEditing] = useState(false);
+  const [draftMin, setDraftMin] = useState(String(alert.minPrice >= 1 ? alert.minPrice.toFixed(2) : alert.minPrice.toFixed(6)));
+  const [draftMax, setDraftMax] = useState(String(alert.maxPrice >= 1 ? alert.maxPrice.toFixed(2) : alert.maxPrice.toFixed(6)));
+  const [draftNote, setDraftNote] = useState(alert.note ?? '');
+  const [editError, setEditError] = useState('');
+
+  const currentPrice = coin?.current_price;
+  const isInside = alert.isInsideRange === true;
+  const isUnknown = alert.isInsideRange === null;
+
+  // Visual range bar: 0–100% from min to max, where current price sits
+  const priceBarPct = currentPrice != null
+    ? Math.max(2, Math.min(98, ((currentPrice - alert.minPrice) / (alert.maxPrice - alert.minPrice)) * 100))
+    : null;
+
+  const handleOpenEdit = () => {
+    setDraftMin(alert.minPrice >= 1 ? alert.minPrice.toFixed(2) : alert.minPrice.toFixed(6));
+    setDraftMax(alert.maxPrice >= 1 ? alert.maxPrice.toFixed(2) : alert.maxPrice.toFixed(6));
+    setDraftNote(alert.note ?? '');
+    setEditError('');
+    setEditing(true);
+  };
+
+  const handleSave = () => {
+    const min = parseNum(draftMin);
+    const max = parseNum(draftMax);
+    if (isNaN(min) || min <= 0) { setEditError('Prezzo minimo non valido'); return; }
+    if (isNaN(max) || max <= 0) { setEditError('Prezzo massimo non valido'); return; }
+    if (min >= max) { setEditError('Il minimo deve essere inferiore al massimo'); return; }
+    onEdit(alert.id, min, max, draftNote.trim() || undefined);
+    setEditing(false);
+  };
+
+  return (
+    <div className="rounded-xl mb-2 border overflow-hidden bg-dark-800 border-dark-600">
+      <div
+        className="flex items-center gap-3 p-3 cursor-pointer select-none"
+        onClick={() => !editing && handleOpenEdit()}
+      >
+        <img src={alert.coinImage} alt={alert.coinName} className="w-8 h-8 rounded-full flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-white text-sm font-semibold">{alert.coinName}</span>
+            {!isUnknown && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                isInside ? 'bg-accent-green/15 text-accent-green' : 'bg-gray-700 text-gray-400'
+              }`}>
+                {isInside ? '↔ Nel range' : '↗ Fuori range'}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-accent-blue mt-0.5">
+            ${formatPrice(alert.minPrice)} – ${formatPrice(alert.maxPrice)}
+          </div>
+          {/* Range bar */}
+          {currentPrice != null && priceBarPct != null && (
+            <div className="mt-1.5 relative h-1.5 bg-dark-600 rounded-full overflow-visible">
+              <div className="absolute inset-0 bg-accent-blue/20 rounded-full" />
+              <div
+                className={`absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-dark-900 ${isInside ? 'bg-accent-green' : 'bg-gray-400'}`}
+                style={{ left: `${priceBarPct}%`, transform: 'translate(-50%, -50%)' }}
+              />
+            </div>
+          )}
+          {currentPrice != null && (
+            <div className="text-xs text-gray-500 mt-1">
+              Ora: <span className={`font-medium ${isInside ? 'text-accent-green' : 'text-gray-300'}`}>${formatPrice(currentPrice)}</span>
+            </div>
+          )}
+          {alert.note && (
+            <div className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]">📝 {alert.note}</div>
+          )}
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          {!editing && <span className="text-gray-600 text-xs mr-1">✏️</span>}
+          <button
+            onClick={() => { hapticMedium(); onRemove(alert.id); }}
+            className="text-xs px-2 py-1 rounded-lg bg-accent-red/10 text-accent-red hover:bg-accent-red/20 transition-colors"
+            aria-label="Elimina"
+          >✕</button>
+        </div>
+      </div>
+
+      {editing && (
+        <div className="px-3 pb-3 border-t border-dark-600">
+          <div className="flex items-center justify-between pt-2.5 pb-2">
+            <span className="text-xs text-gray-500">Modifica range</span>
+            {coin && (
+              <span className="text-xs text-gray-500">
+                Ora: <span className="text-gray-300 font-medium">${formatPrice(coin.current_price)}</span>
+              </span>
+            )}
+          </div>
+          <div className="space-y-2 mb-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Prezzo minimo</label>
+              <div className="flex items-center bg-dark-700 rounded-lg px-3 border border-dark-600 focus-within:border-accent-blue">
+                <span className="text-gray-500 mr-1 text-sm">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={draftMin}
+                  onChange={(e) => { setDraftMin(e.target.value); setEditError(''); }}
+                  autoFocus
+                  className="flex-1 bg-transparent text-white py-2 outline-none text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Prezzo massimo</label>
+              <div className="flex items-center bg-dark-700 rounded-lg px-3 border border-dark-600 focus-within:border-accent-blue">
+                <span className="text-gray-500 mr-1 text-sm">$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={draftMax}
+                  onChange={(e) => { setDraftMax(e.target.value); setEditError(''); }}
+                  className="flex-1 bg-transparent text-white py-2 outline-none text-sm"
+                />
+              </div>
+            </div>
+          </div>
+          {editError && <p className="text-accent-red text-xs mb-2">{editError}</p>}
+          <div className="mb-3">
+            <label className="text-xs text-gray-500 mb-1 block">Nota</label>
+            <textarea
+              value={draftNote}
+              onChange={(e) => setDraftNote(e.target.value)}
+              placeholder="Aggiungi una nota…"
+              rows={2}
+              className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-accent-blue transition-colors resize-none"
+            />
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => setEditing(false)}
