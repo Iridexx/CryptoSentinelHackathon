@@ -405,7 +405,7 @@ const SettingsTab: FC<Props> = ({
             <p className="text-sm text-white mb-1">Range slider allarmi</p>
             <p className="text-xs text-gray-500 mb-3">Variazione massima gestibile dallo slider nella modifica di un allarme</p>
             <div className="flex gap-2">
-              {([10, 20, 30, 50] as const).map((pct) => (
+              {([5, 10, 20, 30, 50] as const).map((pct) => (
                 <button
                   key={pct}
                   onClick={() => onSliderRangeChange(pct)}
