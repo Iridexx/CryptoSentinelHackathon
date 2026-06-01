@@ -180,13 +180,8 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
                 inputMode="decimal"
                 value={priceValue}
                 onChange={(e) => {
-                  const val = e.target.value;
-                  setPriceValue(val);
+                  setPriceValue(e.target.value);
                   setError('');
-                  const num = parsePrice(val);
-                  if (!isNaN(num) && num > 0) {
-                    setDirection(num >= coin.current_price ? 'above' : 'below');
-                  }
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                 className="flex-1 bg-transparent text-white py-2.5 outline-none text-sm"
