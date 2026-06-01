@@ -73,17 +73,17 @@ jobs:
           RELEASE_NOTES: |
             Novità di questa versione:
 
-            • Pull-to-refresh — trascina verso il basso per aggiornare i prezzi
-            • Flash prezzo verde/rosso quando i valori cambiano dopo l'aggiornamento
+            • Popup aggiornamento rinnovato — tasti Ignora, Dopo (snooze 4h) e Scarica
+            • Ignora nasconde solo il build corrente; riappare automaticamente con build più nuovo
+            • Dopo rimanda il popup di 4 ore; scompare subito se esce una versione ancora più recente
+            • Pull-to-refresh disabilitato mentre il popup aggiornamento è aperto
+            • Nuovo logo faro SVG nel header — stile dark premium con gradiente blu
+            • Navigazione inferiore con icone SVG vettoriali (mercato, preferiti, allarmi, impostazioni)
+            • Allarmi range prezzo — ricevi notifica quando il prezzo entra o esce da un intervallo
+            • Note personalizzate per ogni allarme — visibili nella notifica e nell'elenco
+            • Modifica allarme con input diretto prezzo o percentuale (oltre allo slider)
             • Timeframe 1h / 24h / 7g per le variazioni di prezzo
             • Ordinamento lista per rank, variazione %, volume, prezzo
-            • Feedback aptico su tap preferiti, allarmi, ordinamento e pull-to-refresh
-            • Notifiche corrette — nessun duplicato, nessun falso all'apertura app
-            • Icona notifica dedicata nella barra di stato; tap apre direttamente l'app
-            • Modifica allarme con input diretto prezzo o percentuale (oltre allo slider)
-            • Slider allarmi fluido (pointer events, zero jank) centrato sul prezzo di mercato
-            • Impostazione range variazione slider in Impostazioni (±5% ±10% ±20% ±30% ±50%)
-            • Note personalizzate per ogni allarme — visibili nella notifica e nell'elenco
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           sleep 3
