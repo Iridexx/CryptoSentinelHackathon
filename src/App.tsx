@@ -188,113 +188,153 @@ export default function App() {
     });
   }, []);
 
-  const sortedCoins = useMemo(() => {
-    const arr = [...coins];
-    arr.sort((a, b) => {
-      let av = 0, bv = 0;
-      if (sortBy === 'rank')   { av = a.rank;   bv = b.rank; }
-      if (sortBy === 'change') { av = a.change24h ?? 0; bv = b.change24h ?? 0; }
-      if (sortBy === '7d')     { av = a.change7d ?? 0;  bv = b.change7d ?? 0; }
-      if (sortBy === 'volume') { av = a.volume24h ?? 0; bv = b.volume24h ?? 0; }
-      if (sortBy === 'price')  { av = a.price;  bv = b.price; }
-      return sortDesc ? bv - av : av - bv;
-    });
-    return arr;
-  }, [coins, sortBy, sortDesc]);
-
   const isSearching = search.trim().length > 0;
+  const rawDisplayCoins = isSearching ? searchResults : coins;
+  const displayLoading = isSearching ? searching : loading;
 
-  const handleCoinTap = useCallback((coin: Coin) => {
-    hapticLight();
+  const displayCoins = useMemo(() => {
+    const arr = [...rawDisplayCoins];
+    if (sortBy === 'rank') {
+      arr.sort((a, b) => {
+        const ar = a.market_cap_rank ?? 9999;
+        const br = b.market_cap_rank ?? 9999;
+        return sortDesc ? ar - br : br - ar;
+      });
+    } else if (sortBy === '7d') {
+      arr.sort((a, b) => {
+        const av = a.price_change_percentage_7d_in_currency ?? 0;
+        const bv = b.price_change_percentage_7d_in_currency ?? 0;
+        return sortDesc ? bv - av : av - bv;
+      });
+    } else {
+      const key = sortBy === 'change' ? 'price_change_percentage_24h'
+        : sortBy === 'volume' ? 'total_volume'
+        : 'current_price';
+      arr.sort((a, b) => sortDesc ? b[key] - a[key] : a[key] - b[key]);
+    }
+    return arr;
+  }, [rawDisplayCoins, sortBy, sortDesc]);
+
+  const favoriteCoins = useMemo(
+    () => coins.filter((c) => isFavorite(c.id)),
+    [coins, isFavorite]
+  );
+
+  const handleAddAlert = useCallback((coin: Coin) => {
     setSelectedCoin(coin);
   }, []);
 
-  const handleTabChange = useCallback((newTab: Tab) => {
-    setTab(newTab);
-    if (newTab !== 'dashboard') setSearch('');
-  }, []);
-
-  const favoriteCoins = useMemo(() =>
-    sortedCoins.filter(c => isFavorite(c.id)),
-    [sortedCoins, isFavorite]
+  const handleConfirmAlert = useCallback(
+    (direction: 'above' | 'below', threshold: number, percentChange?: number, note?: string) => {
+      if (!selectedCoin) return;
+      addAlert({
+        coinId: selectedCoin.id,
+        coinName: selectedCoin.name,
+        coinSymbol: selectedCoin.symbol,
+        coinImage: selectedCoin.image,
+        direction,
+        threshold,
+        percentChange,
+        note,
+      });
+    },
+    [selectedCoin, addAlert]
   );
 
-  const activeAlertCount = useMemo(() =>
-    alerts.filter(a => a.active).length,
-    [alerts]
+  const handleConfirmRange = useCallback(
+    (minPrice: number, maxPrice: number, note?: string) => {
+      if (!selectedCoin) return;
+      addRangeAlert({
+        coinId: selectedCoin.id,
+        coinName: selectedCoin.name,
+        coinSymbol: selectedCoin.symbol,
+        coinImage: selectedCoin.image,
+        minPrice,
+        maxPrice,
+        note,
+      });
+    },
+    [selectedCoin, addRangeAlert]
   );
+
+  const triggeredCount = alerts.filter((a) => a.triggered).length;
 
   return (
-    <div className="min-h-screen text-white" style={{ background: '#060E1A' }}>
-      <header className="px-4 pt-safe sticky top-0 z-40"
+    <div className="flex flex-col h-full bg-dark-900">
+      <div
+        className="fixed inset-x-0 top-0 bg-dark-900 z-50 pointer-events-none"
+        style={{ height: 'env(safe-area-inset-top)' }}
+      />
+      <header
+        className="px-4 pt-safe sticky top-0 z-40"
         style={{
           background: 'linear-gradient(180deg, #07101F 0%, #0A1628 70%, #0D1A2E 100%)',
           borderBottom: '1px solid rgba(59,130,246,0.18)',
-        }}>
-        <div className="max-w-lg mx-auto flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
-            <LogoLighthouse />
-            <div>
-              <h1 className="text-white font-bold text-xl tracking-tight leading-none"
-                style={{ textShadow: '0 0 22px rgba(96,165,250,0.38), 0 0 48px rgba(59,130,246,0.12)' }}>
+        }}
+      >
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between py-2.5">
+            <div className="flex items-center gap-2">
+              <LogoLighthouse />
+              <h1
+                className="text-white font-bold text-xl tracking-tight"
+                style={{ textShadow: '0 0 22px rgba(96,165,250,0.38), 0 0 48px rgba(59,130,246,0.12)' }}
+              >
                 CryptoSentinel
               </h1>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full inline-block"
-                  style={{ background: '#3B82F6', boxShadow: '0 0 6px rgba(59,130,246,0.9)' }} />
-                <span className="text-xs font-mono"
-                  style={{ color: 'rgba(148,163,184,0.7)', letterSpacing: '0.03em' }}>
-                  {lastUpdated
-                    ? lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                    : '--:--:--'}
-                </span>
-              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {lastUpdated && (
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: '#3B82F6', boxShadow: '0 0 6px rgba(59,130,246,0.9)' }}
+                  />
+                  <span className={`text-xs tabular-nums transition-colors ${refreshFlash ? 'text-accent-green font-medium' : 'text-gray-500'}`}>
+                    {refreshFlash ? '✓ OK' : lastUpdated.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           {tab === 'dashboard' && (
-            <div className="flex items-center gap-2">
-              {(['1h', '24h', '7d'] as TimeFrame[]).map(tf => (
-                <button
-                  key={tf}
-                  onClick={() => { hapticLight(); setTimeFrame(tf); }}
-                  className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all duration-150"
-                  style={{
-                    background: timeFrame === tf ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.05)',
-                    color: timeFrame === tf ? '#60A5FA' : '#8B95A7',
-                    border: timeFrame === tf ? '1px solid rgba(59,130,246,0.35)' : '1px solid transparent',
-                  }}
-                >
-                  {tf}
-                </button>
-              ))}
+            <div className="pb-3">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Cerca criptovaluta…"
+                  className="w-full bg-dark-700 border border-dark-600 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-accent-blue transition-colors"
+                />
+              </div>
             </div>
           )}
         </div>
       </header>
 
-      <div
-        ref={mainRef}
-        className="overflow-y-auto"
-        style={{ height: 'calc(100dvh - 56px - 72px)', paddingBottom: '0' }}
-      >
-        {/* PTR indicator */}
-        <div ref={ptrRef} style={{ height: 0, overflow: 'hidden' }} className="flex items-center justify-center">
-          <div className="flex flex-col items-center gap-1">
-            <svg data-ptr-arrow width="20" height="20" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-              style={{ transition: 'transform 220ms, color 220ms', color: 'rgb(156 163 175)' }}>
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <polyline points="19 12 12 19 5 12" />
+      <main ref={mainRef} className="flex-1 overflow-y-auto overscroll-y-none pb-20">
+        {/* Pull-to-refresh indicator — altezza gestita direttamente via DOM */}
+        <div ref={ptrRef} className="h-0 flex items-center justify-center overflow-hidden">
+          {ptrRefreshing ? (
+            <svg className="w-5 h-5 text-accent-blue animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            {ptrRefreshing && (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6"
-                strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
-                className="animate-spin">
-                <path d="M21 12a9 9 0 11-6.219-8.56" />
-              </svg>
-            )}
-          </div>
+          ) : (
+            <svg
+              data-ptr-arrow=""
+              style={{ transition: 'transform 150ms, color 150ms' }}
+              className="w-5 h-5 text-gray-400"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
         </div>
 
         <div className="max-w-lg mx-auto px-4 py-3">
@@ -321,99 +361,109 @@ export default function App() {
           {tab === 'dashboard' && (
             <div>
               {!isSearching && (
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex gap-1.5 flex-wrap">
-                    {(['rank','change','7d','volume','price'] as SortBy[]).map(key => (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex gap-1">
+                      {([50, 100] as const).map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => handlePerPageChange(n)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                            perPage === n ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="px-2.5 py-1 rounded-lg bg-dark-700 text-gray-400 hover:text-white disabled:opacity-30 text-sm transition-colors"
+                      >
+                        ←
+                      </button>
+                      <span className="text-xs text-gray-500 tabular-nums">Pag. {page}</span>
+                      <button
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={coins.length < perPage}
+                        className="px-2.5 py-1 rounded-lg bg-dark-700 text-gray-400 hover:text-white disabled:opacity-30 text-sm transition-colors"
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <span className="text-gray-600 text-xs flex-shrink-0">Periodo:</span>
+                    {([
+                      { key: '1h' as TimeFrame, label: '1h' },
+                      { key: '24h' as TimeFrame, label: '24h' },
+                      { key: '7d' as TimeFrame, label: '7g' },
+                    ]).map(({ key, label }) => (
                       <button
                         key={key}
-                        onClick={() => { hapticLight(); handleSort(key); }}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all"
-                        style={{
-                          background: sortBy === key ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.05)',
-                          color: sortBy === key ? '#60A5FA' : '#8B95A7',
-                          border: sortBy === key ? '1px solid rgba(59,130,246,0.3)' : '1px solid transparent',
-                        }}
+                        onClick={() => setTimeFrame(key)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          timeFrame === key ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'
+                        }`}
                       >
-                        {key === 'rank' ? '#' : key === 'change' ? '24h%' : key === '7d' ? '7d%' : key === 'volume' ? 'Vol' : '$'}
-                        {sortBy === key && (
-                          <span className="ml-1">{sortDesc ? '↓' : '↑'}</span>
-                        )}
+                        {label}
                       </button>
                     ))}
                   </div>
-                  <button
-                    onClick={() => { hapticLight(); setPerPage(p => p === 50 ? 100 : 50); setPage(1); }}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold"
-                    style={{ background: 'rgba(255,255,255,0.05)', color: '#8B95A7' }}
-                  >
-                    {perPage}
-                  </button>
-                </div>
+                  <div className="flex gap-1.5 mb-3 overflow-x-auto pb-0.5 scrollbar-none">
+                    {([
+                      { key: 'rank' as SortBy, label: 'Rank' },
+                      { key: 'change' as SortBy, label: '24h %' },
+                      { key: '7d' as SortBy, label: '7g %' },
+                      { key: 'volume' as SortBy, label: 'Volume' },
+                      { key: 'price' as SortBy, label: 'Prezzo' },
+                    ]).map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => { hapticLight(); handleSort(key); }}
+                        className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          sortBy === key ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/30' : 'bg-dark-700 text-gray-400 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        {label}
+                        {sortBy === key && <span className="text-xs">{sortDesc ? '↓' : '↑'}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
 
-              <div className="relative mb-3">
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Cerca coin..."
-                  className="w-full bg-dark-800 border border-dark-600 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent-blue"
-                />
-                {search && (
-                  <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">×</button>
-                )}
-              </div>
-
-              {isSearching ? (
-                searching ? (
-                  <div className="text-center text-gray-500 py-8 text-sm">Ricerca...</div>
-                ) : searchResults.length === 0 ? (
-                  <div className="text-center text-gray-500 py-8 text-sm">Nessun risultato</div>
-                ) : (
-                  searchResults.map(coin => (
+              {displayLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-16 bg-dark-800 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              ) : displayCoins.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-4xl mb-3">🔍</div>
+                  <p className="text-gray-500 text-sm">
+                    {isSearching
+                      ? `Nessuna criptovaluta trovata per "${search}"`
+                      : 'Nessuna criptovaluta disponibile'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {displayCoins.map((coin) => (
                     <CoinCard
                       key={coin.id}
                       coin={coin}
                       isFavorite={isFavorite(coin.id)}
-                      onFavorite={() => toggleFavorite(coin.id)}
-                      onTap={handleCoinTap}
+                      onToggleFavorite={toggleFavorite}
+                      onAddAlert={handleAddAlert}
+                      currency={currency}
+                      showVolume={sortBy === 'volume'}
                       timeFrame={timeFrame}
                     />
-                  ))
-                )
-              ) : loading && coins.length === 0 ? (
-                <div className="text-center text-gray-500 py-12 text-sm">Caricamento...</div>
-              ) : (
-                sortedCoins.map(coin => (
-                  <CoinCard
-                    key={coin.id}
-                    coin={coin}
-                    isFavorite={isFavorite(coin.id)}
-                    onFavorite={() => toggleFavorite(coin.id)}
-                    onTap={handleCoinTap}
-                    timeFrame={timeFrame}
-                  />
-                ))
-              )}
-
-              {!isSearching && coins.length > 0 && (
-                <div className="flex justify-center gap-3 mt-4 mb-2">
-                  <button
-                    onClick={() => { hapticLight(); setPage(p => Math.max(1, p - 1)); }}
-                    disabled={page === 1}
-                    className="px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-30"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: '#8B95A7' }}
-                  >
-                    ←
-                  </button>
-                  <span className="flex items-center text-xs text-gray-500">Pag. {page}</span>
-                  <button
-                    onClick={() => { hapticLight(); setPage(p => p + 1); }}
-                    disabled={coins.length < perPage}
-                    className="px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-30"
-                    style={{ background: 'rgba(255,255,255,0.06)', color: '#8B95A7' }}
-                  >
-                    →
-                  </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -422,81 +472,70 @@ export default function App() {
           {tab === 'favorites' && (
             <div>
               {favoriteCoins.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  <p className="text-sm">Nessun preferito</p>
-                  <p className="text-xs mt-1 text-gray-600">Tocca ★ su una coin per aggiungerla</p>
+                <div className="flex flex-col items-center justify-center py-16 text-center px-8">
+                  <div className="text-5xl mb-4">⭐</div>
+                  <h3 className="text-white font-semibold text-lg mb-2">Nessun preferito</h3>
+                  <p className="text-gray-500 text-sm">
+                    Premi la ★ accanto a una criptovaluta per aggiungerla ai tuoi preferiti.
+                  </p>
                 </div>
               ) : (
-                favoriteCoins.map(coin => (
-                  <CoinCard
-                    key={coin.id}
-                    coin={coin}
-                    isFavorite={true}
-                    onFavorite={() => toggleFavorite(coin.id)}
-                    onTap={handleCoinTap}
-                    timeFrame={timeFrame}
-                  />
-                ))
+                <div className="space-y-2">
+                  {favoriteCoins.map((coin) => (
+                    <CoinCard
+                      key={coin.id}
+                      coin={coin}
+                      isFavorite={true}
+                      onToggleFavorite={toggleFavorite}
+                      onAddAlert={handleAddAlert}
+                      currency={currency}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           )}
 
           {tab === 'alerts' && (
-            <AlertsTab
-              coins={coins}
-              alerts={alerts}
-              rangeAlerts={rangeAlerts}
-              onAdd={addAlert}
-              onRemove={removeAlert}
-              onReset={resetAlert}
-              onEdit={editAlert}
-              onClear={clearAlerts}
-              onAddRange={addRangeAlert}
-              onRemoveRange={removeRangeAlert}
-              onEditRange={editRangeAlert}
-              history={history}
-              onClearHistory={clearHistory}
-              sliderRange={sliderRange}
-            />
+            <AlertsTab alerts={alerts} onRemove={removeAlert} onReset={resetAlert} coins={coins} onEdit={editAlert} history={history} onClearHistory={clearHistory} sliderRange={sliderRange} rangeAlerts={rangeAlerts} onRemoveRange={removeRangeAlert} onEditRange={editRangeAlert} />
           )}
 
           {tab === 'settings' && (
             <SettingsTab
               refreshInterval={refreshInterval}
               onIntervalChange={handleIntervalChange}
-              perPage={perPage}
-              onPerPageChange={handlePerPageChange}
-              sliderRange={sliderRange}
-              onSliderRangeChange={handleSliderRangeChange}
+              favoritesCount={favorites.size}
+              alertsCount={alerts.length}
               onClearFavorites={clearFavorites}
               onClearAlerts={clearAlerts}
+              notifPerm={notifPerm}
+              onPermissionChange={setNotifPerm}
+              batteryDismissed={batteryDismissed}
+              dlState={dlState}
+              onDownloadStart={() => setDlState('downloading')}
+              onDownloadDone={() => setDlState('done')}
+              currency={currency}
+              onCurrencyChange={changeCurrency}
+              sliderRange={sliderRange}
+              onSliderRangeChange={handleSliderRangeChange}
             />
           )}
         </div>
-      </div>
+      </main>
 
       <Navbar
         activeTab={tab}
-        onTabChange={handleTabChange}
-        alertCount={activeAlertCount}
-        favoriteCount={favorites.length}
+        onTabChange={setTab}
+        alertCount={triggeredCount}
+        favoriteCount={favorites.size}
       />
 
       {selectedCoin && (
         <AlertModal
           coin={selectedCoin}
+          onConfirm={handleConfirmAlert}
+          onConfirmRange={handleConfirmRange}
           onClose={() => setSelectedCoin(null)}
-          onConfirm={(price, pct, note) => {
-            addAlert(selectedCoin, price, pct, note);
-            setSelectedCoin(null);
-          }}
-          onConfirmRange={(low, high) => {
-            addRangeAlert(selectedCoin, low, high);
-            setSelectedCoin(null);
-          }}
-          existingAlert={alerts.find(a => a.coinId === selectedCoin.id)}
-          currentPrice={selectedCoin.price}
-          sliderRange={sliderRange}
         />
       )}
     </div>
