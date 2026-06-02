@@ -110,6 +110,10 @@ interface Props {
   onCurrencyChange: (c: Currency) => void;
   sliderRange: number;
   onSliderRangeChange: (n: number) => void;
+  favMoveUpPct: number;
+  onFavMoveUpPctChange: (n: number) => void;
+  favMoveDownPct: number;
+  onFavMoveDownPctChange: (n: number) => void;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -128,6 +132,10 @@ const SettingsTab: FC<Props> = ({
   onCurrencyChange,
   sliderRange,
   onSliderRangeChange,
+  favMoveUpPct,
+  onFavMoveUpPctChange,
+  favMoveDownPct,
+  onFavMoveDownPctChange,
 }) => {
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
@@ -416,6 +424,44 @@ const SettingsTab: FC<Props> = ({
                   ±{pct}%
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-sm text-white mb-1">Allarme variazione preferiti</p>
+            <p className="text-xs text-gray-500 mb-3">Ricevi una notifica quando il prezzo di un preferito si muove della percentuale impostata</p>
+            <div className="space-y-2">
+              <div>
+                <p className="text-xs text-gray-400 mb-1.5">↑ Rialzo</p>
+                <div className="flex gap-2">
+                  {([0, 1, 2, 5, 10] as const).map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => onFavMoveUpPctChange(pct)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        favMoveUpPct === pct ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {pct === 0 ? 'Off' : `${pct}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 mb-1.5">↓ Ribasso</p>
+                <div className="flex gap-2">
+                  {([0, 1, 2, 5, 10] as const).map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => onFavMoveDownPctChange(pct)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        favMoveDownPct === pct ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {pct === 0 ? 'Off' : `${pct}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

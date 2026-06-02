@@ -10,6 +10,7 @@ import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { useFavoritePriceAlerts } from './hooks/useFavoritePriceAlerts';
 import { hapticLight } from './utils/haptics';
 import UpdateNotification from './components/UpdateNotification';
 import Navbar, { type Tab } from './components/Navbar';
@@ -23,6 +24,8 @@ import SettingsTab from './components/SettingsTab';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
+const FAV_UP_KEY = 'cs_fav_up_pct';
+const FAV_DOWN_KEY = 'cs_fav_down_pct';
 
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
@@ -153,6 +156,23 @@ export default function App() {
     localStorage.setItem(SLIDER_RANGE_KEY, String(n));
   }, []);
 
+  const [favMoveUpPct, setFavMoveUpPct] = useState<number>(() =>
+    Number(localStorage.getItem(FAV_UP_KEY) ?? 5)
+  );
+  const [favMoveDownPct, setFavMoveDownPct] = useState<number>(() =>
+    Number(localStorage.getItem(FAV_DOWN_KEY) ?? 5)
+  );
+
+  const handleFavMoveUpPctChange = useCallback((n: number) => {
+    setFavMoveUpPct(n);
+    localStorage.setItem(FAV_UP_KEY, String(n));
+  }, []);
+
+  const handleFavMoveDownPctChange = useCallback((n: number) => {
+    setFavMoveDownPct(n);
+    localStorage.setItem(FAV_DOWN_KEY, String(n));
+  }, []);
+
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
   const { results: searchResults, searching } = useSearch(search, currency);
@@ -219,6 +239,8 @@ export default function App() {
     () => coins.filter((c) => isFavorite(c.id)),
     [coins, isFavorite]
   );
+
+  useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct);
 
   const handleAddAlert = useCallback((coin: Coin) => {
     setSelectedCoin(coin);
@@ -518,6 +540,10 @@ export default function App() {
               onCurrencyChange={changeCurrency}
               sliderRange={sliderRange}
               onSliderRangeChange={handleSliderRangeChange}
+              favMoveUpPct={favMoveUpPct}
+              onFavMoveUpPctChange={handleFavMoveUpPctChange}
+              favMoveDownPct={favMoveDownPct}
+              onFavMoveDownPctChange={handleFavMoveDownPctChange}
             />
           )}
         </div>

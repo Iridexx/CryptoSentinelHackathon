@@ -110,6 +110,40 @@ export async function sendRangeNotification(params: {
   }
 }
 
+export async function sendFavoriteMoveNotification(params: {
+  coinName: string;
+  coinSymbol: string;
+  direction: 'up' | 'down';
+  pct: number;
+  currentPrice: number;
+}): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      if (perm.display !== 'granted') return;
+      const fmt = (v: number) => v >= 1000 ? v.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : v >= 1 ? v.toFixed(2) : v.toFixed(6);
+      const arrow = params.direction === 'up' ? '▲' : '▼';
+      const label = params.direction === 'up' ? 'rialzo' : 'ribasso';
+      const title = `${arrow} ${params.coinName} (${params.coinSymbol.toUpperCase()}) — ${label} del ${params.pct.toFixed(1)}%`;
+      const body = `Il prezzo si è mosso verso il ${label} del ${params.pct.toFixed(1)}%  ·  Ora: $${fmt(params.currentPrice)}`;
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: (Date.now() % 2_000_000) | 0,
+          channelId: 'price_alerts',
+          title,
+          body,
+          sound: 'default',
+          smallIcon: 'ic_notification',
+          autoCancel: true,
+        }],
+      });
+    } catch {
+      // notifica fallita silenziosamente
+    }
+    return;
+  }
+}
+
 export function openNotificationSettings(): void {
   if (Capacitor.isNativePlatform()) {
     AppSettings.openNotifications().catch(() => {
