@@ -169,6 +169,17 @@ public class AppSettingsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getAndClearPendingFavAlerts(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext()
+            .getSharedPreferences("cryptosentinel_prefs", android.content.Context.MODE_PRIVATE);
+        String json = prefs.getString("pending_fav_alerts_json", "[]");
+        prefs.edit().putString("pending_fav_alerts_json", "[]").apply();
+        JSObject result = new JSObject();
+        result.put("json", json);
+        call.resolve(result);
+    }
+
+    @PluginMethod
     public void openWithChooser(PluginCall call) {
         String url = call.getString("url");
         if (url == null) { call.reject("url mancante"); return; }

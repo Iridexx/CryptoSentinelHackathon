@@ -38,8 +38,9 @@ public class PriceCheckWorker extends Worker {
     private static final String FAV_COINS_KEY    = "fav_coins_json";
     private static final String FAV_UP_KEY       = "fav_up_pct";
     private static final String FAV_DOWN_KEY     = "fav_down_pct";
-    private static final String FAV_REF_KEY      = "fav_ref_prices";
-    private static final String FAV_CURRENCY_KEY = "fav_currency";
+    private static final String FAV_REF_KEY        = "fav_ref_prices";
+    private static final String FAV_CURRENCY_KEY   = "fav_currency";
+    private static final String PENDING_FAV_KEY    = "pending_fav_alerts_json";
     private static final String CHANNEL          = "price_alerts";
     private static final String TAG              = "PriceCheckWorker";
     private static final long   COOLDOWN_MS      = 5 * 60 * 1000L;
@@ -123,7 +124,7 @@ public class PriceCheckWorker extends Worker {
 
             if (coinIds.isEmpty()) return Result.success();
 
-            // Single API call — include fav currency if different from usd
+            // Single API call -- include fav currency if different from usd
             String ids = String.join(",", coinIds);
             String vsParams = favCurrency.equals("usd") ? "usd" : "usd," + favCurrency;
             JSONObject prices = fetchJson(
@@ -201,6 +202,11 @@ public class PriceCheckWorker extends Worker {
             JSONObject refPrices = new JSONObject(refPricesStr);
             boolean changed = false;
 
+            JSONArray pendingAlerts;
+            try { pendingAlerts = new JSONArray(prefs.getString(PENDING_FAV_KEY, "[]")); }
+            catch (Exception e) { pendingAlerts = new JSONArray(); }
+            boolean pendingChanged = false;
+
             for (int i = 0; i < favCoins.length(); i++) {
                 JSONObject coin = favCoins.getJSONObject(i);
                 String coinId     = coin.optString("id");
@@ -225,19 +231,36 @@ public class PriceCheckWorker extends Worker {
                 }
 
                 double pct = (current - ref) / ref * 100.0;
+                String direction = null;
 
                 if (upPct > 0 && pct >= upPct) {
-                    refPrices.put(coinId, current);
-                    changed = true;
-                    notifyFavMove(coinName, coinSymbol, "up", Math.abs(pct), current);
+                    direction = "up";
                 } else if (downPct > 0 && pct <= -downPct) {
+                    direction = "down";
+                }
+
+                if (direction != null) {
                     refPrices.put(coinId, current);
                     changed = true;
-                    notifyFavMove(coinName, coinSymbol, "down", Math.abs(pct), current);
+                    notifyFavMove(coinName, coinSymbol, direction, Math.abs(pct), current);
+                    // Queue alert for JS to pick up when app returns to foreground
+                    JSONObject pending = new JSONObject();
+                    pending.put("coinId", coinId);
+                    pending.put("coinName", coinName);
+                    pending.put("coinSymbol", coinSymbol);
+                    pending.put("direction", direction);
+                    pending.put("pct", Math.abs(pct));
+                    pending.put("currentPrice", current);
+                    pending.put("refPrice", ref);
+                    pendingAlerts.put(pending);
+                    pendingChanged = true;
                 }
             }
 
-            if (changed) prefs.edit().putString(FAV_REF_KEY, refPrices.toString()).apply();
+            SharedPreferences.Editor ed = prefs.edit();
+            if (changed) ed.putString(FAV_REF_KEY, refPrices.toString());
+            if (pendingChanged) ed.putString(PENDING_FAV_KEY, pendingAlerts.toString());
+            if (changed || pendingChanged) ed.apply();
         } catch (Exception e) {
             Log.e(TAG, "checkFavAlerts error", e);
         }

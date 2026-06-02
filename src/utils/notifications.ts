@@ -5,6 +5,7 @@ interface AppSettingsPlugin {
   openNotifications(): Promise<void>;
   openWithChooser(options: { url: string; title?: string }): Promise<void>;
   syncFavAlerts(options: { coinsJson: string; upPct: number; downPct: number; refPricesJson: string; currency: string }): Promise<void>;
+  getAndClearPendingFavAlerts(): Promise<{ json: string }>;
 }
 
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
@@ -164,4 +165,14 @@ export async function syncFavAlertsNative(
   try {
     await AppSettings.syncFavAlerts({ coinsJson, upPct, downPct, refPricesJson, currency });
   } catch { /* ignore */ }
+}
+
+export async function getAndClearPendingFavAlerts(): Promise<string> {
+  if (!Capacitor.isNativePlatform()) return '[]';
+  try {
+    const result = await AppSettings.getAndClearPendingFavAlerts();
+    return result.json ?? '[]';
+  } catch {
+    return '[]';
+  }
 }

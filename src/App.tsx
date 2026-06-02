@@ -5,7 +5,7 @@ import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
 import { useRangeAlerts } from './hooks/useRangeAlerts';
 import { useCurrency } from './hooks/useCurrency';
-import { getNotificationPermission, initNotifications, syncFavAlertsNative } from './utils/notifications';
+import { getNotificationPermission, initNotifications, syncFavAlertsNative, getAndClearPendingFavAlerts } from './utils/notifications';
 import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
@@ -255,12 +255,30 @@ export default function App() {
 
   const { containerRef: mainRef, indicatorRef: ptrRef, isRefreshing: ptrRefreshing } = usePullToRefresh(handleRefresh, isUpdateVisible);
 
-  // Refresh immediato al ritorno in foreground: garantisce il check prezzi preferiti
+  // Refresh immediato al ritorno in foreground + lettura alert pending dal WorkManager nativo
   useEffect(() => {
-    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      refresh();
+      getAndClearPendingFavAlerts().then(json => {
+        try {
+          const pending: FavAlertData[] = JSON.parse(json);
+          if (pending.length === 0) return;
+          const refMap: Record<string, number> = JSON.parse(
+            localStorage.getItem('cs_fav_ref_prices') ?? '{}'
+          );
+          for (const a of pending) {
+            bumpRefPrice(a.coinId, a.currentPrice);
+            refMap[a.coinId] = a.currentPrice;
+            handleFavAlert(a);
+          }
+          localStorage.setItem('cs_fav_ref_prices', JSON.stringify(refMap));
+        } catch { /* ignore */ }
+      });
+    };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refresh]);
+  }, [refresh, handleFavAlert, bumpRefPrice]);
 
   const handleIntervalChange = useCallback((ms: number) => {
     setRefreshInterval(ms);
@@ -314,7 +332,7 @@ export default function App() {
     [coins, isFavorite]
   );
 
-  useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct, handleFavAlert);
+  const { bumpRefPrice } = useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct, handleFavAlert);
 
   // Keep favSyncRef up-to-date on every render so the background handler always has fresh data
   favSyncRef.current = {

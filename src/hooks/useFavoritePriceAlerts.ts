@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Coin } from '../types';
 import { sendFavoriteMoveNotification } from '../utils/notifications';
 import { playAlertBeep } from '../utils/audio';
@@ -34,7 +34,7 @@ export function useFavoritePriceAlerts(
   upPct: number,
   downPct: number,
   onAlert?: (alert: FavAlertData) => void,
-) {
+): { bumpRefPrice: (coinId: string, price: number) => void } {
   const refPrices = useRef<Map<string, number>>(loadRefPrices());
   const upPctRef = useRef(upPct);
   const downPctRef = useRef(downPct);
@@ -83,4 +83,11 @@ export function useFavoritePriceAlerts(
       onAlertRef.current?.(p);
     });
   }, [favoriteCoins]);
+
+  const bumpRefPrice = useCallback((coinId: string, price: number) => {
+    refPrices.current.set(coinId, price);
+    saveRefPrices(refPrices.current);
+  }, []);
+
+  return { bumpRefPrice };
 }
