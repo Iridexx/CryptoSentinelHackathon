@@ -157,10 +157,10 @@ export default function App() {
   }, []);
 
   const [favMoveUpPct, setFavMoveUpPct] = useState<number>(() =>
-    Number(localStorage.getItem(FAV_UP_KEY) ?? 5)
+    Number(localStorage.getItem(FAV_UP_KEY) ?? 0)
   );
   const [favMoveDownPct, setFavMoveDownPct] = useState<number>(() =>
-    Number(localStorage.getItem(FAV_DOWN_KEY) ?? 5)
+    Number(localStorage.getItem(FAV_DOWN_KEY) ?? 0)
   );
 
   const handleFavMoveUpPctChange = useCallback((n: number) => {
