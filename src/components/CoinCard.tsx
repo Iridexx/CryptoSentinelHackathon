@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FC } from 'react';
+import { useCallback, useEffect, useRef, useState, type FC } from 'react';
 import type { Coin } from '../types';
 import type { Currency } from '../hooks/useCurrency';
 import type { FavAlertData } from '../hooks/useFavoritePriceAlerts';
@@ -41,9 +41,10 @@ interface Props {
   timeFrame?: TimeFrame;
   alertPending?: FavAlertData;
   onAlertTap?: () => void;
+  rankDelta?: number;
 }
 
-const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap }) => {
+const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta }) => {
   const displayChange =
     timeFrame === '1h' ? (coin.price_change_percentage_1h_in_currency ?? coin.price_change_percentage_24h) :
     timeFrame === '7d' ? (coin.price_change_percentage_7d_in_currency ?? coin.price_change_percentage_24h) :
@@ -63,14 +64,71 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, c
     return () => clearTimeout(t);
   }, [coin.current_price]);
 
+  // Rank change animation
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isVisibleRef = useRef(false);
+  const pendingRankDeltaRef = useRef<number | null>(null);
+  const rankFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevRankDeltaRef = useRef<number | undefined>(undefined);
+  const [rankFlash, setRankFlash] = useState<number | null>(null);
+
+  const fireRankFlash = useCallback((delta: number) => {
+    if (rankFlashTimerRef.current) clearTimeout(rankFlashTimerRef.current);
+    setRankFlash(delta);
+    rankFlashTimerRef.current = setTimeout(() => setRankFlash(null), 3500);
+  }, []);
+
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        isVisibleRef.current = entry.isIntersecting;
+        if (entry.isIntersecting && pendingRankDeltaRef.current !== null) {
+          const delta = pendingRankDeltaRef.current;
+          pendingRankDeltaRef.current = null;
+          fireRankFlash(delta);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [fireRankFlash]);
+
+  useEffect(() => {
+    if (rankDelta === undefined) {
+      prevRankDeltaRef.current = undefined;
+      return;
+    }
+    if (rankDelta === 0 || rankDelta === prevRankDeltaRef.current) return;
+    prevRankDeltaRef.current = rankDelta;
+    if (isVisibleRef.current) {
+      fireRankFlash(rankDelta);
+    } else {
+      pendingRankDeltaRef.current = rankDelta;
+    }
+  }, [rankDelta, fireRankFlash]);
+
+  const cardBg = rankFlash !== null
+    ? rankFlash > 0
+      ? 'bg-[#0c1f0c] ring-2 ring-green-500/60'
+      : 'bg-[#1f0c0c] ring-2 ring-red-500/60'
+    : alertPending
+      ? 'bg-[#1c1208] ring-2 ring-orange-500/60 hover:bg-[#221508]'
+      : 'bg-dark-800 hover:bg-dark-700';
+
   return (
-    <div className={`flex items-center gap-3 rounded-xl p-3 transition-colors relative ${
-      alertPending
-        ? 'bg-[#1c1208] ring-2 ring-orange-500/60 hover:bg-[#221508]'
-        : 'bg-dark-800 hover:bg-dark-700'
-    }`}>
+    <div ref={cardRef} className={`flex items-center gap-3 rounded-xl p-3 transition-colors relative ${cardBg}`}>
       {alertPending && (
         <span className="absolute top-1.5 right-10 w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+      )}
+      {rankFlash !== null && (
+        <span className={`absolute top-1 left-1 flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse z-10 ${
+          rankFlash > 0 ? 'bg-green-500/30 text-green-400' : 'bg-red-500/30 text-red-400'
+        }`}>
+          {rankFlash > 0 ? `▲ +${rankFlash}` : `▼ ${rankFlash}`}
+        </span>
       )}
 
       {/* Tappable area (separata dai bottoni) */}

@@ -114,6 +114,8 @@ interface Props {
   onFavMoveUpPctChange: (n: number) => void;
   favMoveDownPct: number;
   onFavMoveDownPctChange: (n: number) => void;
+  rankAnimTopN: number;
+  onRankAnimTopNChange: (n: number) => void;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -136,6 +138,8 @@ const SettingsTab: FC<Props> = ({
   onFavMoveUpPctChange,
   favMoveDownPct,
   onFavMoveDownPctChange,
+  rankAnimTopN,
+  onRankAnimTopNChange,
 }) => {
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
@@ -462,6 +466,23 @@ const SettingsTab: FC<Props> = ({
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+          <div className="px-4 py-3">
+            <p className="text-sm text-white mb-1">Animazione rank mercato</p>
+            <p className="text-xs text-gray-500 mb-3">Illumina la card quando una coin guadagna o perde posizioni nella top N per capitalizzazione</p>
+            <div className="flex gap-2">
+              {([0, 50, 100, 200] as const).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => onRankAnimTopNChange(n)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    rankAnimTopN === n ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {n === 0 ? 'Off' : `Top ${n}`}
+                </button>
+              ))}
             </div>
           </div>
         </div>

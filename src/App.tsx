@@ -27,6 +27,7 @@ const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
 const FAV_UP_KEY = 'cs_fav_up_pct';
 const FAV_DOWN_KEY = 'cs_fav_down_pct';
+const RANK_ANIM_KEY = 'cs_rank_anim_topn';
 
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
@@ -168,6 +169,14 @@ export default function App() {
     localStorage.setItem(FAV_DOWN_KEY, String(n));
   }, []);
 
+  const [rankAnimTopN, setRankAnimTopN] = useState<number>(() =>
+    Number(localStorage.getItem(RANK_ANIM_KEY) ?? 100)
+  );
+  const handleRankAnimTopNChange = useCallback((n: number) => {
+    setRankAnimTopN(n);
+    localStorage.setItem(RANK_ANIM_KEY, String(n));
+  }, []);
+
   const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
 
@@ -186,6 +195,48 @@ export default function App() {
 
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
+
+  const prevRanksRef = useRef<Map<string, number>>(new Map());
+  const [rankDeltas, setRankDeltas] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    prevRanksRef.current = new Map();
+  }, [currency, perPage, page]);
+
+  useEffect(() => {
+    if (coins.length === 0) return;
+
+    if (prevRanksRef.current.size === 0) {
+      for (const coin of coins) {
+        if (coin.market_cap_rank != null) prevRanksRef.current.set(coin.id, coin.market_cap_rank);
+      }
+      return;
+    }
+
+    const newDeltas = new Map<string, number>();
+    if (rankAnimTopN > 0) {
+      for (const coin of coins) {
+        const prev = prevRanksRef.current.get(coin.id);
+        const curr = coin.market_cap_rank;
+        if (prev != null && curr != null && prev !== curr && curr <= rankAnimTopN) {
+          newDeltas.set(coin.id, prev - curr);
+        }
+      }
+    }
+
+    for (const coin of coins) {
+      if (coin.market_cap_rank != null) prevRanksRef.current.set(coin.id, coin.market_cap_rank);
+    }
+
+    if (newDeltas.size === 0) {
+      setRankDeltas(new Map());
+      return;
+    }
+    setRankDeltas(newDeltas);
+    const t = setTimeout(() => setRankDeltas(new Map()), 4000);
+    return () => clearTimeout(t);
+  }, [coins, rankAnimTopN]);
+
   const { results: searchResults, searching } = useSearch(search, currency);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
   const { alerts, addAlert, removeAlert, resetAlert, editAlert, clearAlerts, history, clearHistory } = useAlerts(coins);
@@ -503,6 +554,7 @@ export default function App() {
                       currency={currency}
                       showVolume={sortBy === 'volume'}
                       timeFrame={timeFrame}
+                      rankDelta={rankDeltas.get(coin.id)}
                     />
                   ))}
                 </div>
@@ -565,6 +617,8 @@ export default function App() {
               onFavMoveUpPctChange={handleFavMoveUpPctChange}
               favMoveDownPct={favMoveDownPct}
               onFavMoveDownPctChange={handleFavMoveDownPctChange}
+              rankAnimTopN={rankAnimTopN}
+              onRankAnimTopNChange={handleRankAnimTopNChange}
             />
           )}
         </div>
