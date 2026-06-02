@@ -201,6 +201,8 @@ export default function App() {
   }, []);
 
   const handleSort = useCallback((key: SortBy) => {
+    if (key === '7d') setTimeFrame('7d');
+    else if (key === 'change') setTimeFrame('24h');
     setSortBy((prev) => {
       if (prev === key) { setSortDesc((d) => !d); return key; }
       setSortDesc(true);
