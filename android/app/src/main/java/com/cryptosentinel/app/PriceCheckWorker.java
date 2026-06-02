@@ -32,13 +32,17 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class PriceCheckWorker extends Worker {
-    private static final String PREFS        = "cryptosentinel_prefs";
-    private static final String KEY          = "alerts_json";
-    private static final String RANGE_KEY    = "range_alerts_json";
-    private static final String CHANNEL      = "price_alerts";
-    private static final String TAG          = "PriceCheckWorker";
-    private static final long   COOLDOWN_MS  = 5 * 60 * 1000L;
-    private static final String WORK_TAG      = "price_check";
+    private static final String PREFS          = "cryptosentinel_prefs";
+    private static final String KEY            = "alerts_json";
+    private static final String RANGE_KEY      = "range_alerts_json";
+    private static final String FAV_COINS_KEY  = "fav_coins_json";
+    private static final String FAV_UP_KEY     = "fav_up_pct";
+    private static final String FAV_DOWN_KEY   = "fav_down_pct";
+    private static final String FAV_REF_KEY    = "fav_ref_prices";
+    private static final String CHANNEL        = "price_alerts";
+    private static final String TAG            = "PriceCheckWorker";
+    private static final long   COOLDOWN_MS    = 5 * 60 * 1000L;
+    private static final String WORK_TAG       = "price_check";
     private static final String WORK_IMMEDIATE = "price_check_immediate";
 
     public PriceCheckWorker(@NonNull Context context, @NonNull WorkerParameters p) {
@@ -54,7 +58,6 @@ public class PriceCheckWorker extends Worker {
             .setConstraints(constraints)
             .addTag(WORK_TAG)
             .build();
-        // UPDATE resetta il backoff di retry se il worker era in stato di errore
         WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
             WORK_TAG,
             ExistingPeriodicWorkPolicy.UPDATE,
@@ -62,8 +65,6 @@ public class PriceCheckWorker extends Worker {
         );
     }
 
-    // Controllo immediato una-tantum: parte appena c'è rete, sostituisce
-    // qualsiasi check immediato già in coda (REPLACE)
     public static void scheduleImmediate(Context ctx) {
         Constraints constraints = new Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -86,12 +87,18 @@ public class PriceCheckWorker extends Worker {
         try {
             SharedPreferences prefs = getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-            String alertsJson = prefs.getString(KEY, "[]");
-            JSONArray alerts = new JSONArray(alertsJson);
 
+            String alertsJson     = prefs.getString(KEY, "[]");
             String rangeAlertsJson = prefs.getString(RANGE_KEY, "[]");
-            JSONArray rangeAlerts = new JSONArray(rangeAlertsJson);
+            String favCoinsJson   = prefs.getString(FAV_COINS_KEY, "[]");
+            float  favUpPct       = prefs.getFloat(FAV_UP_KEY, 0f);
+            float  favDownPct     = prefs.getFloat(FAV_DOWN_KEY, 0f);
 
+            JSONArray alerts     = new JSONArray(alertsJson);
+            JSONArray rangeAlerts = new JSONArray(rangeAlertsJson);
+            JSONArray favCoins   = new JSONArray(favCoinsJson);
+
+            // Collect all coin IDs from every source in a single list
             List<String> coinIds = new ArrayList<>();
             for (int i = 0; i < alerts.length(); i++) {
                 JSONObject a = alerts.getJSONObject(i);
@@ -104,36 +111,46 @@ public class PriceCheckWorker extends Worker {
                 String id = rangeAlerts.getJSONObject(i).optString("coinId");
                 if (!id.isEmpty() && !coinIds.contains(id)) coinIds.add(id);
             }
+            boolean hasFavAlerts = (favUpPct > 0 || favDownPct > 0) && favCoins.length() > 0;
+            if (hasFavAlerts) {
+                for (int i = 0; i < favCoins.length(); i++) {
+                    String id = favCoins.getJSONObject(i).optString("id");
+                    if (!id.isEmpty() && !coinIds.contains(id)) coinIds.add(id);
+                }
+            }
+
             if (coinIds.isEmpty()) return Result.success();
 
+            // Single API call for all coin IDs
             String ids = String.join(",", coinIds);
             JSONObject prices = fetchJson(
                 "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd");
             if (prices == null) return Result.retry();
 
             ensureChannel();
-            boolean changed = false;
+
+            // --- Regular price alerts ---
+            boolean alertsChanged = false;
             for (int i = 0; i < alerts.length(); i++) {
                 JSONObject a = alerts.getJSONObject(i);
                 if (a.optBoolean("triggered", false)) continue;
-                String coinId   = a.optString("coinId");
-                String dir      = a.optString("direction");
+                String coinId    = a.optString("coinId");
+                String dir       = a.optString("direction");
                 double threshold = a.optDouble("threshold", 0);
                 if (!prices.has(coinId)) continue;
                 double price = prices.getJSONObject(coinId).optDouble("usd", -1);
                 if (price < 0) continue;
-
                 boolean fire = (dir.equals("above") && price >= threshold) ||
                                (dir.equals("below") && price <= threshold);
                 if (fire) {
                     a.put("triggered", true);
-                    changed = true;
+                    alertsChanged = true;
                     notify(a.optString("coinName"), dir, threshold, price, a.optString("note", null));
                 }
             }
-            if (changed) prefs.edit().putString(KEY, alerts.toString()).apply();
+            if (alertsChanged) prefs.edit().putString(KEY, alerts.toString()).apply();
 
-            // Process range alerts
+            // --- Range alerts ---
             boolean rangeChanged = false;
             long nowMs = System.currentTimeMillis();
             for (int i = 0; i < rangeAlerts.length(); i++) {
@@ -142,20 +159,16 @@ public class PriceCheckWorker extends Worker {
                 if (!prices.has(coinId)) continue;
                 double price = prices.getJSONObject(coinId).optDouble("usd", -1);
                 if (price < 0) continue;
-
                 double minPrice = a.optDouble("minPrice", 0);
                 double maxPrice = a.optDouble("maxPrice", 0);
                 boolean isInside = price >= minPrice && price <= maxPrice;
-
                 if (!a.has("isInsideRange") || a.isNull("isInsideRange")) {
                     a.put("isInsideRange", isInside);
                     rangeChanged = true;
                     continue;
                 }
-
                 boolean wasInside = a.optBoolean("isInsideRange", false);
                 if (isInside == wasInside) continue;
-
                 long lastNotified = a.optLong("lastNotifiedAt", 0);
                 a.put("isInsideRange", isInside);
                 rangeChanged = true;
@@ -166,11 +179,99 @@ public class PriceCheckWorker extends Worker {
             }
             if (rangeChanged) prefs.edit().putString(RANGE_KEY, rangeAlerts.toString()).apply();
 
+            // --- Favorite price alerts ---
+            if (hasFavAlerts) {
+                checkFavAlerts(prefs, favCoins, favUpPct, favDownPct, prices);
+            }
+
             return Result.success();
         } catch (Exception e) {
             Log.e(TAG, "doWork error", e);
             return Result.retry();
         }
+    }
+
+    private void checkFavAlerts(SharedPreferences prefs, JSONArray favCoins,
+                                 float upPct, float downPct, JSONObject prices) {
+        try {
+            String refPricesStr = prefs.getString(FAV_REF_KEY, "{}");
+            JSONObject refPrices = new JSONObject(refPricesStr);
+            boolean changed = false;
+
+            for (int i = 0; i < favCoins.length(); i++) {
+                JSONObject coin = favCoins.getJSONObject(i);
+                String coinId     = coin.optString("id");
+                String coinName   = coin.optString("name");
+                String coinSymbol = coin.optString("symbol");
+
+                if (!prices.has(coinId)) continue;
+                double current = prices.getJSONObject(coinId).optDouble("usd", -1);
+                if (current < 0) continue;
+
+                if (!refPrices.has(coinId)) {
+                    // First time seen — seed reference price, no alert
+                    refPrices.put(coinId, current);
+                    changed = true;
+                    continue;
+                }
+
+                double ref = refPrices.getDouble(coinId);
+                if (ref <= 0) {
+                    refPrices.put(coinId, current);
+                    changed = true;
+                    continue;
+                }
+
+                double pct = (current - ref) / ref * 100.0;
+
+                if (upPct > 0 && pct >= upPct) {
+                    refPrices.put(coinId, current);
+                    changed = true;
+                    notifyFavMove(coinName, coinSymbol, "up", Math.abs(pct), current);
+                } else if (downPct > 0 && pct <= -downPct) {
+                    refPrices.put(coinId, current);
+                    changed = true;
+                    notifyFavMove(coinName, coinSymbol, "down", Math.abs(pct), current);
+                }
+            }
+
+            if (changed) prefs.edit().putString(FAV_REF_KEY, refPrices.toString()).apply();
+        } catch (Exception e) {
+            Log.e(TAG, "checkFavAlerts error", e);
+        }
+    }
+
+    private void notifyFavMove(String coinName, String coinSymbol,
+                                String direction, double pct, double price) {
+        Context ctx = getApplicationContext();
+        String arrow = direction.equals("up") ? "▲" : "▼";
+        String label = direction.equals("up") ? "rialzo" : "ribasso";
+        String title = arrow + " " + coinName + " (" + coinSymbol.toUpperCase() + ")"
+                       + " — " + label + " del " + String.format("%.1f", pct) + "%";
+        String body  = "Movimento del " + String.format("%.1f", pct) + "% verso il "
+                       + label + "  ·  Ora: $" + fmt(price);
+
+        Intent intent = new Intent(ctx, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+            ? PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT
+            : PendingIntent.FLAG_UPDATE_CURRENT;
+        PendingIntent pi = PendingIntent.getActivity(ctx, 2, intent, flags);
+
+        NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(pi)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setVibrate(new long[]{0, 250, 100, 250});
+        try {
+            NotificationManagerCompat.from(ctx)
+                .notify((int)(System.currentTimeMillis() % 100_000), b.build());
+        } catch (SecurityException ignored) {}
     }
 
     private JSONObject fetchJson(String urlStr) {
@@ -233,7 +334,8 @@ public class PriceCheckWorker extends Worker {
         } catch (SecurityException ignored) {}
     }
 
-    private void notifyRange(String coinName, double minPrice, double maxPrice, double price, boolean entered, String note) {
+    private void notifyRange(String coinName, double minPrice, double maxPrice,
+                              double price, boolean entered, String note) {
         Context ctx = getApplicationContext();
         String status = entered ? "↔ Entrato nel range" : "↗ Uscito dal range";
         String title = status + " — " + coinName;

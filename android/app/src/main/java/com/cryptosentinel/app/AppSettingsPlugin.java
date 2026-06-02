@@ -149,6 +149,21 @@ public class AppSettingsPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void syncFavAlerts(PluginCall call) {
+        String coinsJson = call.getString("coinsJson", "[]");
+        float upPct   = call.getFloat("upPct",   0f);
+        float downPct = call.getFloat("downPct", 0f);
+        getContext()
+            .getSharedPreferences("cryptosentinel_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString("fav_coins_json", coinsJson)
+            .putFloat("fav_up_pct",   upPct)
+            .putFloat("fav_down_pct", downPct)
+            .apply();
+        call.resolve();
+    }
+
+    @PluginMethod
     public void openWithChooser(PluginCall call) {
         String url = call.getString("url");
         if (url == null) { call.reject("url mancante"); return; }

@@ -5,7 +5,7 @@ import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
 import { useRangeAlerts } from './hooks/useRangeAlerts';
 import { useCurrency } from './hooks/useCurrency';
-import { getNotificationPermission, initNotifications } from './utils/notifications';
+import { getNotificationPermission, initNotifications, syncFavAlertsNative } from './utils/notifications';
 import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
@@ -312,6 +312,12 @@ export default function App() {
   );
 
   useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct, handleFavAlert);
+
+  // Sync favorite alert config to the native WorkManager so alerts fire in background
+  useEffect(() => {
+    const coinsData = favoriteCoins.map(c => ({ id: c.id, name: c.name, symbol: c.symbol }));
+    syncFavAlertsNative(JSON.stringify(coinsData), favMoveUpPct, favMoveDownPct);
+  }, [favoriteCoins, favMoveUpPct, favMoveDownPct]);
 
   const handleAddAlert = useCallback((coin: Coin) => {
     setSelectedCoin(coin);

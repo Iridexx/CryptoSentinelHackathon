@@ -4,6 +4,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 interface AppSettingsPlugin {
   openNotifications(): Promise<void>;
   openWithChooser(options: { url: string; title?: string }): Promise<void>;
+  syncFavAlerts(options: { coinsJson: string; upPct: number; downPct: number }): Promise<void>;
 }
 
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
@@ -150,4 +151,15 @@ export function openNotificationSettings(): void {
       window.open('app-settings:', '_system');
     });
   }
+}
+
+export async function syncFavAlertsNative(
+  coinsJson: string,
+  upPct: number,
+  downPct: number,
+): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await AppSettings.syncFavAlerts({ coinsJson, upPct, downPct });
+  } catch { /* ignore */ }
 }
