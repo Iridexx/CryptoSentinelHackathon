@@ -433,7 +433,7 @@ const SettingsTab: FC<Props> = ({
               <div>
                 <p className="text-xs text-gray-400 mb-1.5">↑ Rialzo</p>
                 <div className="flex gap-2">
-                  {([0, 1, 2, 5, 10] as const).map((pct) => (
+                  {([0, 1, 2, 5, 8] as const).map((pct) => (
                     <button
                       key={pct}
                       onClick={() => onFavMoveUpPctChange(pct)}
@@ -449,7 +449,7 @@ const SettingsTab: FC<Props> = ({
               <div>
                 <p className="text-xs text-gray-400 mb-1.5">↓ Ribasso</p>
                 <div className="flex gap-2">
-                  {([0, 1, 2, 5, 10] as const).map((pct) => (
+                  {([0, 1, 2, 5, 8] as const).map((pct) => (
                     <button
                       key={pct}
                       onClick={() => onFavMoveDownPctChange(pct)}
