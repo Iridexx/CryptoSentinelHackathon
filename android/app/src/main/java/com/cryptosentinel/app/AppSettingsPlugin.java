@@ -73,7 +73,6 @@ public class AppSettingsPlugin extends Plugin {
                 if (id != downloadId) return;
                 ctx.unregisterReceiver(this);
 
-                // Notifica il layer JavaScript che il download è completato
                 JSObject data = new JSObject();
                 data.put("status", "completed");
                 notifyListeners("downloadComplete", data);
@@ -150,16 +149,22 @@ public class AppSettingsPlugin extends Plugin {
 
     @PluginMethod
     public void syncFavAlerts(PluginCall call) {
-        String coinsJson = call.getString("coinsJson", "[]");
-        float upPct   = call.getFloat("upPct",   0f);
-        float downPct = call.getFloat("downPct", 0f);
-        getContext()
+        String coinsJson     = call.getString("coinsJson", "[]");
+        float  upPct         = call.getFloat("upPct",   0f);
+        float  downPct       = call.getFloat("downPct", 0f);
+        String refPricesJson = call.getString("refPricesJson", "{}");
+        String currency      = call.getString("currency", "usd");
+        android.content.SharedPreferences.Editor ed = getContext()
             .getSharedPreferences("cryptosentinel_prefs", android.content.Context.MODE_PRIVATE)
             .edit()
             .putString("fav_coins_json", coinsJson)
             .putFloat("fav_up_pct",   upPct)
             .putFloat("fav_down_pct", downPct)
-            .apply();
+            .putString("fav_currency", currency);
+        if (refPricesJson != null && !refPricesJson.equals("{}") && !refPricesJson.isEmpty()) {
+            ed.putString("fav_ref_prices", refPricesJson);
+        }
+        ed.apply();
         call.resolve();
     }
 

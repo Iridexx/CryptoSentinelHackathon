@@ -32,18 +32,19 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class PriceCheckWorker extends Worker {
-    private static final String PREFS          = "cryptosentinel_prefs";
-    private static final String KEY            = "alerts_json";
-    private static final String RANGE_KEY      = "range_alerts_json";
-    private static final String FAV_COINS_KEY  = "fav_coins_json";
-    private static final String FAV_UP_KEY     = "fav_up_pct";
-    private static final String FAV_DOWN_KEY   = "fav_down_pct";
-    private static final String FAV_REF_KEY    = "fav_ref_prices";
-    private static final String CHANNEL        = "price_alerts";
-    private static final String TAG            = "PriceCheckWorker";
-    private static final long   COOLDOWN_MS    = 5 * 60 * 1000L;
-    private static final String WORK_TAG       = "price_check";
-    private static final String WORK_IMMEDIATE = "price_check_immediate";
+    private static final String PREFS            = "cryptosentinel_prefs";
+    private static final String KEY              = "alerts_json";
+    private static final String RANGE_KEY        = "range_alerts_json";
+    private static final String FAV_COINS_KEY    = "fav_coins_json";
+    private static final String FAV_UP_KEY       = "fav_up_pct";
+    private static final String FAV_DOWN_KEY     = "fav_down_pct";
+    private static final String FAV_REF_KEY      = "fav_ref_prices";
+    private static final String FAV_CURRENCY_KEY = "fav_currency";
+    private static final String CHANNEL          = "price_alerts";
+    private static final String TAG              = "PriceCheckWorker";
+    private static final long   COOLDOWN_MS      = 5 * 60 * 1000L;
+    private static final String WORK_TAG         = "price_check";
+    private static final String WORK_IMMEDIATE   = "price_check_immediate";
 
     public PriceCheckWorker(@NonNull Context context, @NonNull WorkerParameters p) {
         super(context, p);
@@ -88,15 +89,16 @@ public class PriceCheckWorker extends Worker {
             SharedPreferences prefs = getApplicationContext()
                 .getSharedPreferences(PREFS, Context.MODE_PRIVATE);
 
-            String alertsJson     = prefs.getString(KEY, "[]");
+            String alertsJson      = prefs.getString(KEY, "[]");
             String rangeAlertsJson = prefs.getString(RANGE_KEY, "[]");
-            String favCoinsJson   = prefs.getString(FAV_COINS_KEY, "[]");
-            float  favUpPct       = prefs.getFloat(FAV_UP_KEY, 0f);
-            float  favDownPct     = prefs.getFloat(FAV_DOWN_KEY, 0f);
+            String favCoinsJson    = prefs.getString(FAV_COINS_KEY, "[]");
+            float  favUpPct        = prefs.getFloat(FAV_UP_KEY, 0f);
+            float  favDownPct      = prefs.getFloat(FAV_DOWN_KEY, 0f);
+            String favCurrency     = prefs.getString(FAV_CURRENCY_KEY, "usd").toLowerCase();
 
-            JSONArray alerts     = new JSONArray(alertsJson);
+            JSONArray alerts      = new JSONArray(alertsJson);
             JSONArray rangeAlerts = new JSONArray(rangeAlertsJson);
-            JSONArray favCoins   = new JSONArray(favCoinsJson);
+            JSONArray favCoins    = new JSONArray(favCoinsJson);
 
             // Collect all coin IDs from every source in a single list
             List<String> coinIds = new ArrayList<>();
@@ -121,10 +123,11 @@ public class PriceCheckWorker extends Worker {
 
             if (coinIds.isEmpty()) return Result.success();
 
-            // Single API call for all coin IDs
+            // Single API call — include fav currency if different from usd
             String ids = String.join(",", coinIds);
+            String vsParams = favCurrency.equals("usd") ? "usd" : "usd," + favCurrency;
             JSONObject prices = fetchJson(
-                "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd");
+                "https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=" + vsParams);
             if (prices == null) return Result.retry();
 
             ensureChannel();
@@ -181,7 +184,7 @@ public class PriceCheckWorker extends Worker {
 
             // --- Favorite price alerts ---
             if (hasFavAlerts) {
-                checkFavAlerts(prefs, favCoins, favUpPct, favDownPct, prices);
+                checkFavAlerts(prefs, favCoins, favUpPct, favDownPct, prices, favCurrency);
             }
 
             return Result.success();
@@ -192,7 +195,7 @@ public class PriceCheckWorker extends Worker {
     }
 
     private void checkFavAlerts(SharedPreferences prefs, JSONArray favCoins,
-                                 float upPct, float downPct, JSONObject prices) {
+                                 float upPct, float downPct, JSONObject prices, String currency) {
         try {
             String refPricesStr = prefs.getString(FAV_REF_KEY, "{}");
             JSONObject refPrices = new JSONObject(refPricesStr);
@@ -205,11 +208,10 @@ public class PriceCheckWorker extends Worker {
                 String coinSymbol = coin.optString("symbol");
 
                 if (!prices.has(coinId)) continue;
-                double current = prices.getJSONObject(coinId).optDouble("usd", -1);
+                double current = prices.getJSONObject(coinId).optDouble(currency, -1);
                 if (current < 0) continue;
 
                 if (!refPrices.has(coinId)) {
-                    // First time seen — seed reference price, no alert
                     refPrices.put(coinId, current);
                     changed = true;
                     continue;
@@ -249,7 +251,7 @@ public class PriceCheckWorker extends Worker {
         String title = arrow + " " + coinName + " (" + coinSymbol.toUpperCase() + ")"
                        + " — " + label + " del " + String.format("%.1f", pct) + "%";
         String body  = "Movimento del " + String.format("%.1f", pct) + "% verso il "
-                       + label + "  ·  Ora: $" + fmt(price);
+                       + label + "  ·  Ora: " + fmt(price);
 
         Intent intent = new Intent(ctx, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);

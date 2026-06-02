@@ -46,6 +46,7 @@ export default function App() {
   const [sortBy, setSortBy] = useState<SortBy>('rank');
   const [sortDesc, setSortDesc] = useState(true);
   const lastUpdateCheckRef = useRef<number>(0);
+  const favSyncRef = useRef({ coinsJson: '[]', upPct: 0, downPct: 0, refPricesJson: '{}', currency: 'usd' });
 
   const [dismissedBuild, setDismissedBuild] = useState<string | null>(() =>
     localStorage.getItem('cs_dismissed_build')
@@ -123,6 +124,8 @@ export default function App() {
         }
       } else {
         triggerImmediateCheck();
+        const s = favSyncRef.current;
+        syncFavAlertsNative(s.coinsJson, s.upPct, s.downPct, s.refPricesJson, s.currency);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -313,11 +316,21 @@ export default function App() {
 
   useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct, handleFavAlert);
 
-  // Sync favorite alert config to the native WorkManager so alerts fire in background
+  // Keep favSyncRef up-to-date on every render so the background handler always has fresh data
+  favSyncRef.current = {
+    coinsJson: JSON.stringify(favoriteCoins.map(c => ({ id: c.id, name: c.name, symbol: c.symbol }))),
+    upPct: favMoveUpPct,
+    downPct: favMoveDownPct,
+    refPricesJson: localStorage.getItem('cs_fav_ref_prices') ?? '{}',
+    currency,
+  };
+
+  // Sync favorite alert config + reference prices to the native WorkManager every price cycle
   useEffect(() => {
     const coinsData = favoriteCoins.map(c => ({ id: c.id, name: c.name, symbol: c.symbol }));
-    syncFavAlertsNative(JSON.stringify(coinsData), favMoveUpPct, favMoveDownPct);
-  }, [favoriteCoins, favMoveUpPct, favMoveDownPct]);
+    const refPricesJson = localStorage.getItem('cs_fav_ref_prices') ?? '{}';
+    syncFavAlertsNative(JSON.stringify(coinsData), favMoveUpPct, favMoveDownPct, refPricesJson, currency);
+  }, [favoriteCoins, favMoveUpPct, favMoveDownPct, currency]);
 
   const handleAddAlert = useCallback((coin: Coin) => {
     setSelectedCoin(coin);
