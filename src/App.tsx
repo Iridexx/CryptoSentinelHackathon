@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Coin } from './types';
-import { useCryptoData } from './hooks/useCryptoData';
+import { useCryptoData, type PerPage } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
 import { useAlerts } from './hooks/useAlerts';
 import { useRangeAlerts } from './hooks/useRangeAlerts';
@@ -37,7 +37,7 @@ export default function App() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
   const [batteryDismissed, setBatteryDismissed] = useState(isBatteryBannerDismissed);
   const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
-  const [perPage, setPerPage] = useState<50 | 100>(50);
+  const [perPage, setPerPage] = useState<PerPage>(50);
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('24h');
   const [page, setPage] = useState(1);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateResult | null>(null);
@@ -56,7 +56,6 @@ export default function App() {
     Number(localStorage.getItem('cs_snoozed_until') ?? 0)
   );
 
-  // Re-mostra il popup quando lo snooze scade (senza bisogno di riaprire l'app)
   useEffect(() => {
     if (!snoozedUntil || Date.now() > snoozedUntil) return;
     const t = setTimeout(() => setSnoozedUntil(0), snoozedUntil - Date.now());
@@ -70,14 +69,12 @@ export default function App() {
     [availableUpdate, dismissedBuild, snoozedBuild, snoozedUntil]
   );
 
-  // "Ignora": nasconde questa versione specifica per sempre (fino a build più nuovo)
   const handleIgnoreUpdate = useCallback(() => {
     const build = availableUpdate?.buildNumber ?? '_';
     localStorage.setItem('cs_dismissed_build', build);
     setDismissedBuild(build);
   }, [availableUpdate]);
 
-  // "Dopo": riappare dopo 4 ore, oppure subito se esce un build più nuovo
   const handleSnoozeUpdate = useCallback(() => {
     const build = availableUpdate?.buildNumber ?? '_';
     const until = Date.now() + 4 * 60 * 60 * 1000;
@@ -87,7 +84,6 @@ export default function App() {
     setSnoozedUntil(until);
   }, [availableUpdate]);
 
-  // Dopo download completato: resetta tutto
   const handleUpdateDone = useCallback(() => {
     setAvailableUpdate(null);
     localStorage.removeItem('cs_dismissed_build');
@@ -104,7 +100,6 @@ export default function App() {
       const result = await checkForUpdates(__APP_BUILD_NUMBER__);
       if (result.available) setAvailableUpdate(result);
     } catch {
-      // Rete non ancora pronta (primo avvio post-installazione): riprova dopo 15s
       lastUpdateCheckRef.current = 0;
       setTimeout(async () => {
         try {
@@ -195,7 +190,7 @@ export default function App() {
     localStorage.setItem(INTERVAL_KEY, String(ms));
   }, []);
 
-  const handlePerPageChange = useCallback((n: 50 | 100) => {
+  const handlePerPageChange = useCallback((n: PerPage) => {
     setPerPage(n);
     setPage(1);
   }, []);
@@ -342,7 +337,6 @@ export default function App() {
       </header>
 
       <main ref={mainRef} className="flex-1 overflow-y-auto overscroll-y-none pb-20">
-        {/* Pull-to-refresh indicator — altezza gestita direttamente via DOM */}
         <div ref={ptrRef} className="h-0 flex items-center justify-center overflow-hidden">
           {ptrRefreshing ? (
             <svg className="w-5 h-5 text-accent-blue animate-spin" fill="none" viewBox="0 0 24 24">
@@ -388,7 +382,7 @@ export default function App() {
                 <>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex gap-1">
-                      {([50, 100] as const).map((n) => (
+                      {([50, 100, 200, 400, 600] as const).map((n) => (
                         <button
                           key={n}
                           onClick={() => handlePerPageChange(n)}
