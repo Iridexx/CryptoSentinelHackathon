@@ -58,6 +58,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<() => Promise<void>>(async () => {});
+  const coinsRef = useRef<Coin[]>(page === 1 ? loadCachedCoins() : []);
 
   const fetchCoins = useCallback(async () => {
     if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
@@ -65,6 +66,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
     abortRef.current = new AbortController();
     try {
       const data = await fetchCoinsAll(perPage, page, currency, abortRef.current.signal);
+      coinsRef.current = data;
       setCoins(data);
       setError(null);
       setLastUpdated(new Date());
@@ -74,9 +76,10 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       const msg = (err as Error).message ?? '';
-      if (msg.includes('429')) {
-        // Rate limit temporaneo: riprova silenziosamente dopo 10 secondi
-        retryRef.current = setTimeout(() => fetchRef.current(), 10_000);
+      const isRateLimit = msg.includes('429');
+      // Retry silently if rate-limited or if we already have data to display
+      if (isRateLimit || coinsRef.current.length > 0) {
+        retryRef.current = setTimeout(() => fetchRef.current(), isRateLimit ? 15_000 : 10_000);
         return;
       }
       setError('Impossibile caricare i prezzi. Dati dalla cache.');
