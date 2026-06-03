@@ -192,7 +192,7 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
           aria-label="Grafico"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+            <polyline strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} points="3,17 9,11 13,15 21,7" />
           </svg>
         </button>
       </div>
