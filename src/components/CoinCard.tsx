@@ -144,12 +144,12 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
         </span>
         <img src={coin.image} alt={coin.name} className="w-9 h-9 rounded-full flex-shrink-0" loading="lazy" />
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <button
-              className="font-semibold text-sm text-white truncate hover:text-accent-blue transition-colors active:opacity-70"
-              onClick={(e) => { e.stopPropagation(); hapticLight(); onChartTap(coin); }}
-            >{coin.name}</button>
+        <div
+          className="flex-1 min-w-0 cursor-pointer active:opacity-70"
+          onClick={(e) => { e.stopPropagation(); hapticLight(); onChartTap(coin); }}
+        >
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="font-semibold text-sm text-white truncate">{coin.name}</span>
             <span className="text-xs text-gray-400 uppercase flex-shrink-0">{coin.symbol}</span>
           </div>
           <div className="text-xs text-gray-400 mt-0.5">
