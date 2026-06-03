@@ -6,7 +6,8 @@ import { hapticMedium, hapticLight } from '../utils/haptics';
 
 const SYMBOL: Record<Currency, string> = { usd: '$', eur: '€', btc: '₿' };
 
-function formatPrice(price: number, currency: Currency): string {
+function formatPrice(price: number | null | undefined, currency: Currency): string {
+  if (price == null || !isFinite(price)) return '—';
   if (currency === 'btc') {
     if (price >= 0.001) return price.toLocaleString('it-IT', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
     return price.toFixed(8);
@@ -16,7 +17,8 @@ function formatPrice(price: number, currency: Currency): string {
   return price.toLocaleString('it-IT', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
 }
 
-function formatMarketCap(val: number, currency: Currency): string {
+function formatMarketCap(val: number | null | undefined, currency: Currency): string {
+  if (val == null || !isFinite(val)) return '—';
   const sym = SYMBOL[currency];
   if (currency === 'btc') {
     if (val >= 1e6) return `${sym}${(val / 1e6).toFixed(2)}M`;
@@ -46,9 +48,9 @@ interface Props {
 
 const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta }) => {
   const displayChange =
-    timeFrame === '1h' ? (coin.price_change_percentage_1h_in_currency ?? coin.price_change_percentage_24h) :
-    timeFrame === '7d' ? (coin.price_change_percentage_7d_in_currency ?? coin.price_change_percentage_24h) :
-    coin.price_change_percentage_24h;
+    timeFrame === '1h' ? (coin.price_change_percentage_1h_in_currency ?? coin.price_change_percentage_24h ?? 0) :
+    timeFrame === '7d' ? (coin.price_change_percentage_7d_in_currency ?? coin.price_change_percentage_24h ?? 0) :
+    (coin.price_change_percentage_24h ?? 0);
   const isPositive = displayChange >= 0;
   const sym = SYMBOL[currency];
 
