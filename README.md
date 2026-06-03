@@ -133,6 +133,20 @@ L'app usa il **tier gratuito di CoinGecko**, che ha un limite di richieste per m
 
 ---
 
+## Supporta il progetto
+
+CryptoSentinel è gratuito e senza pubblicità. Se lo trovi utile puoi offrire un caffè ☕
+
+| Metodo | Indirizzo |
+|---|---|
+| ⚡ Lightning Network | `eifel@getalby.com` |
+| ₿ Bitcoin (on-chain · Taproot) | `bc1pfzyjm5759qv0rjfsxld4jcejqv7elkuw6j9w2dxcsyrdf4vsw6yq6lexdg` |
+| 💎 USDT / USDC (EVM) | `0x80f8Fc375bCf1a7BC38394d6048e8364628Bd6C0` |
+
+> L'indirizzo EVM è compatibile con Ethereum, Polygon, BNB Chain, Arbitrum e qualsiasi altra rete EVM.
+
+---
+
 ## Licenza
 
 Uso personale. Non affiliato con CoinGecko.
