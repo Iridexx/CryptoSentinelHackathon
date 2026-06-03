@@ -23,6 +23,7 @@ import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
 import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
+import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
@@ -34,6 +35,7 @@ type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(shouldShowSplash);
   const [tab, setTab] = useState<Tab>('dashboard');
   const [search, setSearch] = useState('');
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
@@ -399,6 +401,8 @@ export default function App() {
   const triggeredCount = alerts.filter((a) => a.triggered).length;
 
   return (
+    <>
+    {showSplash && <SplashOverlay onDone={() => setShowSplash(false)} />}
     <div className="flex flex-col h-full bg-dark-900">
       <div
         className="fixed inset-x-0 top-0 bg-dark-900 z-50 pointer-events-none"
@@ -710,5 +714,6 @@ export default function App() {
         />
       )}
     </div>
+    </>
   );
 }
