@@ -235,7 +235,9 @@ export function useAlerts(coins: Coin[]) {
       if (filtered.length === 0) return;
 
       playAlertBeep();
-      filtered.forEach((params) => sendAlertNotification(params));
+      filtered.forEach(({ coinName, direction, threshold, currentPrice, note }) =>
+        sendAlertNotification({ coinName, direction, threshold, currentPrice, note })
+      );
     };
 
     fire();

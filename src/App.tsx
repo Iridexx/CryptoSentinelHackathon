@@ -106,6 +106,7 @@ export default function App() {
       const result = await checkForUpdates(__APP_BUILD_NUMBER__);
       if (result.available) setAvailableUpdate(result);
     } catch {
+      // Rete non ancora pronta (primo avvio post-installazione): riprova dopo 15s
       lastUpdateCheckRef.current = 0;
       setTimeout(async () => {
         try {

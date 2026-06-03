@@ -117,13 +117,19 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
       - name: Scarica APK dall'artefatto
         uses: actions/download-artifact@v7
         with:
           name: CryptoSentinel-debug.apk
 
       - name: Prepara cartella Pages
-        run: mkdir -p pages-dist && cp CryptoSentinel-debug.apk pages-dist/
+        run: |
+          mkdir -p pages-dist
+          cp docs/index.html pages-dist/index.html
+          cp CryptoSentinel-debug.apk pages-dist/
 
       - name: Upload artefatto Pages
         uses: actions/upload-pages-artifact@v3
