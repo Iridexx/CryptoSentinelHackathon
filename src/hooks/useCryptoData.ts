@@ -56,8 +56,11 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchRef = useRef<() => Promise<void>>(async () => {});
 
   const fetchCoins = useCallback(async () => {
+    if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
@@ -70,11 +73,19 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
+      const msg = (err as Error).message ?? '';
+      if (msg.includes('429')) {
+        // Rate limit temporaneo: riprova silenziosamente dopo 10 secondi
+        retryRef.current = setTimeout(() => fetchRef.current(), 10_000);
+        return;
+      }
       setError('Impossibile caricare i prezzi. Dati dalla cache.');
     } finally {
       setLoading(false);
     }
   }, [perPage, page, currency]);
+
+  fetchRef.current = fetchCoins;
 
   const refresh = useCallback(async () => {
     if (timerRef.current !== null) {
@@ -91,6 +102,8 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
     return () => {
       if (timerRef.current !== null) clearInterval(timerRef.current);
       timerRef.current = null;
+      if (retryRef.current !== null) clearTimeout(retryRef.current);
+      retryRef.current = null;
       abortRef.current?.abort();
     };
   }, [fetchCoins, intervalMs]);
