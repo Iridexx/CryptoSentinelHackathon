@@ -71,24 +71,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: |
-            Novità di questa versione:
+            ## CryptoSentinel v1.1.1
 
-            • Popup aggiornamento rinnovato — tasti Ignora, Dopo (snooze 4h) e Scarica
-            • Ignora nasconde solo il build corrente; riappare automaticamente con build più nuovo
-            • Dopo rimanda il popup di 4 ore; scompare subito se esce una versione ancora più recente
-            • Pull-to-refresh disabilitato mentre il popup aggiornamento è aperto
-            • Nuovo logo faro SVG nel header — stile dark premium con gradiente blu
-            • Navigazione inferiore con icone SVG vettoriali (mercato, preferiti, allarmi, impostazioni)
-            • Allarmi range prezzo — ricevi notifica quando il prezzo entra o esce da un intervallo
-            • Note personalizzate per ogni allarme — visibili nella notifica e nell'elenco
-            • Modifica allarme con input diretto prezzo o percentuale (oltre allo slider)
-            • Timeframe 1h / 24h / 7g per le variazioni di prezzo
-            • Ordinamento lista per rank, variazione %, volume, prezzo
+            ### Novità
+
+            • **Allarmi range prezzo** — notifica quando il prezzo entra o esce da un intervallo min–max
+            • **Alert immediato** — scatta subito se il prezzo supera già la soglia al momento della creazione
+            • **Grafici** — linee di soglia con stile LargeDashed e frecce ▲/▼
+            • **Notifiche** — ID deterministici (hash) per eliminare duplicati; cooldown 5 min sui preferiti
+            • **Fav alerts** — notifica popup in-app al movimento % configurabile
+            • **Schermata di avvio** — animazione faro all'avvio a freddo (tocca per saltare)
+            • **WorkManager** — fix loop di backoff esponenziale (non si ferma più dopo ore di inattività)
+            • **Header** — nuovo logo faro SVG con gradiente blu premium
+            • **Navigazione** — bottom bar con icone SVG vettoriali
+            • **Popup aggiornamento** — tasti Ignora, Dopo (snooze 4h) e Scarica
+            • **Impostazioni** — link a CoinGecko, multi-valuta USD/EUR/BTC, animazione rank
+            • **Pagina web** — landing page su GitHub Pages con download automatico
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release delete v1.1.1 --yes --cleanup-tag 2>/dev/null || true
           sleep 3
-          gh release create latest \
-            --title "CryptoSentinel v1.0.${{ github.run_number }}" \
+          gh release create v1.1.1 \
+            --title "CryptoSentinel v1.1.1" \
             --notes "$RELEASE_NOTES" \
             --latest \
             CryptoSentinel-debug.apk
