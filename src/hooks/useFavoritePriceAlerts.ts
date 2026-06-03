@@ -14,6 +14,7 @@ export interface FavAlertData {
 }
 
 const REF_KEY = 'cs_fav_ref_prices';
+const FAV_COOLDOWN_MS = 5 * 60 * 1000;
 
 function loadRefPrices(): Map<string, number> {
   try {
@@ -36,6 +37,7 @@ export function useFavoritePriceAlerts(
   onAlert?: (alert: FavAlertData) => void,
 ): { bumpRefPrice: (coinId: string, price: number) => void } {
   const refPrices = useRef<Map<string, number>>(loadRefPrices());
+  const lastFiredRef = useRef<Map<string, number>>(new Map());
   const upPctRef = useRef(upPct);
   const downPctRef = useRef(downPct);
   const onAlertRef = useRef(onAlert);
@@ -48,6 +50,7 @@ export function useFavoritePriceAlerts(
 
     const up = upPctRef.current;
     const down = downPctRef.current;
+    const now = Date.now();
     const toNotify: FavAlertData[] = [];
 
     for (const coin of favoriteCoins) {
@@ -58,13 +61,20 @@ export function useFavoritePriceAlerts(
       }
 
       const pctChange = (coin.current_price - ref) / ref * 100;
+      const cooldownOk = now - (lastFiredRef.current.get(coin.id) ?? 0) >= FAV_COOLDOWN_MS;
 
       if (up > 0 && pctChange >= up) {
         refPrices.current.set(coin.id, coin.current_price);
-        toNotify.push({ coinId: coin.id, coinName: coin.name, coinSymbol: coin.symbol, direction: 'up', pct: pctChange, currentPrice: coin.current_price, refPrice: ref });
+        if (cooldownOk) {
+          lastFiredRef.current.set(coin.id, now);
+          toNotify.push({ coinId: coin.id, coinName: coin.name, coinSymbol: coin.symbol, direction: 'up', pct: pctChange, currentPrice: coin.current_price, refPrice: ref });
+        }
       } else if (down > 0 && pctChange <= -down) {
         refPrices.current.set(coin.id, coin.current_price);
-        toNotify.push({ coinId: coin.id, coinName: coin.name, coinSymbol: coin.symbol, direction: 'down', pct: Math.abs(pctChange), currentPrice: coin.current_price, refPrice: ref });
+        if (cooldownOk) {
+          lastFiredRef.current.set(coin.id, now);
+          toNotify.push({ coinId: coin.id, coinName: coin.name, coinSymbol: coin.symbol, direction: 'down', pct: Math.abs(pctChange), currentPrice: coin.current_price, refPrice: ref });
+        }
       }
     }
 

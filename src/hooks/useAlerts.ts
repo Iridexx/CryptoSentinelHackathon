@@ -116,6 +116,16 @@ export function useAlerts(coins: Coin[]) {
     });
   }, []);
 
+  // Al resume: resetta i prezzi precedenti così il primo fetch post-pausa
+  // funge da baseline e non scatta alert in blocco per movimenti avvenuti in background
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState === 'visible') prevPricesRef.current.clear();
+    };
+    document.addEventListener('visibilitychange', onResume);
+    return () => document.removeEventListener('visibilitychange', onResume);
+  }, []);
+
   // Al mount: legge lo stato triggered dal worker nativo e aggiorna React
   useEffect(() => {
     getAlertsFromNative().then(nativeJson => {

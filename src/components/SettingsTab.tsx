@@ -370,7 +370,7 @@ const SettingsTab: FC<Props> = ({
               <div>
                 <p className="text-sm text-white">Ottimizzazione batteria</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {batteryDismissed ? 'Impostazione verificata' : 'Potrebbe bloccare gli aggiornamenti'}
+                  {batteryDismissed ? 'Impostazione verificata' : 'Può bloccare notifiche e aggiornamenti in background'}
                 </p>
               </div>
               {batteryDismissed ? (
@@ -381,13 +381,18 @@ const SettingsTab: FC<Props> = ({
             </div>
             <button
               onClick={openBatterySettings}
-              className="w-full px-4 py-3 flex items-center justify-between text-accent-yellow hover:bg-dark-700 transition-colors rounded-b-xl"
+              className="w-full px-4 py-3 flex items-center justify-between text-accent-yellow hover:bg-dark-700 transition-colors"
             >
               <span className="text-sm">Apri impostazioni batteria</span>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
+            <div className="px-4 py-3 rounded-b-xl">
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Per ricevere notifiche anche con app chiusa, cerca <span className="text-white">CryptoSentinel</span> nelle impostazioni batteria e imposta <span className="text-white">"Nessuna restrizione"</span> (o "Non ottimizzare"). In caso contrario Android può bloccare gli alert dopo circa 1 ora di inattività.
+              </p>
+            </div>
           </div>
         </section>
       )}

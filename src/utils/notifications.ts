@@ -42,6 +42,14 @@ export async function getNotificationPermission(): Promise<NotificationPermissio
   return status.display === 'granted' ? 'granted' : 'denied';
 }
 
+function notifId(seed: string): number {
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) {
+    h = (Math.imul(h, 33) ^ seed.charCodeAt(i)) >>> 0;
+  }
+  return (h % 1_900_000) + 1;
+}
+
 export async function sendAlertNotification(params: {
   coinName: string;
   direction: 'above' | 'below';
@@ -61,7 +69,7 @@ export async function sendAlertNotification(params: {
         : `Soglia: $${fmt(params.threshold)}  ·  Prezzo attuale: $${fmt(params.currentPrice)}`;
       await LocalNotifications.schedule({
         notifications: [{
-          id: (Date.now() % 2_000_000) | 0,
+          id: notifId(params.coinName + params.direction + params.threshold),
           channelId: 'price_alerts',
           title: `${arrow} ${params.coinName} — soglia ${label}`,
           body,
@@ -96,7 +104,7 @@ export async function sendRangeNotification(params: {
       const body = params.note ? `${bodyBase}\n📝 ${params.note}` : bodyBase;
       await LocalNotifications.schedule({
         notifications: [{
-          id: (Date.now() % 2_000_000) | 0,
+          id: notifId(params.coinName + params.minPrice + params.maxPrice),
           channelId: 'price_alerts',
           title,
           body,
@@ -130,7 +138,7 @@ export async function sendFavoriteMoveNotification(params: {
       const body = `Il prezzo si è mosso verso il ${label} del ${params.pct.toFixed(1)}%  ·  Ora: $${fmt(params.currentPrice)}`;
       await LocalNotifications.schedule({
         notifications: [{
-          id: (Date.now() % 2_000_000) | 0,
+          id: notifId(params.coinName + params.direction),
           channelId: 'price_alerts',
           title,
           body,
