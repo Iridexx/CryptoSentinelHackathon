@@ -146,7 +146,10 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <span className="font-semibold text-sm text-white truncate">{coin.name}</span>
+            <button
+              className="font-semibold text-sm text-white truncate hover:text-accent-blue transition-colors active:opacity-70"
+              onClick={(e) => { e.stopPropagation(); hapticLight(); onChartTap(coin); }}
+            >{coin.name}</button>
             <span className="text-xs text-gray-400 uppercase flex-shrink-0">{coin.symbol}</span>
           </div>
           <div className="text-xs text-gray-400 mt-0.5">
@@ -185,15 +188,6 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
           aria-label="Imposta allarme"
         >
           🔔
-        </button>
-        <button
-          onClick={() => { hapticLight(); onChartTap(coin); }}
-          className="text-gray-600 hover:text-accent-blue transition-colors active:scale-75 flex items-center justify-center"
-          aria-label="Grafico"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <polyline strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} points="3,17 9,11 13,15 21,7" />
-          </svg>
         </button>
       </div>
     </div>

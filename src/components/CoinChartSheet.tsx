@@ -39,6 +39,8 @@ const CoinChartSheet: FC<Props> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef(0);
 
   const { lineData, candleData, loading, error } = useCoinChart(coin.id, currency, DAYS[tf], mode);
 
@@ -164,7 +166,11 @@ const CoinChartSheet: FC<Props> = ({
       <div
         className="bg-dark-800 rounded-t-3xl border-t border-dark-600 max-h-[92vh] flex flex-col"
         onClick={e => e.stopPropagation()}
-        onTouchMove={e => e.stopPropagation()}
+        onTouchStart={e => { touchStartY.current = e.touches[0].clientY; }}
+        onTouchEnd={e => {
+          const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+          if (deltaY > 80 && (scrollRef.current?.scrollTop ?? 0) <= 0) onClose();
+        }}
       >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
@@ -172,7 +178,7 @@ const CoinChartSheet: FC<Props> = ({
         </div>
 
         {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 pb-6">
+        <div ref={scrollRef} className="overflow-y-auto flex-1 pb-6">
 
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3">
