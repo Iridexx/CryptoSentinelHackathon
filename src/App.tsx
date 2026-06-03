@@ -672,6 +672,7 @@ export default function App() {
               onFavMoveDownPctChange={handleFavMoveDownPctChange}
               rankAnimTopN={rankAnimTopN}
               onRankAnimTopNChange={handleRankAnimTopNChange}
+              initialUpdate={availableUpdate}
             />
           )}
         </div>

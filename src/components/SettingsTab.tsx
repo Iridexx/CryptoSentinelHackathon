@@ -116,6 +116,7 @@ interface Props {
   onFavMoveDownPctChange: (n: number) => void;
   rankAnimTopN: number;
   onRankAnimTopNChange: (n: number) => void;
+  initialUpdate?: UpdateResult | null;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -140,9 +141,14 @@ const SettingsTab: FC<Props> = ({
   onFavMoveDownPctChange,
   rankAnimTopN,
   onRankAnimTopNChange,
+  initialUpdate,
 }) => {
-  const [updateState, setUpdateState] = useState<UpdateState>('idle');
-  const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
+  const [updateState, setUpdateState] = useState<UpdateState>(() =>
+    initialUpdate?.available ? 'available' : 'idle'
+  );
+  const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(() =>
+    initialUpdate?.available ? initialUpdate : null
+  );
   const [devState, setDevState] = useState<DevState>('locked');
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);

@@ -71,7 +71,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: |
-            ## CryptoSentinel v1.1.1
+            ## CryptoSentinel v1.0.${{ github.run_number }}
 
             ### Novità
 
@@ -90,9 +90,10 @@ jobs:
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           gh release delete v1.1.1 --yes --cleanup-tag 2>/dev/null || true
+          gh release delete "v1.0.${{ github.run_number }}" --yes --cleanup-tag 2>/dev/null || true
           sleep 3
-          gh release create v1.1.1 \
-            --title "CryptoSentinel v1.1.1" \
+          gh release create "v1.0.${{ github.run_number }}" \
+            --title "CryptoSentinel v1.0.${{ github.run_number }}" \
             --notes "$RELEASE_NOTES" \
             --latest \
             CryptoSentinel-debug.apk
