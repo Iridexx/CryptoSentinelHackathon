@@ -29,7 +29,7 @@ const FavMovePopup: FC<Props> = ({ alert, currency, onClose, onDismiss }) => {
       onClick={onClose}
     >
       <div
-        className="bg-dark-800 rounded-t-3xl border-t border-dark-600 max-h-[92vh] flex flex-col"
+        className="bg-dark-800 rounded-t-3xl border-t border-dark-600 h-[92vh] flex flex-col"
         onClick={e => e.stopPropagation()}
         onTouchStart={e => { touchStartY.current = e.touches[0].clientY; }}
         onTouchEnd={e => {

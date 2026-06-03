@@ -109,7 +109,7 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex flex-col justify-end" onClick={onClose}>
       <div
-        className="bg-dark-800 rounded-t-3xl border-t border-dark-600 max-h-[92vh] flex flex-col"
+        className="bg-dark-800 rounded-t-3xl border-t border-dark-600 h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
         onTouchStart={e => { touchStartY.current = e.touches[0].clientY; }}
         onTouchEnd={e => {
