@@ -1,7 +1,7 @@
 import { type FC, useState, useEffect, useRef, useCallback } from 'react';
 
 const SESSION_KEY = 'cs_splash_shown';
-const AUTO_DISMISS_MS = 6000;
+const AUTO_DISMISS_MS = 8000;
 
 // Colore di sfondo che corrisponde al background dello splash HTML:
 // evita lo "spostamento" visivo mentre l'iframe si carica
