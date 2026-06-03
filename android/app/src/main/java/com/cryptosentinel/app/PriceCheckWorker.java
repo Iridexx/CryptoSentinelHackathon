@@ -197,7 +197,7 @@ public class PriceCheckWorker extends Worker {
             return Result.success();
         } catch (Exception e) {
             Log.e(TAG, "doWork error", e);
-            return Result.retry();
+            return Result.success();
         }
     }
 
