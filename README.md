@@ -140,7 +140,7 @@ CryptoSentinel è gratuito e senza pubblicità. Se lo trovi utile puoi offrire u
 | Metodo | Indirizzo |
 |---|---|
 | ☕ Buy Me a Coffee | [buymeacoffee.com/eifel3btc](https://buymeacoffee.com/eifel3btc) |
-| ⚡ Lightning Network | `eifel@getalby.com` |
+| ⚡ Lightning Network | [eifel@getalby.com](https://getalby.com/p/eifel) |
 | ₿ Bitcoin (on-chain · Taproot) | `bc1pfzyjm5759qv0rjfsxld4jcejqv7elkuw6j9w2dxcsyrdf4vsw6yq6lexdg` |
 | 💎 USDT / USDC (EVM) | `0x80f8Fc375bCf1a7BC38394d6048e8364628Bd6C0` |
 
