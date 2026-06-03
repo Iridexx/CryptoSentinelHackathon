@@ -102,20 +102,19 @@ const CoinChartSheet: FC<Props> = ({
         const series = chart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2, lastValueVisible: true, priceLineVisible: false });
         series.setData(lineData);
         if (showAlerts) {
-          coinAlerts.forEach(a => {
+          coinAlerts.filter(a => a.active ?? true).forEach(a => {
             series.createPriceLine({
               price: a.threshold,
-              color: (a.active ?? true) ? (a.direction === 'above' ? '#10b981' : '#ef4444') : '#4b5563',
+              color: a.direction === 'above' ? '#10b981' : '#ef4444',
               lineWidth: 1,
               lineStyle: LineStyle.Dashed,
               axisLabelVisible: true,
               title: a.direction === 'above' ? '▲' : '▼',
             });
           });
-          coinRangeAlerts.forEach(a => {
-            const c = (a.active ?? true) ? '#3b82f6' : '#4b5563';
-            series.createPriceLine({ price: a.maxPrice, color: c, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↑' });
-            series.createPriceLine({ price: a.minPrice, color: c, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↓' });
+          coinRangeAlerts.filter(a => a.active ?? true).forEach(a => {
+            series.createPriceLine({ price: a.maxPrice, color: '#3b82f6', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↑' });
+            series.createPriceLine({ price: a.minPrice, color: '#3b82f6', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↓' });
           });
         }
       } else {
@@ -129,20 +128,19 @@ const CoinChartSheet: FC<Props> = ({
         });
         series.setData(candleData);
         if (showAlerts) {
-          coinAlerts.forEach(a => {
+          coinAlerts.filter(a => a.active ?? true).forEach(a => {
             series.createPriceLine({
               price: a.threshold,
-              color: (a.active ?? true) ? (a.direction === 'above' ? '#10b981' : '#ef4444') : '#4b5563',
+              color: a.direction === 'above' ? '#10b981' : '#ef4444',
               lineWidth: 1,
               lineStyle: LineStyle.Dashed,
               axisLabelVisible: true,
               title: a.direction === 'above' ? '▲' : '▼',
             });
           });
-          coinRangeAlerts.forEach(a => {
-            const c = (a.active ?? true) ? '#3b82f6' : '#4b5563';
-            series.createPriceLine({ price: a.maxPrice, color: c, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↑' });
-            series.createPriceLine({ price: a.minPrice, color: c, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↓' });
+          coinRangeAlerts.filter(a => a.active ?? true).forEach(a => {
+            series.createPriceLine({ price: a.maxPrice, color: '#3b82f6', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↑' });
+            series.createPriceLine({ price: a.minPrice, color: '#3b82f6', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '↓' });
           });
         }
       }
