@@ -19,7 +19,7 @@
     </style>
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="android:background">#0a0e1a</item>
         <item name="windowSplashScreenBackground">#0a0e1a</item>
         <item name="android:statusBarColor">#0a0e1a</item>
         <item name="android:windowLightStatusBar">false</item>
