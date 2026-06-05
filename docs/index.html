@@ -158,19 +158,6 @@
   .rbody p{margin:8px 0;}
   .rbody .muted{color:var(--faint);}
 
-  /* dev section */
-  .dev-card{max-width:760px;margin:0 auto;background:linear-gradient(135deg,rgba(13,26,51,.7),rgba(8,18,38,.9));border:1px solid var(--line);border-radius:var(--radius);padding:36px 40px;display:flex;align-items:center;gap:36px;flex-wrap:wrap;}
-  .dev-avatar{width:72px;height:72px;border-radius:50%;border:2px solid rgba(111,176,255,.3);flex-shrink:0;background:linear-gradient(135deg,#0d1a33,#1a2d55);display:grid;place-items:center;}
-  .dev-avatar svg{width:36px;height:36px;stroke:var(--blue-bright);}
-  .dev-info{flex:1;min-width:0;}
-  .dev-info .dev-name{font-family:'Sora',sans-serif;font-weight:700;font-size:22px;margin-bottom:4px;}
-  .dev-info .dev-role{color:var(--muted);font-size:15px;margin-bottom:14px;}
-  .dev-info .dev-note{color:#b0c0dc;font-size:15px;line-height:1.6;max-width:52ch;}
-  .dev-links{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;}
-  .btn-x{display:inline-flex;align-items:center;gap:10px;padding:11px 20px;border-radius:12px;background:#000;border:1px solid rgba(255,255,255,.15);color:#fff;font-weight:700;font-size:14.5px;transition:.2s;}
-  .btn-x:hover{background:#111;border-color:rgba(255,255,255,.3);transform:translateY(-1px);}
-  .btn-x svg{width:18px;height:18px;fill:#fff;flex-shrink:0;}
-
   /* footer */
   footer{border-top:1px solid var(--line);padding:40px 0;margin-top:24px;}
   footer .wrap{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;color:var(--faint);font-size:14px;}
@@ -356,42 +343,21 @@
     </div>
   </section>
 
-  <!-- DEVELOPER -->
-  <section id="sviluppatore">
-    <div class="wrap">
-      <div class="sec-head">
-        <div class="eyebrow">Chi c'è dietro</div>
-        <h2 class="sora">Lo sviluppatore</h2>
-      </div>
-      <div class="dev-card">
-        <div class="dev-avatar">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-          </svg>
-        </div>
-        <div class="dev-info">
-          <div class="dev-name">@eifel3btc</div>
-          <div class="dev-role">Sviluppatore indipendente · Bitcoiner</div>
-          <p class="dev-note">
-            CryptoSentinel è un progetto open source sviluppato per passione.<br>
-            Nessun tracker, nessuna pubblicità, nessuna registrazione — solo lo strumento che volevo usare io stesso.
-          </p>
-          <div class="dev-links">
-            <a class="btn-x" href="https://x.com/eifel3btc" target="_blank" rel="noopener">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-              Seguimi su X
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <footer>
     <div class="wrap">
       <a class="brand" href="#top"><span><span class="c">Crypto</span>Sentinel</span></a>
-      <span>Il tuo faro nel mercato crypto · Distribuito gratuitamente, open source.</span>
-      <a id="footGh" href="#" target="_blank" rel="noopener">Repository GitHub →</a>
+      <span>Il tuo faro nel mercato crypto &middot; Distribuito gratuitamente, open source.</span>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+        <a id="footGh" href="#" target="_blank" rel="noopener">Repository GitHub &rarr;</a>
+        <a href="https://x.com/eifel3btc" target="_blank" rel="noopener"
+           style="display:flex;align-items:center;gap:8px;color:var(--faint);transition:.2s;"
+           onmouseover="this.style.color='var(--ink)'" onmouseout="this.style.color='var(--faint)'">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+          Sviluppato da <strong style="color:var(--ink);margin-left:3px;">Eifel</strong>
+        </a>
+      </div>
     </div>
   </footer>
 
@@ -409,24 +375,16 @@
   </template>
 
 <script>
-  /* =====================================================================
-     ⬇️⬇️⬇️   CONFIGURA QUI (le uniche 2 righe da modificare)   ⬇️⬇️⬇️
-     Scrivi il tuo username GitHub e il nome esatto del repository.
-     La pagina mostrerà SEMPRE l'ultima Release con un file .apk allegato.
-  ===================================================================== */
   const GH_OWNER = "Iridexx";
   const GH_REPO  = "CryptoSentinel";
-  /* ⬆️⬆️⬆️  ...e nient'altro. Pubblica una Release su GitHub con l'APK
-     come asset e qui comparirà da sola.  ⬆️⬆️⬆️ */
 
   const repoUrl = `https://github.com/${GH_OWNER}/${GH_REPO}`;
   const releasesUrl = `${repoUrl}/releases`;
   document.getElementById('btnReleases').href = releasesUrl;
   document.getElementById('navGh').href = repoUrl;
   document.getElementById('footGh').href = repoUrl;
-  document.getElementById('btnDownload').href = releasesUrl; // fallback finché non carica
+  document.getElementById('btnDownload').href = releasesUrl;
 
-  // ---- starfield in the scene ----
   (function(){
     const s=document.getElementById('stars');let h='';
     for(let i=0;i<26;i++){const x=Math.random()*100,y=Math.random()*62,sz=(Math.random()*2+1).toFixed(1),d=(Math.random()*4+2.5).toFixed(1),dl=(Math.random()*4).toFixed(1);
@@ -434,13 +392,11 @@
     s.innerHTML=h;
   })();
 
-  // ---- helpers ----
   const fmtSize = b => b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.round(b/1024)+' KB';
   const fmtDate = iso => { try{return new Date(iso).toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});}catch(e){return '';} };
   const fmtNum = n => n>=1000 ? (n/1000).toFixed(1).replace('.0','')+'k' : (''+n);
   const esc = t => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // ---- tiny & safe markdown -> html for release notes ----
   function md(src){
     if(!src || !src.trim()) return '<p class="muted">Nessuna nota di rilascio per questa versione.</p>';
     const lines = esc(src).replace(/\r/g,'').split('\n');
@@ -461,7 +417,6 @@
     return out;
   }
 
-  // ---- fetch latest release ----
   (async function(){
     const relName=document.getElementById('relName'), relTag=document.getElementById('relTag'),
           relDate=document.getElementById('relDate'), relBody=document.getElementById('relBody'),
@@ -485,7 +440,6 @@
         const bits=[ver];
         if(apk.size) bits.push(fmtSize(apk.size));
         dlSub.textContent = bits.join(' · ')+' · Android';
-        // meta
         const sizeM=document.getElementById('sizeM'), dateM=document.getElementById('dateM'), dlM=document.getElementById('dlM');
         if(apk.size){ document.getElementById('sizeVal').textContent=fmtSize(apk.size); sizeM.hidden=false; }
         if(d.published_at){ document.getElementById('dateVal').textContent=fmtDate(d.published_at); dateM.hidden=false; }
@@ -495,7 +449,6 @@
         dlSub.textContent = ver+' · vedi gli allegati su GitHub';
       }
     }catch(err){
-      // graceful fallback (repo non configurato, nessuna release, o limite API)
       relName.textContent = 'Note di rilascio non disponibili';
       relBody.innerHTML = `<p class="muted">Non riesco a leggere le release da GitHub in questo momento. Assicurati di aver impostato <code>GH_OWNER</code> e <code>GH_REPO</code> nel file, e di aver pubblicato una <a href="${releasesUrl}" target="_blank" rel="noopener">Release</a> con l'APK allegato.</p>`;
       btn.href = releasesUrl;
