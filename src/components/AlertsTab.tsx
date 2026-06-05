@@ -339,10 +339,15 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
       >
         <img src={alert.coinImage} alt={alert.coinName} className="w-8 h-8 rounded-full flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <span className="text-white text-sm font-semibold">{alert.coinName}</span>
             {alert.triggered && (
               <span className="text-xs bg-accent-yellow/20 text-accent-yellow px-1.5 py-0.5 rounded-full">Scattato</span>
+            )}
+            {alert.triggered && alert.triggeredAt && (
+              <span className="text-xs text-gray-500">
+                {new Date(alert.triggeredAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </span>
             )}
           </div>
           <div className={`text-xs mt-0.5 flex items-center gap-1.5 ${isAbove ? 'text-accent-green' : 'text-accent-red'}`}>
