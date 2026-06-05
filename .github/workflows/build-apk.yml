@@ -95,13 +95,15 @@ jobs:
             • **Download aggiornamento** — nuovo flusso in due step: popup con link diretto all'APK per scaricarlo con un tocco
             • **QR code donazioni** — tasto QR accanto a Copia in "Supporta sviluppatore" per Bitcoin, Lightning e EVM
             • **Contatore download** — la pagina web ora mostra il totale cumulativo dei download da tutte le release
+            • **Alert scattati** — data e ora di scatto visibili nella card accanto al badge giallo
+            • **Fix rilevamento aggiornamenti** — confronto build number corretto (non più basato sul numero di patch semver)
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           gh release delete v1.2.0 --yes --cleanup-tag 2>/dev/null || true
           gh release delete v1.1.1 --yes --cleanup-tag 2>/dev/null || true
           sleep 3
           gh release create v1.2.0 \
-            --title "CryptoSentinel v1.2.0" \
+            --title "CryptoSentinel v1.2 #${{ github.run_number }}" \
             --notes "$RELEASE_NOTES" \
             --latest \
             CryptoSentinel-debug.apk
