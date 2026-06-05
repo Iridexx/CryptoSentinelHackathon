@@ -139,11 +139,13 @@ export default function App() {
     onDownloadComplete(() => setDlState('done')).then((fn) => { unsubDl = fn; });
 
     const updateTimer = setTimeout(runUpdateCheck, 3000);
+    const updateInterval = setInterval(runUpdateCheck, 30 * 60 * 1000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       unsubDl?.();
       clearTimeout(updateTimer);
+      clearInterval(updateInterval);
     };
   }, [runUpdateCheck]);
 
@@ -672,7 +674,6 @@ export default function App() {
               onFavMoveDownPctChange={handleFavMoveDownPctChange}
               rankAnimTopN={rankAnimTopN}
               onRankAnimTopNChange={handleRankAnimTopNChange}
-              initialUpdate={availableUpdate}
             />
           )}
         </div>
