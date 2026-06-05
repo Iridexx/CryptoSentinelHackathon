@@ -1,4 +1,5 @@
-import { useState, type FC } from 'react';
+import { useState, useEffect, type FC } from 'react';
+import QRCode from 'qrcode';
 import { Capacitor } from '@capacitor/core';
 import { openNotificationSettings } from '../utils/notifications';
 import { openBatterySettings } from '../utils/energySaving';
@@ -29,10 +30,53 @@ const DONATION_OPTIONS = [
   },
 ] as const;
 
+const QRModal: FC<{ address: string; label: string; icon: string; onClose: () => void }> = ({ address, label, icon, onClose }) => {
+  const [qrUrl, setQrUrl] = useState('');
+
+  useEffect(() => {
+    QRCode.toDataURL(address, { width: 240, margin: 2, color: { dark: '#000000', light: '#ffffff' } })
+      .then(setQrUrl)
+      .catch(() => {});
+  }, [address]);
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-dark-800 rounded-2xl w-full max-w-xs p-5 shadow-2xl border border-dark-600 flex flex-col items-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between w-full mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{icon}</span>
+            <span className="text-white font-bold text-base">{label}</span>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-xl leading-none">&times;</button>
+        </div>
+
+        {qrUrl ? (
+          <div className="bg-white rounded-xl p-3 mb-4">
+            <img src={qrUrl} alt="QR code" className="w-48 h-48 block" />
+          </div>
+        ) : (
+          <div className="w-48 h-48 bg-dark-700 rounded-xl mb-4 flex items-center justify-center">
+            <svg className="w-6 h-6 text-gray-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          </div>
+        )}
+
+        <p className="text-xs text-gray-500 font-mono text-center break-all leading-relaxed">{address}</p>
+      </div>
+    </div>
+  );
+};
+
 const DonationRow: FC<{ icon: string; label: string; subtitle: string; address: string; appUri?: string | null; last?: boolean }> = ({
   icon, label, subtitle, address, appUri, last,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   const truncated = address.length > 20
     ? `${address.slice(0, 10)}…${address.slice(-6)}`
@@ -59,25 +103,37 @@ const DonationRow: FC<{ icon: string; label: string; subtitle: string; address: 
   };
 
   return (
-    <div
-      className={`px-4 py-3 flex items-center gap-3 transition-colors ${last ? 'rounded-b-xl' : ''} ${appUri ? 'cursor-pointer hover:bg-dark-700 active:bg-dark-600' : ''}`}
-      onClick={appUri ? handleOpen : undefined}
-    >
-      <span className="text-xl w-7 text-center flex-shrink-0">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-white font-medium">{label}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
-        <p className="text-xs text-gray-600 font-mono mt-0.5 truncate">{truncated}</p>
-      </div>
-      <button
-        onClick={handleCopy}
-        className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
-          copied ? 'bg-accent-green/20 text-accent-green' : 'bg-dark-700 text-gray-400 hover:text-white'
-        }`}
+    <>
+      {showQR && <QRModal address={address} label={label} icon={icon} onClose={() => setShowQR(false)} />}
+      <div
+        className={`px-4 py-3 flex items-center gap-3 transition-colors ${last ? 'rounded-b-xl' : ''} ${appUri ? 'cursor-pointer hover:bg-dark-700 active:bg-dark-600' : ''}`}
+        onClick={appUri ? handleOpen : undefined}
       >
-        {copied ? '✓' : 'Copia'}
-      </button>
-    </div>
+        <span className="text-xl w-7 text-center flex-shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white font-medium">{label}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+          <p className="text-xs text-gray-600 font-mono mt-0.5 truncate">{truncated}</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={handleCopy}
+            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${
+              copied ? 'bg-accent-green/20 text-accent-green' : 'bg-dark-700 text-gray-400 hover:text-white'
+            }`}
+          >
+            {copied ? '✓' : 'Copia'}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowQR(true); }}
+            className="text-xs px-3 py-1.5 rounded-lg font-semibold bg-dark-700 text-gray-400 hover:text-white transition-all"
+            aria-label="Mostra QR code"
+          >
+            QR
+          </button>
+        </div>
+      </div>
+    </>
   );
 };
 
@@ -116,7 +172,6 @@ interface Props {
   onFavMoveDownPctChange: (n: number) => void;
   rankAnimTopN: number;
   onRankAnimTopNChange: (n: number) => void;
-  initialUpdate?: UpdateResult | null;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -141,14 +196,9 @@ const SettingsTab: FC<Props> = ({
   onFavMoveDownPctChange,
   rankAnimTopN,
   onRankAnimTopNChange,
-  initialUpdate,
 }) => {
-  const [updateState, setUpdateState] = useState<UpdateState>(() =>
-    initialUpdate?.available ? 'available' : 'idle'
-  );
-  const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(() =>
-    initialUpdate?.available ? initialUpdate : null
-  );
+  const [updateState, setUpdateState] = useState<UpdateState>('idle');
+  const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
   const [devState, setDevState] = useState<DevState>('locked');
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
