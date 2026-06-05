@@ -417,15 +417,21 @@
     return out;
   }
 
+  // ---- fetch latest release + cumulative download count ----
   (async function(){
     const relName=document.getElementById('relName'), relTag=document.getElementById('relTag'),
           relDate=document.getElementById('relDate'), relBody=document.getElementById('relBody'),
           btn=document.getElementById('btnDownload'), dlSub=document.getElementById('dlSub'),
           verChip=document.getElementById('verChip');
     try{
-      const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases/latest`,{headers:{'Accept':'application/vnd.github+json'}});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const d = await r.json();
+      // Fetch latest release and all releases in parallel
+      const ghHeaders = {'Accept':'application/vnd.github+json'};
+      const [latestRes, allRes] = await Promise.all([
+        fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases/latest`, {headers:ghHeaders}),
+        fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases?per_page=100`, {headers:ghHeaders}),
+      ]);
+      if(!latestRes.ok) throw new Error('HTTP '+latestRes.status);
+      const d = await latestRes.json();
       const apk = (d.assets||[]).find(a=>/\.apk$/i.test(a.name)) || (d.assets||[])[0];
       const ver = d.tag_name || d.name || 'latest';
 
@@ -435,6 +441,19 @@
       relDate.textContent = d.published_at ? 'Pubblicata il '+fmtDate(d.published_at) : '';
       relBody.innerHTML = md(d.body);
 
+      // Cumulative downloads across all releases
+      let totalDownloads = 0;
+      if(allRes.ok){
+        const allReleases = await allRes.json();
+        for(const rel of allReleases){
+          for(const asset of (rel.assets||[])){
+            if(/\.apk$/i.test(asset.name) && typeof asset.download_count === 'number'){
+              totalDownloads += asset.download_count;
+            }
+          }
+        }
+      }
+
       if(apk && apk.browser_download_url){
         btn.href = apk.browser_download_url;
         const bits=[ver];
@@ -443,7 +462,7 @@
         const sizeM=document.getElementById('sizeM'), dateM=document.getElementById('dateM'), dlM=document.getElementById('dlM');
         if(apk.size){ document.getElementById('sizeVal').textContent=fmtSize(apk.size); sizeM.hidden=false; }
         if(d.published_at){ document.getElementById('dateVal').textContent=fmtDate(d.published_at); dateM.hidden=false; }
-        if(typeof apk.download_count==='number'){ document.getElementById('dlVal').textContent=fmtNum(apk.download_count); dlM.hidden=false; }
+        if(totalDownloads > 0){ document.getElementById('dlVal').textContent=fmtNum(totalDownloads); dlM.hidden=false; }
       } else {
         btn.href = releasesUrl;
         dlSub.textContent = ver+' · vedi gli allegati su GitHub';
