@@ -50,10 +50,11 @@ export interface RangeAlert {
   coinName: string;
   coinSymbol: string;
   coinImage: string;
-  min: number;
-  max: number;
+  minPrice: number;
+  maxPrice: number;
   note?: string;
   active?: boolean;
-  lastState?: 'inside' | 'outside' | null;
+  isInsideRange: boolean | null;
+  lastNotifiedAt: number | null;
   createdAt: number;
 }
