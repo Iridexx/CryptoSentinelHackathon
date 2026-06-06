@@ -92,11 +92,13 @@ jobs:
 
             • **Schermata di avvio** — fix tocca-per-saltare: il tap ora funziona correttamente su tutti i dispositivi
             • **Rilevamento aggiornamenti** — il controllo ora avviene ogni 30 minuti anche a app aperta (non solo al riavvio)
-            • **Download aggiornamento** — nuovo flusso in due step: popup con link diretto all'APK per scaricarlo con un tocco
             • **QR code donazioni** — tasto QR accanto a Copia in "Supporta sviluppatore" per Bitcoin, Lightning e EVM
             • **Contatore download** — la pagina web ora mostra il totale cumulativo dei download da tutte le release
             • **Alert scattati** — data e ora di scatto visibili nella card accanto al badge giallo
             • **Fix rilevamento aggiornamenti** — confronto build number corretto (non più basato sul numero di patch semver)
+            • **Grafico interattivo** — il prezzo in alto a destra segue il pallino mentre si scorre il grafico
+            • **Alert reattivi** — la card si aggiorna come "Scattato" istantaneamente, senza ritardi
+            • **Download aggiornamento** — avvio diretto senza aprire l'app GitHub; banner di stato unificato con SettingsTab
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           gh release delete v1.2.0 --yes --cleanup-tag 2>/dev/null || true
