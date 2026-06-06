@@ -147,7 +147,15 @@
   .release .rhead .rt .v{font-family:'Sora',sans-serif;font-weight:700;font-size:20px;}
   .release .rhead .rt .tag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--green);background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);padding:3px 10px;border-radius:7px;}
   .release .rhead .rdate{color:var(--muted);font-size:14px;font-weight:600;}
-  .rbody{padding:24px 26px;color:#cdd9ee;font-size:15px;}
+  .rbody{
+    padding:24px 26px;color:#cdd9ee;font-size:15px;
+    max-height:420px;overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;scrollbar-color:rgba(125,160,215,.28) transparent;
+  }
+  .rbody::-webkit-scrollbar{width:5px;}
+  .rbody::-webkit-scrollbar-track{background:transparent;}
+  .rbody::-webkit-scrollbar-thumb{background:rgba(125,160,215,.28);border-radius:3px;}
+  .rbody::-webkit-scrollbar-thumb:hover{background:rgba(125,160,215,.45);}
   .rbody h3,.rbody h4{font-family:'Sora',sans-serif;color:var(--ink);margin:16px 0 8px;font-size:17px;}
   .rbody h3:first-child,.rbody h4:first-child{margin-top:0;}
   .rbody ul{margin:8px 0 8px 4px;list-style:none;}
@@ -193,7 +201,7 @@
       <div class="nav-links">
         <a href="#funzioni">Funzioni</a>
         <a href="#installa">Installazione</a>
-        <a href="#novita">Novità</a>
+        <a href="#novita">Novit&agrave;</a>
         <a class="nav-gh" id="navGh" href="#" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11 11 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
           GitHub
@@ -206,15 +214,15 @@
   <header class="hero" id="top">
     <div class="wrap">
       <div class="copy">
-        <span class="tagpill"><span class="dot"></span>App Android · Open Source</span>
+        <span class="tagpill"><span class="dot"></span>App Android &middot; Open Source</span>
         <h1 class="sora"><span class="c">Crypto</span><span class="grad">Sentinel</span></h1>
-        <p class="lede">Il tuo <em>faro</em> nel mercato crypto. Prezzi in tempo reale, preferiti e allarmi — sempre di guardia.</p>
+        <p class="lede">Il tuo <em>faro</em> nel mercato crypto. Prezzi in tempo reale, preferiti e allarmi &mdash; sempre di guardia.</p>
 
         <div class="dl">
           <div class="dl-row">
             <a class="btn-dl" id="btnDownload" href="#" rel="noopener">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>
-              <span class="sub">Scarica l'APK<small id="dlSub">Ultima versione · Android</small></span>
+              <span class="sub">Scarica l'APK<small id="dlSub">Ultima versione &middot; Android</small></span>
             </a>
             <a class="btn-ghost" id="btnReleases" href="#" target="_blank" rel="noopener">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
@@ -222,10 +230,10 @@
             </a>
           </div>
           <div class="meta" id="meta">
-            <span class="m"><span class="vchip" id="verChip">v—</span></span>
-            <span class="m" id="sizeM" hidden><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 10h16"/></svg><span id="sizeVal">—</span></span>
-            <span class="m" id="dateM" hidden><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span id="dateVal">—</span></span>
-            <span class="m" id="dlM" hidden><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg><span id="dlVal">—</span> download</span>
+            <span class="m"><span class="vchip" id="verChip">v&mdash;</span></span>
+            <span class="m" id="sizeM" hidden><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 10h16"/></svg><span id="sizeVal">&mdash;</span></span>
+            <span class="m" id="dateM" hidden><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span id="dateVal">&mdash;</span></span>
+            <span class="m" id="dlM" hidden><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg><span id="dlVal">&mdash;</span> download</span>
           </div>
           <div class="trust">
             <span>Gratis</span><span>Open source</span><span>Nessuna registrazione</span>
@@ -271,7 +279,7 @@
           <line x1="120" y1="28" x2="120" y2="16" stroke="#9fb0d4" stroke-width="2"/>
         </svg>
         <div class="sea"></div>
-        <div class="label">Sempre di guardia · 24/7</div>
+        <div class="label">Sempre di guardia &middot; 24/7</div>
       </div>
     </div>
   </header>
@@ -298,7 +306,7 @@
         <div class="card">
           <div class="ic"><svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
           <h3>Allarmi di prezzo</h3>
-          <p>Imposta soglie e ricevi una notifica appena vengono superate. Niente più ansie.</p>
+          <p>Imposta soglie e ricevi una notifica appena vengono superate. Niente pi&ugrave; ansie.</p>
         </div>
       </div>
     </div>
@@ -320,7 +328,7 @@
       </div>
       <div class="note">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
-        <span>Android potrebbe avvisarti perché l'app non arriva dal Play Store: è normale per le app distribuite via APK. Il codice è open source e verificabile su GitHub.</span>
+        <span>Android potrebbe avvisarti perch&eacute; l'app non arriva dal Play Store: &egrave; normale per le app distribuite via APK. Il codice &egrave; open source e verificabile su GitHub.</span>
       </div>
     </div>
   </section>
@@ -330,15 +338,15 @@
     <div class="wrap">
       <div class="sec-head">
         <div class="eyebrow">Ultima release</div>
-        <h2 class="sora">Cosa c'è di nuovo</h2>
+        <h2 class="sora">Cosa c'&egrave; di nuovo</h2>
         <p>Aggiornato automaticamente a ogni nuova versione pubblicata su GitHub.</p>
       </div>
       <div class="release">
         <div class="rhead">
-          <div class="rt"><span class="v" id="relName">Caricamento…</span><span class="tag" id="relTag" hidden>latest</span></div>
+          <div class="rt"><span class="v" id="relName">Caricamento&hellip;</span><span class="tag" id="relTag" hidden>latest</span></div>
           <div class="rdate" id="relDate"></div>
         </div>
-        <div class="rbody" id="relBody"><p class="muted">Recupero delle note di rilascio da GitHub…</p></div>
+        <div class="rbody" id="relBody"><p class="muted">Recupero delle note di rilascio da GitHub&hellip;</p></div>
       </div>
     </div>
   </section>
