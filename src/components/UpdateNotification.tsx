@@ -15,7 +15,6 @@ const APK_FILENAME = 'CryptoSentinel-debug.apk';
 
 const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, onDismiss, onDownloadStart }) => {
   const [showModal, setShowModal] = useState(false);
-  const [showLinkModal, setShowLinkModal] = useState(false);
 
   useEffect(() => {
     if (dlState === 'done') setShowModal(true);
@@ -46,32 +45,44 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, on
   return (
     <>
       {/* Floating indicator */}
-      {dlState !== 'downloading' && (
+      {dlState === 'idle' && (
         <button
           onClick={() => setShowModal(true)}
           className="fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center"
-          aria-label={dlState === 'done' ? 'Download completato' : 'Aggiornamento disponibile'}
+          aria-label="Aggiornamento disponibile"
         >
-          {dlState === 'done' ? (
-            <>
-              <span className="absolute w-full h-full rounded-full bg-accent-green/20 border border-accent-green/40" />
-              <svg className="relative z-10 w-5 h-5 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
-            </>
-          ) : (
-            <>
-              <span className="absolute w-full h-full rounded-full bg-accent-green/25 animate-ping" />
-              <span className="absolute w-full h-full rounded-full bg-accent-green/15 border border-accent-green/40" />
-              <svg className="relative z-10 w-5 h-5 text-accent-green drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-            </>
-          )}
+          <span className="absolute w-full h-full rounded-full bg-accent-green/25 animate-ping" />
+          <span className="absolute w-full h-full rounded-full bg-accent-green/15 border border-accent-green/40" />
+          <svg className="relative z-10 w-5 h-5 text-accent-green drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
         </button>
       )}
 
-      {/* Modal principale */}
+      {dlState === 'downloading' && (
+        <div className="fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center">
+          <span className="absolute w-full h-full rounded-full bg-accent-blue/15 border border-accent-blue/40" />
+          <svg className="relative z-10 w-5 h-5 text-accent-blue animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        </div>
+      )}
+
+      {dlState === 'done' && (
+        <button
+          onClick={() => setShowModal(true)}
+          className="fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center"
+          aria-label="Download completato"
+        >
+          <span className="absolute w-full h-full rounded-full bg-accent-green/20 border border-accent-green/40" />
+          <svg className="relative z-10 w-5 h-5 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      )}
+
+      {/* Modal */}
       {showModal && (
         <div className={backdrop} onClick={dlState === 'done' ? handleDismissDone : onSnooze}>
           <div className={modalBox} onClick={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()}>
@@ -89,13 +100,26 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, on
                   <button onClick={handleDismissDone} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
                 </div>
 
-                <div className="bg-dark-700 rounded-xl px-4 py-3 mb-4">
-                  <p className="text-xs text-gray-500 mb-1">File salvato in</p>
-                  <p className="text-sm text-white font-mono break-all">Download/{APK_FILENAME}</p>
-                </div>
+                <button
+                  onClick={handleOpenDownloads}
+                  className="flex items-center gap-3 bg-dark-700 rounded-xl px-4 py-3 mb-4 hover:bg-dark-600 active:bg-dark-500 transition-colors w-full text-left"
+                >
+                  <span className="w-8 h-8 rounded-lg bg-accent-green/15 border border-accent-green/30 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-500 mb-0.5">File salvato in</p>
+                    <p className="text-sm text-white font-mono">Download/{APK_FILENAME}</p>
+                  </div>
+                  <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
 
                 <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                  Apri la cartella Download e tocca il file per installare l&apos;aggiornamento.
+                  Tocca il file qui sopra per aprire la cartella Download e installare l&apos;aggiornamento.
                 </p>
 
                 <div className="flex gap-2">
@@ -156,7 +180,7 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, on
                     Dopo
                   </button>
                   <button
-                    onClick={() => { setShowModal(false); setShowLinkModal(true); }}
+                    onClick={handleDownload}
                     className="flex-1 py-2.5 bg-accent-green text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity"
                   >
                     Scarica
@@ -164,61 +188,6 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, on
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal link diretto */}
-      {showLinkModal && (
-        <div className={backdrop} onClick={() => setShowLinkModal(false)}>
-          <div className={modalBox} onClick={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-accent-green/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                </span>
-                <h2 className="text-white font-bold text-base">Scarica APK</h2>
-              </div>
-              <button onClick={() => setShowLinkModal(false)} className="text-gray-500 hover:text-gray-300 text-xl leading-none">×</button>
-            </div>
-
-            <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-              Tocca il link qui sotto per scaricare direttamente il file APK:
-            </p>
-
-            <a
-              href={apkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => { handleDownload(); setShowLinkModal(false); }}
-              className="flex items-center gap-3 bg-dark-700 rounded-xl px-4 py-3 mb-4 hover:bg-dark-600 active:bg-dark-500 transition-colors group"
-            >
-              <span className="w-8 h-8 rounded-lg bg-accent-green/15 border border-accent-green/30 flex items-center justify-center flex-shrink-0">
-                <svg className="w-4 h-4 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-white font-semibold truncate">{APK_FILENAME}</p>
-                <p className="text-xs text-accent-green truncate">{apkUrl}</p>
-              </div>
-              <svg className="w-4 h-4 text-gray-600 group-hover:text-gray-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
-
-            <p className="text-xs text-gray-600 mb-4 leading-relaxed">
-              Dopo il download, apri il file dalla cartella Download per installare l&apos;aggiornamento.
-            </p>
-
-            <button
-              onClick={() => setShowLinkModal(false)}
-              className="w-full py-2.5 bg-dark-700 text-gray-300 text-sm rounded-xl hover:bg-dark-600 transition-colors"
-            >
-              Chiudi
-            </button>
           </div>
         </div>
       )}
