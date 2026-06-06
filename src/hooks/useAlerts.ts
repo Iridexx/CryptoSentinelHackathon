@@ -59,7 +59,6 @@ export function useAlerts(coins: Coin[]) {
       createdAt: Date.now(),
     };
 
-    // Verifica immediata: se il prezzo è già oltre la soglia, scatta subito senza aspettare il prossimo refresh
     const coin = coinsRef.current.find(c => c.id === alertData.coinId);
     if (coin) {
       const price = coin.current_price;
@@ -117,8 +116,6 @@ export function useAlerts(coins: Coin[]) {
     });
   }, []);
 
-  // Al resume: resetta i prezzi precedenti così il primo fetch post-pausa
-  // funge da baseline e non scatta alert in blocco per movimenti avvenuti in background
   useEffect(() => {
     const onResume = () => {
       if (document.visibilityState === 'visible') prevPricesRef.current.clear();
@@ -127,7 +124,6 @@ export function useAlerts(coins: Coin[]) {
     return () => document.removeEventListener('visibilitychange', onResume);
   }, []);
 
-  // Al mount: legge lo stato triggered dal worker nativo e aggiorna React
   useEffect(() => {
     getAlertsFromNative().then(nativeJson => {
       if (!nativeJson) return;
@@ -151,7 +147,6 @@ export function useAlerts(coins: Coin[]) {
 
     const prevPrices = prevPricesRef.current;
 
-    // Prima lettura: popola i prezzi senza sparare (evita notifiche all'apertura app)
     if (prevPrices.size === 0) {
       coins.forEach(c => prevPrices.set(c.id, c.current_price));
       return;
@@ -174,7 +169,6 @@ export function useAlerts(coins: Coin[]) {
       const crossed =
         (alert.direction === 'above' && prevPrice !== undefined && prevPrice < alert.threshold && price >= alert.threshold) ||
         (alert.direction === 'below' && prevPrice !== undefined && prevPrice > alert.threshold && price <= alert.threshold);
-      // Fallback: scatta se l'alert è recente e la condizione è già soddisfatta (editAlert senza cambio prezzo)
       const isNew = Date.now() - alert.createdAt < 10 * 60 * 1000;
       const fires = crossed || (isNew && conditionMet);
 
@@ -185,12 +179,35 @@ export function useAlerts(coins: Coin[]) {
       }
     }
 
-    // Aggiorna i prezzi precedenti
     coins.forEach(c => prevPrices.set(c.id, c.current_price));
 
     if (toFire.length === 0) return;
 
-    // Controlla se il worker nativo ha già sparato per questi alert (evita doppioni)
+    // Aggiorna subito la UI senza aspettare il worker nativo
+    const now = Date.now();
+    setAlerts((prev) => {
+      const next = prev.map((a) => toTriggerIds.has(a.id) ? { ...a, triggered: true, triggeredAt: now } : a);
+      saveAlerts(next);
+      return next;
+    });
+    const newEntries: AlertHistoryEntry[] = toFire.map(({ alert, currentPrice }) => ({
+      id: `${now}-${alert.id}`,
+      coinId: alert.coinId,
+      coinName: alert.coinName,
+      coinSymbol: alert.coinSymbol,
+      coinImage: alert.coinImage,
+      direction: alert.direction,
+      threshold: alert.threshold,
+      triggeredPrice: currentPrice,
+      triggeredAt: now,
+    }));
+    setHistory((prev) => {
+      const next = [...newEntries, ...prev].slice(0, MAX_HISTORY);
+      saveHistory(next);
+      return next;
+    });
+
+    // Controlla il worker nativo solo per deduplicare le notifiche (non blocca la UI)
     let alive = true;
     const fire = async () => {
       const nativeJson = await getAlertsFromNative();
@@ -205,31 +222,6 @@ export function useAlerts(coins: Coin[]) {
         } catch {}
       }
 
-      // Segna tutti come triggered in React (anche quelli gestiti dal worker)
-      const now = Date.now();
-      setAlerts((prev) => {
-        const next = prev.map((a) => toTriggerIds.has(a.id) ? { ...a, triggered: true, triggeredAt: now } : a);
-        saveAlerts(next);
-        return next;
-      });
-      const newEntries: AlertHistoryEntry[] = toFire.map(({ alert, currentPrice }) => ({
-        id: `${now}-${alert.id}`,
-        coinId: alert.coinId,
-        coinName: alert.coinName,
-        coinSymbol: alert.coinSymbol,
-        coinImage: alert.coinImage,
-        direction: alert.direction,
-        threshold: alert.threshold,
-        triggeredPrice: currentPrice,
-        triggeredAt: now,
-      }));
-      setHistory((prev) => {
-        const next = [...newEntries, ...prev].slice(0, MAX_HISTORY);
-        saveHistory(next);
-        return next;
-      });
-
-      // Notifica solo per alert che il worker NON ha già gestito
       const filtered = toFire.filter(({ alert }) => !nativeTriggered.has(alert.id));
       if (filtered.length === 0) return;
 
