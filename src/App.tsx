@@ -52,9 +52,8 @@ export default function App() {
   const favSyncRef = useRef({ coinsJson: '[]', upPct: 0, downPct: 0, refPricesJson: '{}', currency: 'usd' });
   const bumpRefPriceRef = useRef<(coinId: string, price: number) => void>(() => {});
 
-  const [dismissedBuild, setDismissedBuild] = useState<string | null>(() =>
-    localStorage.getItem('cs_dismissed_build')
-  );
+  // dismiss è session-only: non si carica da localStorage, così il riavvio mostra sempre la freccia
+  const [dismissedBuild, setDismissedBuild] = useState<string | null>(null);
   const [snoozedBuild, setSnoozedBuild] = useState<string | null>(() =>
     localStorage.getItem('cs_snoozed_build')
   );
@@ -77,8 +76,7 @@ export default function App() {
 
   const handleIgnoreUpdate = useCallback(() => {
     const build = availableUpdate?.buildNumber ?? '_';
-    localStorage.setItem('cs_dismissed_build', build);
-    setDismissedBuild(build);
+    setDismissedBuild(build); // session-only, non persiste in localStorage
   }, [availableUpdate]);
 
   const handleSnoozeUpdate = useCallback(() => {
@@ -92,7 +90,7 @@ export default function App() {
 
   const handleUpdateDone = useCallback(() => {
     setAvailableUpdate(null);
-    localStorage.removeItem('cs_dismissed_build');
+    setDlState('idle');
     localStorage.removeItem('cs_snoozed_build');
     localStorage.removeItem('cs_snoozed_until');
     setDismissedBuild(null);

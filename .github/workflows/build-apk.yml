@@ -101,6 +101,7 @@ jobs:
             • **Download aggiornamento** — avvio diretto senza aprire l'app GitHub; banner di stato unificato con SettingsTab
             • **Alert** — rimossa icona matita dalle card alert (non più necessaria)
             • **Popup aggiornamento** — segno di spunta cliccabile apre direttamente la cartella Download senza modal intermedio
+            • **Fix freccia aggiornamento** — la freccia ora appare sempre al riavvio anche se il popup era stato ignorato
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           gh release delete v1.2.0 --yes --cleanup-tag 2>/dev/null || true
