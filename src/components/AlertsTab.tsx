@@ -371,9 +371,14 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
           )}
           <button
             onClick={() => { hapticMedium(); onRemove(alert.id); }}
-            className="text-xs px-2 py-1 rounded-lg bg-accent-red/10 text-accent-red hover:bg-accent-red/20 transition-colors"
+            className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors flex items-center justify-center"
+            style={{ color: '#8B95A7' }}
             aria-label="Elimina allarme"
-          >✕</button>
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -578,9 +583,14 @@ const RangeAlertRow: FC<RangeAlertRowProps> = ({ alert, onRemove, onEdit, coin }
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => { hapticMedium(); onRemove(alert.id); }}
-            className="text-xs px-2 py-1 rounded-lg bg-accent-red/10 text-accent-red hover:bg-accent-red/20 transition-colors"
+            className="p-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 transition-colors flex items-center justify-center"
+            style={{ color: '#8B95A7' }}
             aria-label="Elimina"
-          >✕</button>
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
         </div>
       </div>
 
