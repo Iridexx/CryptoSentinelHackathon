@@ -1,4 +1,4 @@
-package com.cryptosentinel.app;
+package com.cryptosentinelai.app;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

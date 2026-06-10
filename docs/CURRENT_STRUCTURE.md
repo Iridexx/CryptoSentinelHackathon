@@ -18,7 +18,7 @@ CryptoSentinelHackathon/ - app CryptoSentinel esistente, frontend React/Vite con
 |   |   |   |   `-- java/com/getcapacitor/myapp/ExampleInstrumentedTest.java - test strumentale di esempio.
 |   |   |   |-- main/ - app Android effettiva.
 |   |   |   |   |-- AndroidManifest.xml - dichiara activity, BootReceiver, FileProvider e permessi Android.
-|   |   |   |   |-- java/com/cryptosentinel/app/ - codice nativo Java custom.
+|   |   |   |   |-- java/com/cryptosentinelai/app/ - codice nativo Java custom.
 |   |   |   |   |   |-- MainActivity.java - entrypoint Android; registra plugin, imposta status bar, pulisce cache su update, schedula worker.
 |   |   |   |   |   |-- AppSettingsPlugin.java - bridge Capacitor per impostazioni, download APK, sync alert, apertura link/download.
 |   |   |   |   |   |-- PriceCheckWorker.java - WorkManager ogni 15 minuti per controllare alert/preferiti anche in background.
@@ -100,7 +100,7 @@ CryptoSentinelHackathon/ - app CryptoSentinel esistente, frontend React/Vite con
 |   |-- types.ts - tipi Coin, PriceAlert, RangeAlert e storico.
 |   `-- vite-env.d.ts - tipi ambiente Vite.
 |-- .gitignore - esclusioni Git.
-|-- capacitor.config.ts - appId `com.cryptosentinel.app`, nome app, webDir `dist`.
+|-- capacitor.config.ts - appId `com.cryptosentinelai.app`, nome app, webDir `dist`.
 |-- eslint.config.js - configurazione lint.
 |-- index.html - entrypoint HTML Vite.
 |-- LICENSE - licenza.
@@ -218,10 +218,10 @@ CryptoSentinelHackathon/ - app CryptoSentinel esistente, frontend React/Vite con
 | `src/utils/update.ts` | Check GitHub release, download APK e sync alert/range verso Android. |
 | `src/utils/energySaving.ts` | Integrazione impostazioni risparmio energetico. |
 | `src/utils/haptics.ts` | Feedback aptico. |
-| `android/app/src/main/java/com/cryptosentinel/app/MainActivity.java` | Avvio Android, registrazione plugin e scheduling worker. |
-| `android/app/src/main/java/com/cryptosentinel/app/AppSettingsPlugin.java` | Plugin Capacitor custom per impostazioni, download APK, alert sync e link esterni. |
-| `android/app/src/main/java/com/cryptosentinel/app/PriceCheckWorker.java` | Worker nativo per controlli prezzo background e notifiche Android. |
-| `android/app/src/main/java/com/cryptosentinel/app/BootReceiver.java` | Ripristino worker al boot. |
+| `android/app/src/main/java/com/cryptosentinelai/app/MainActivity.java` | Avvio Android, registrazione plugin e scheduling worker. |
+| `android/app/src/main/java/com/cryptosentinelai/app/AppSettingsPlugin.java` | Plugin Capacitor custom per impostazioni, download APK, alert sync e link esterni. |
+| `android/app/src/main/java/com/cryptosentinelai/app/PriceCheckWorker.java` | Worker nativo per controlli prezzo background e notifiche Android. |
+| `android/app/src/main/java/com/cryptosentinelai/app/BootReceiver.java` | Ripristino worker al boot. |
 | `android/app/src/main/AndroidManifest.xml` | Permessi e componenti Android dichiarati. |
 | `package.json` | Script npm e dipendenze frontend/mobile. |
 | `vite.config.ts` | Build Vite e costanti `__APP_VERSION__`, `__APP_BUILD_DATE__`, `__APP_BUILD_NUMBER__`. |

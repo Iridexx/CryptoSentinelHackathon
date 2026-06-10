@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">CryptoSentinel</string>
     <string name="title_activity_main">CryptoSentinel</string>
-    <string name="package_name">com.cryptosentinel.app</string>
-    <string name="custom_url_scheme">com.cryptosentinel.app</string>
+    <string name="package_name">com.cryptosentinelai.app</string>
+    <string name="custom_url_scheme">com.cryptosentinelai.app</string>
 </resources>

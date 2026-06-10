@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.cryptosentinel.app',
+  appId: 'com.cryptosentinelai.app',
   appName: 'CryptoSentinel',
   webDir: 'dist',
   android: {

@@ -28,6 +28,7 @@ backend/secrets/
 *.jks
 *service-account*.json
 firebase-adminsdk*.json
+android/app/google-services.json
 wallet*.json
 encrypted-wallet*
 

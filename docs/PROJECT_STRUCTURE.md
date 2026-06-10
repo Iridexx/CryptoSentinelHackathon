@@ -8,12 +8,13 @@ Documento di riferimento per revisione esterna. Viene aggiornato al termine di o
 
 ```text
 CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack Track 1.
+|-- AGENTS.md - regole operative permanenti per agenti AI sul repository.
 |-- .github/ - automazioni CI/CD GitHub.
-|   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, artifact/release e deploy Pages su gh-pages solo da main.
+|   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, restore sicuro google-services da secret, artifact/release e deploy Pages su gh-pages solo da main.
 |-- android/ - progetto Android Capacitor esistente.
 |   |-- app/ - modulo Android principale.
 |   |   |-- src/main/AndroidManifest.xml - dichiarazioni activity, receiver, provider, permessi e FCM.
-|   |   |-- src/main/java/com/cryptosentinel/app/ - codice nativo Java.
+|   |   |-- src/main/java/com/cryptosentinelai/app/ - codice nativo Java.
 |   |   |   |-- MainActivity.java - entrypoint Android, plugin custom e worker scheduling.
 |   |   |   |-- AppSettingsPlugin.java - bridge Capacitor per impostazioni, download APK e sync alert.
 |   |   |   |-- PriceCheckWorker.java - WorkManager per alert/preferiti in background.
@@ -212,6 +213,9 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 1 - Backend FastAPI fondamenta | Completato | Server FastAPI avviabile, token auth read/admin, logging strutturato, health/readiness, heartbeat interno. |
 | Step 2 - Migrazione Notifiche a Backend FCM | Parziale | Backend FCM, token registry, severity model, endpoint e mobile token registration implementati; delivery reale richiede credenziali Firebase e build Android. |
 | Task intermedio - Ambiente + config refactor | Parziale | Config refactor completato e verificato; build APK riuscita in CI, deploy Pages corretto per usare branch `gh-pages` solo da `main`. |
+| Task istruzioni agenti | Completato | Creato `AGENTS.md` con regole permanenti operative, sicurezza, documentazione, config, CI e step boundary. |
+| Task Android package rename | Completato | Package Android/appId rinominato da `com.cryptosentinel.app` a `com.cryptosentinelai.app` per evitare conflitto con il fork/app esistente. |
+| Task CI FCM Android config | Completato | Workflow aggiorna `android/app/google-services.json` da GitHub Secret base64 prima della build APK. |
 | Step 3 - Migrazione CoinGecko a CMC | Non iniziato | Da avviare solo dopo approvazione. |
 
 ## 5. DECISIONI ARCHITETTURALI
@@ -227,8 +231,11 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | FCM credentials path in `.env.example` | Anche i path a service account/segreti sono trattati come sensibili, quindi non stanno in `instance.yaml`. |
 | Java locale non installato | La build Android passa da GitHub Actions, usando JDK 21 già presente nel workflow; evita SDK/JDK sulla macchina locale. |
 | Deploy Pages via `gh-pages` branch | Replica il comportamento storico del progetto: ogni build su `main` aggiorna il branch `gh-pages` senza usare l'ambiente protetto `github-pages`. |
+| Package Android dedicato | Il fork hackathon usa `com.cryptosentinelai.app` per non collidere con l'app CryptoSentinel esistente sul device e su Firebase/Play metadata. |
+| `google-services.json` solo da secret CI | Il file Android Firebase resta gitignored e viene ricostruito in CI da `GOOGLE_SERVICES_JSON` base64 senza stampare il contenuto. |
 | Dashboard futura su porta 5176 | `configs/instance.example.yaml` include `dashboard.port: 5176` e CORS per localhost/127.0.0.1:5176. |
 | Questioni Telegram non bloccanti | Si procede con default prudenziali del piano e si aggiornano quando arrivano risposte. |
+| `AGENTS.md` come fonte regole | Centralizza le istruzioni ricorrenti per evitare di ripeterle a ogni sessione. |
 
 ## 6. NOTE PER IL REVISORE
 
@@ -239,6 +246,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Guardrail startup | Confermare fail-closed per `min_portfolio_value_usd <= 1`, `minimum_trades_per_day < 1`, drawdown cap oltre -15%, token count diverso da 149. |
 | Multi-user readiness | Valutare se i file funzionali sono una buona base per default di sistema overridabili per utente. |
 | GitHub Actions APK/Pages | Verificare che il job `build` produca `CryptoSentinel-debug.apk` e che `deploy-pages` aggiorni `gh-pages` solo su push a `main`. |
+| Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
 | Step 5 | Trasformare readiness DB da `not_checked` a check reale di connettività e migrare token FCM JSON su DB. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Step boundary | Step 3 non iniziato: nessuna migrazione CoinGecko -> CMC implementata. |
+| Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |
