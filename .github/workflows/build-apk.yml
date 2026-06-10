@@ -42,6 +42,13 @@ jobs:
           mkdir -p android/app
           printf '%s' "$GOOGLE_SERVICES_JSON" | base64 -d > android/app/google-services.json
 
+      - name: Leggi versione base
+        id: ver
+        run: |
+          BASE=$(cat VERSION | tr -d '[:space:]')
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+          echo "full=$BASE.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
       - name: Build web app
         env:
           BUILD_NUMBER: ${{ github.run_number }}
@@ -60,7 +67,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace -PbuildNumber=${{ github.run_number }}
+          ./gradlew assembleDebug --no-daemon --stacktrace -PbuildNumber=${{ github.run_number }} -PbaseVersion=${{ steps.ver.outputs.base }}
 
       - name: Rinomina APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoSentinel-debug.apk
@@ -80,7 +87,7 @@ jobs:
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           sleep 2
           gh release create dev \
-            --title "CryptoSentinel Dev #${{ github.run_number }}" \
+            --title "CryptoSentinel Dev v${{ steps.ver.outputs.full }}" \
             --notes "Branch: ${{ github.ref_name }} | Build #${{ github.run_number }} del $(date '+%d/%m/%Y %H:%M')" \
             --prerelease \
             CryptoSentinel-debug.apk
@@ -90,13 +97,12 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APP_VERSION: "1.0.${{ github.run_number }}"
         run: |
-          TAG="v1.0.${{ github.run_number }}"
+          TAG="v${{ steps.ver.outputs.full }}"
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           sleep 2
           gh release create "$TAG" \
-            --title "CryptoSentinel $TAG #${{ github.run_number }}" \
+            --title "CryptoSentinel $TAG" \
             --notes "Build automatica dal branch main — run #${{ github.run_number }} del $(date '+%d/%m/%Y %H:%M')" \
             --latest \
             CryptoSentinel-debug.apk
