@@ -9,7 +9,7 @@ Documento di riferimento per revisione esterna. Viene aggiornato al termine di o
 ```text
 CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack Track 1.
 |-- .github/ - automazioni CI/CD GitHub.
-|   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21 e artifact/release.
+|   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, artifact/release e deploy Pages su gh-pages solo da main.
 |-- android/ - progetto Android Capacitor esistente.
 |   |-- app/ - modulo Android principale.
 |   |   |-- src/main/AndroidManifest.xml - dichiarazioni activity, receiver, provider, permessi e FCM.
@@ -174,6 +174,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 | targetSdkVersion | 36 | Target Android. |
 | Android Gradle Plugin | 8.13.0 | Build Android. |
 | GitHub Actions JDK | 21 Temurin | Build APK CI; accettato perché superiore al minimo Java 17 richiesto da toolchain moderna. |
+| peaceiris/actions-gh-pages | v4 | Pubblica `docs/index.html` e APK su branch `gh-pages` dopo build su `main`. |
 | androidx.work:work-runtime | 2.9.0 | Worker background alert locale. |
 | Google Services Gradle Plugin | 4.4.4 | Firebase/FCM quando google-services.json è presente. |
 
@@ -210,7 +211,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 0 - Setup & Architettura | Completato | Scaffold backend, env, gitignore, requirements, i18n, signal engine modulare, report e documentazione. |
 | Step 1 - Backend FastAPI fondamenta | Completato | Server FastAPI avviabile, token auth read/admin, logging strutturato, health/readiness, heartbeat interno. |
 | Step 2 - Migrazione Notifiche a Backend FCM | Parziale | Backend FCM, token registry, severity model, endpoint e mobile token registration implementati; delivery reale richiede credenziali Firebase e build Android. |
-| Task intermedio - Ambiente + config refactor | Parziale | Config refactor completato e verificato; build APK spostata su GitHub Actions con JDK 21 e da verificare al prossimo push/run CI. |
+| Task intermedio - Ambiente + config refactor | Parziale | Config refactor completato e verificato; build APK riuscita in CI, deploy Pages corretto per usare branch `gh-pages` solo da `main`. |
 | Step 3 - Migrazione CoinGecko a CMC | Non iniziato | Da avviare solo dopo approvazione. |
 
 ## 5. DECISIONI ARCHITETTURALI
@@ -225,6 +226,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Errori Pydantic senza input | Evita che un errore di validazione stampi valori di configurazione potenzialmente sensibili. |
 | FCM credentials path in `.env.example` | Anche i path a service account/segreti sono trattati come sensibili, quindi non stanno in `instance.yaml`. |
 | Java locale non installato | La build Android passa da GitHub Actions, usando JDK 21 già presente nel workflow; evita SDK/JDK sulla macchina locale. |
+| Deploy Pages via `gh-pages` branch | Replica il comportamento storico del progetto: ogni build su `main` aggiorna il branch `gh-pages` senza usare l'ambiente protetto `github-pages`. |
 | Dashboard futura su porta 5176 | `configs/instance.example.yaml` include `dashboard.port: 5176` e CORS per localhost/127.0.0.1:5176. |
 | Questioni Telegram non bloccanti | Si procede con default prudenziali del piano e si aggiornano quando arrivano risposte. |
 
@@ -236,7 +238,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Config precedence | Verificare `Settings`: env/.env > instance.yaml > YAML funzionali > default Pydantic. |
 | Guardrail startup | Confermare fail-closed per `min_portfolio_value_usd <= 1`, `minimum_trades_per_day < 1`, drawdown cap oltre -15%, token count diverso da 149. |
 | Multi-user readiness | Valutare se i file funzionali sono una buona base per default di sistema overridabili per utente. |
-| GitHub Actions APK | L'APK debug va verificato via workflow `build-apk.yml` dopo push/run manuale; localmente Java resta 8 e non viene usato. |
+| GitHub Actions APK/Pages | Verificare che il job `build` produca `CryptoSentinel-debug.apk` e che `deploy-pages` aggiorni `gh-pages` solo su push a `main`. |
 | Step 5 | Trasformare readiness DB da `not_checked` a check reale di connettività e migrare token FCM JSON su DB. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Step boundary | Step 3 non iniziato: nessuna migrazione CoinGecko -> CMC implementata. |

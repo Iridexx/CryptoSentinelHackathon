@@ -125,16 +125,8 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     permissions:
-      pages: write
-      id-token: write
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -151,11 +143,10 @@ jobs:
           cp docs/index.html pages-dist/index.html
           cp CryptoSentinel-debug.apk pages-dist/
 
-      - name: Upload artefatto Pages
-        uses: actions/upload-pages-artifact@v3
+      - name: Pubblica su branch gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: pages-dist
-
-      - name: Deploy su GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: pages-dist
+          force_orphan: true
