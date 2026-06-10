@@ -1,0 +1,13 @@
+# Versioned Perpetual strategy defaults.
+
+perp:
+  direction_mode: long_short
+  value_area_pct: 68.0
+  atr_stop_multiplier: 1.0
+  time_stop_hours: 8
+  dynamic_leverage_enabled: true
+  min_volume_profile_liquidity_usd: 50000.0
+  default_leverage: 2
+  max_leverage: 5
+  volume_profile_window_hours: 24
+  volume_profile_candle_minutes: 5

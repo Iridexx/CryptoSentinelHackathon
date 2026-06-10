@@ -1,0 +1,16 @@
+# Versioned Spot strategy defaults.
+
+spot:
+  confidence_threshold: 0.70
+  volatility_trigger_pct: 3.0
+  relative_volume_threshold: 1.8
+  atr_stop_multiplier: 1.5
+  trailing_distance_pct: 2.0
+  partial_take_profit_pct: 50.0
+  time_stop_hours: 6
+  vwap_atr_extension_limit: 1.2
+  rsi_weight_pct: 15.0
+  trend_structure_weight_pct: 30.0
+  relative_volume_weight_pct: 30.0
+  btc_context_weight_pct: 15.0
+  sentiment_weight_pct: 10.0

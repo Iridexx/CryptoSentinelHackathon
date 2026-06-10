@@ -1,0 +1,97 @@
+# Local installation configuration template.
+# Copy to configs/instance.yaml and fill values for the target machine.
+# Do not place credentials, private keys, passphrases, service-account paths, or token values here.
+
+app:
+  env: development
+  name: CryptoSentinel Agent Backend
+  version: 0.1.0-step2
+  default_user_id: "00000000-0000-0000-0000-000000000001"
+
+api:
+  host: 127.0.0.1
+  port: 8000
+  base_url: http://127.0.0.1:8000
+  cors_origins:
+    - http://localhost:5176
+    - http://127.0.0.1:5176
+
+dashboard:
+  port: 5176
+
+frontend:
+  backend_api_base_url: http://127.0.0.1:8000
+
+database:
+  url: sqlite+aiosqlite:///./backend/local.db
+  echo: false
+  pool_size: 5
+  max_overflow: 10
+
+logging:
+  level: INFO
+  format: json
+  retention_days: 14
+  decision_retention_days: 30
+
+agent:
+  mode: conservative
+  markets_enabled: both
+  execution_mode: dry_run
+  heartbeat_interval_seconds: 30
+  test_scaling_pct: 10.0
+  operating_hours_utc: "00:00-23:59"
+
+bsc:
+  network: testnet
+  chain_id: 97
+  rpc_urls: []
+  explorer_base_url: https://testnet.bscscan.com
+
+competition:
+  contract_address: ""
+
+wallet:
+  address: ""
+  key_kdf: scrypt
+  key_rotation_days: 7
+
+cmc:
+  base_url: https://pro-api.coinmarketcap.com
+  mcp_enabled: false
+  mcp_server_url: ""
+  credit_warning_threshold: 20
+  credit_critical_threshold: 10
+
+anthropic:
+  model: claude-sonnet-4-5
+  max_tokens: 4096
+  daily_cost_limit_usd: 10.0
+
+twak:
+  base_url: ""
+  autonomous_mode: false
+  approval_policy: exact
+
+perp_execution:
+  bnb_ai_agent_sdk_enabled: false
+  provider: bnb_sdk
+  eip712_domain: ""
+
+x402:
+  enabled: false
+  network: base
+  usdc_wallet_address: ""
+  daily_spend_limit_usd: 5.0
+  agentdata_base_url: ""
+
+fcm:
+  enabled: false
+  project_id: ""
+  critical_topic: cryptosentinel-critical
+  token_store_path: backend/storage/fcm_tokens.json
+
+signal_engine:
+  binance_futures_base_url: ""
+  binance_futures_ws_url: ""
+  whale_flow_provider_url: ""

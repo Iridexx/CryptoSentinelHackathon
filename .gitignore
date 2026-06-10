@@ -12,6 +12,54 @@ dist
 dist-ssr
 *.local
 
+# Environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+configs/instance.yaml
+configs/*.local.yaml
+secrets/
+backend/secrets/
+*.pem
+*.key
+*.p12
+*.jks
+*service-account*.json
+firebase-adminsdk*.json
+wallet*.json
+encrypted-wallet*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+backend/venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+pip-wheel-metadata/
+
+# Local backend state
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+backend/local.db
+backend/storage/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,0 +1,139 @@
+﻿# CryptoSentinel Backend
+
+FastAPI backend for the BNB Hack Track 1 autonomous trading agent.
+
+The backend currently includes server-side Firebase Cloud Messaging foundations on top of the Step 1 API shell: device token registration, persistent token registry, notification severity levels, FCM delivery wrapper, notification API endpoints, and the refactored Settings loader for secrets, installation config, and functional strategy config. Trading, persistence DB, external market data, and agent decisions are implemented in later steps.
+
+## Current Scope
+
+- FastAPI application factory in `backend/app/main.py`.
+- Public liveness endpoint for process supervision.
+- Authenticated readiness, heartbeat, and status endpoints.
+- Admin-only manual heartbeat endpoint.
+- Structured JSON/console logging via `structlog`.
+- CORS and reverse-proxy header support for future HTTPS deployment.
+- Conservative security headers, with HSTS enabled when `API_BASE_URL` uses `https://`.
+- In-memory heartbeat loop used by health checks.
+- Server-side notification service with `critical`, `warning`, and `info` severities.
+- FCM token registry persisted to local JSON until database persistence is introduced.
+- Firebase Admin SDK delivery client that returns `skipped` when FCM is not configured instead of pretending success.
+- Single `Settings` loader that merges `.env` secrets with `configs/*.yaml`.
+- Startup guardrails for competition qualification: portfolio floor, daily trade minimum, drawdown cap, and 149 eligible tokens.
+
+## Run Locally
+
+```bash
+python -m venv backend/.venv
+backend/.venv/Scripts/activate
+pip install -r backend/requirements.txt
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Create local config files first. The repository only includes `.env.example` and `configs/instance.example.yaml`; never commit `.env`, `configs/instance.yaml`, or real secrets.
+
+Minimum local `.env` secrets for authenticated endpoints:
+
+```env
+API_READ_TOKEN=replace-with-local-read-token
+API_ADMIN_TOKEN=replace-with-local-admin-token
+API_DEVICE_TOKEN=replace-with-limited-device-registration-token
+```
+
+Minimum `configs/instance.yaml` installation values for real FCM delivery:
+
+```yaml
+fcm:
+  enabled: true
+  project_id: your-firebase-project-id
+  critical_topic: cryptosentinel-critical
+  token_store_path: backend/storage/fcm_tokens.json
+```
+
+Minimum `.env` secret for real FCM delivery:
+
+```env
+FCM_CREDENTIALS_PATH=C:/secure/path/firebase-service-account.json
+```
+
+The Firebase service account JSON must not be committed.
+
+## Configuration Precedence
+
+Runtime precedence is:
+
+1. Environment variables and `.env`.
+2. Local `configs/instance.yaml`.
+3. Versioned functional YAML defaults in `configs/`.
+4. Pydantic defaults inside `Settings`.
+
+Application code must read configuration only through `backend.app.core.config.Settings`.
+
+## Endpoints
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/health/live` | Public | Process liveness. |
+| GET | `/health/ready` | Read/Admin token | Readiness and dependency status. |
+| GET | `/health/heartbeat` | Read/Admin token | Internal heartbeat state. |
+| GET | `/api/v1/status` | Read/Admin token | Backend mode, user scope, and conservative risk defaults. |
+| POST | `/api/v1/admin/heartbeat` | Admin token | Manual admin heartbeat tick. |
+| GET | `/api/v1/notifications/status` | Read/Admin token | FCM subsystem status and token count. |
+| POST | `/api/v1/notifications/devices` | Device/Admin token | Register an FCM device token. |
+| POST | `/api/v1/notifications/devices/unregister` | Device/Admin token | Remove an FCM device token. |
+| POST | `/api/v1/notifications/send` | Admin token | Send an FCM notification to registered devices. |
+
+Authentication accepts either:
+
+```http
+Authorization: Bearer <token>
+```
+
+or:
+
+```http
+X-API-Token: <token>
+```
+
+## Mobile Push Registration
+
+The mobile app uses `@capacitor/push-notifications` to obtain the FCM registration token and posts it to `/api/v1/notifications/devices` when these Vite variables are configured at build time:
+
+```env
+VITE_BACKEND_API_BASE_URL=https://your-backend.example
+VITE_API_DEVICE_TOKEN=replace-with-limited-device-registration-token
+```
+
+If those variables are missing, local notifications continue to work and remote push registration is skipped.
+
+## Directory Structure
+
+```text
+backend/
+|-- app/
+|   |-- api/ - FastAPI routers and API dependencies.
+|   |-- agent/ - autonomous agent heartbeat, brain, loops, risk engine, and modular signals.
+|   |-- core/ - configuration, logging, auth, security headers, and runtime primitives.
+|   |-- data/ - market data adapters, CMC integration, MCP integration, and cache boundaries.
+|   |-- domain/ - domain models split by common, spot, perp, and global state.
+|   |-- execution/ - trading execution adapters for TWAK, BNB SDK/EIP-712, x402, and wallet custody.
+|   |-- i18n/ - translation files and localization helpers.
+|   |-- notifications/ - server-side notification integrations, starting with FCM.
+|   |-- observability/ - logging, metrics, health, and replay/export support.
+|   |-- persistence/ - database models, repositories, and migrations.
+|   |-- schemas/ - API schemas and DTOs.
+|   |-- services/ - application services coordinating domain logic.
+|   `-- tasks/ - scheduled jobs and background task entrypoints.
+|-- scripts/ - operational scripts.
+|-- tests/ - unit and integration tests.
+`-- requirements.txt - backend Python dependencies.
+```
+
+## Security Notes
+
+- `API_READ_TOKEN` can read health/status endpoints.
+- `API_DEVICE_TOKEN` can only register/unregister push tokens.
+- `API_ADMIN_TOKEN` can call admin endpoints and send notifications.
+- Device token registration deliberately does not use read or admin tokens in the mobile app.
+- If tokens are missing, protected endpoints return `503` instead of silently running unauthenticated.
+- Wallet private keys must remain encrypted at rest. Store only encrypted key paths and passphrase source names in environment variables.
+- HTTPS is expected at the reverse proxy on VPS. The app is prepared for proxy headers and HSTS once `API_BASE_URL=https://...` is configured.

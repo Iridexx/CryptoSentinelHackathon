@@ -1,0 +1,7 @@
+﻿{
+  "app.name": "CryptoSentinel Agent",
+  "agent.status.idle": "Agent idle",
+  "agent.status.degraded": "Agent degraded",
+  "risk.kill_switch.soft": "Soft stop enabled",
+  "risk.kill_switch.hard": "Hard stop enabled"
+}

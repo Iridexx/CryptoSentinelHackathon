@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 
 interface AppSettingsPlugin {
   openNotifications(): Promise<void>;
@@ -9,6 +10,9 @@ interface AppSettingsPlugin {
 }
 
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
+const BACKEND_API_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined;
+const API_DEVICE_TOKEN = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+let pushRegistrationStarted = false;
 
 export async function initNotifications(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
@@ -21,6 +25,50 @@ export async function initNotifications(): Promise<void> {
     sound: 'default',
     visibility: 1,
   });
+  await registerRemotePushToken();
+}
+
+async function registerRemotePushToken(): Promise<void> {
+  if (pushRegistrationStarted || !BACKEND_API_BASE_URL || !API_DEVICE_TOKEN) return;
+  pushRegistrationStarted = true;
+
+  try {
+    await PushNotifications.addListener('registration', async (token) => {
+      await sendPushTokenToBackend(token.value);
+    });
+
+    await PushNotifications.addListener('registrationError', () => {
+      // Keep local notifications working even if FCM registration is unavailable.
+    });
+
+    const permission = await PushNotifications.requestPermissions();
+    if (permission.receive !== 'granted') return;
+    await PushNotifications.register();
+  } catch {
+    // Keep local notifications working even if remote push bootstrap fails.
+  }
+}
+
+async function sendPushTokenToBackend(token: string): Promise<void> {
+  try {
+    const baseUrl = BACKEND_API_BASE_URL?.replace(/\/+$/, '');
+    if (!baseUrl || !API_DEVICE_TOKEN) return;
+    await fetch(`${baseUrl}/api/v1/notifications/devices`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${API_DEVICE_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token,
+        platform: 'android',
+        app_version: __APP_VERSION__,
+        locale: navigator.language,
+      }),
+    });
+  } catch {
+    // Registration is retried on next app start; do not block local alerts.
+  }
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
