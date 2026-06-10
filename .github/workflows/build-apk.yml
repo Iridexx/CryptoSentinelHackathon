@@ -65,7 +65,15 @@ jobs:
       - name: Rinomina APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoSentinel-debug.apk
 
+      - name: Upload APK come artefatto CI
+        uses: actions/upload-artifact@v6
+        with:
+          name: CryptoSentinel-debug.apk
+          path: CryptoSentinel-debug.apk
+          retention-days: 30
+
       - name: Aggiorna release dev (tutti i branch)
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -79,6 +87,7 @@ jobs:
 
       - name: Pubblica release latest (solo main)
         if: github.ref == 'refs/heads/main'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: |
@@ -123,13 +132,6 @@ jobs:
             --notes "$RELEASE_NOTES" \
             --latest \
             CryptoSentinel-debug.apk
-
-      - name: Upload APK come artefatto CI
-        uses: actions/upload-artifact@v6
-        with:
-          name: CryptoSentinel-debug.apk
-          path: CryptoSentinel-debug.apk
-          retention-days: 30
 
   deploy-pages:
     needs: build

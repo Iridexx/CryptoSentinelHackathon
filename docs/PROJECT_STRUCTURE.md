@@ -10,7 +10,7 @@ Documento di riferimento per revisione esterna. Viene aggiornato al termine di o
 CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack Track 1.
 |-- AGENTS.md - regole operative permanenti per agenti AI sul repository.
 |-- .github/ - automazioni CI/CD GitHub.
-|   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, restore sicuro google-services da secret, artifact/release e deploy Pages su gh-pages solo da main.
+|   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, restore sicuro google-services da secret, artifact prima delle release e deploy Pages su gh-pages solo da main.
 |-- android/ - progetto Android Capacitor esistente.
 |   |-- app/ - modulo Android principale.
 |   |   |-- src/main/AndroidManifest.xml - dichiarazioni activity, receiver, provider, permessi e FCM.
@@ -216,6 +216,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Task istruzioni agenti | Completato | Creato `AGENTS.md` con regole permanenti operative, sicurezza, documentazione, config, CI e step boundary. |
 | Task Android package rename | Completato | Package Android/appId rinominato da `com.cryptosentinel.app` a `com.cryptosentinelai.app` per evitare conflitto con il fork/app esistente. |
 | Task CI FCM Android config | Completato | Workflow aggiorna `android/app/google-services.json` da GitHub Secret base64 prima della build APK. |
+| Task CI APK artifact robustness | Completato | Artifact APK caricato prima delle release GitHub; release non bloccanti per non impedire download APK/Pages. |
 | Step 3 - Migrazione CoinGecko a CMC | Non iniziato | Da avviare solo dopo approvazione. |
 
 ## 5. DECISIONI ARCHITETTURALI
@@ -233,6 +234,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Deploy Pages via `gh-pages` branch | Replica il comportamento storico del progetto: ogni build su `main` aggiorna il branch `gh-pages` senza usare l'ambiente protetto `github-pages`. |
 | Package Android dedicato | Il fork hackathon usa `com.cryptosentinelai.app` per non collidere con l'app CryptoSentinel esistente sul device e su Firebase/Play metadata. |
 | `google-services.json` solo da secret CI | Il file Android Firebase resta gitignored e viene ricostruito in CI da `GOOGLE_SERVICES_JSON` base64 senza stampare il contenuto. |
+| Artifact APK prima delle release | Il download dell'APK non deve dipendere dal successo degli step `gh release`, che sono accessori e possono fallire per collisioni/rate limit. |
 | Dashboard futura su porta 5176 | `configs/instance.example.yaml` include `dashboard.port: 5176` e CORS per localhost/127.0.0.1:5176. |
 | Questioni Telegram non bloccanti | Si procede con default prudenziali del piano e si aggiornano quando arrivano risposte. |
 | `AGENTS.md` come fonte regole | Centralizza le istruzioni ricorrenti per evitare di ripeterle a ogni sessione. |
@@ -246,6 +248,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Guardrail startup | Confermare fail-closed per `min_portfolio_value_usd <= 1`, `minimum_trades_per_day < 1`, drawdown cap oltre -15%, token count diverso da 149. |
 | Multi-user readiness | Valutare se i file funzionali sono una buona base per default di sistema overridabili per utente. |
 | GitHub Actions APK/Pages | Verificare che il job `build` produca `CryptoSentinel-debug.apk` e che `deploy-pages` aggiorni `gh-pages` solo su push a `main`. |
+| GitHub Releases | Gli step release sono non bloccanti; se falliscono, controllare il job ma scaricare comunque l'APK dagli artifact CI. |
 | Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
 | Step 5 | Trasformare readiness DB da `not_checked` a check reale di connettività e migrare token FCM JSON su DB. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
