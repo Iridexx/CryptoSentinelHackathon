@@ -22,12 +22,43 @@ The backend currently includes server-side Firebase Cloud Messaging foundations 
 
 ## Run Locally
 
+Use the startup scripts in `backend/scripts/`. They activate the virtualenv automatically, read host and port from `Settings` (no hardcoded values), and accept an optional flag to enable Uvicorn's reload mode for local development.
+
+**First-time setup** — create the virtualenv and install dependencies:
+
 ```bash
 python -m venv backend/.venv
+# Windows
 backend/.venv/Scripts/activate
+# Linux / macOS
+source backend/.venv/bin/activate
+
 pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+**Windows (PowerShell) — run from the project root:**
+
+```powershell
+# Production (no reload)
+.\backend\scripts\run_backend.ps1
+
+# Development (--reload attivo)
+.\backend\scripts\run_backend.ps1 -Dev
+```
+
+**Linux / macOS — run from the project root:**
+
+```bash
+chmod +x backend/scripts/run_backend.sh
+
+# Production
+./backend/scripts/run_backend.sh
+
+# Development
+./backend/scripts/run_backend.sh --dev
+```
+
+Host and port are read from `configs/instance.yaml` via `Settings`; do not duplicate those values in the scripts or environment. The `-Dev` / `--dev` flag enables `--reload` only when explicitly passed.
 
 Create local config files first. The repository only includes `.env.example` and `configs/instance.example.yaml`; never commit `.env`, `configs/instance.yaml`, or real secrets.
 
@@ -123,7 +154,7 @@ backend/
 |   |-- schemas/ - API schemas and DTOs.
 |   |-- services/ - application services coordinating domain logic.
 |   `-- tasks/ - scheduled jobs and background task entrypoints.
-|-- scripts/ - operational scripts.
+|-- scripts/ - startup and operational scripts (run_backend.ps1, run_backend.sh).
 |-- tests/ - unit and integration tests.
 `-- requirements.txt - backend Python dependencies.
 ```

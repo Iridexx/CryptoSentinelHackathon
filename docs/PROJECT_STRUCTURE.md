@@ -79,7 +79,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- schemas/notifications.py - schema device token, notification request/response e status.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
-|   |-- scripts/.gitkeep - placeholder script operativi backend.
+|   |-- scripts/ - script di avvio backend.
+|   |   |-- run_backend.ps1 - avvio Windows PowerShell (dev/prod, legge host:port da Settings).
+|   |   `-- run_backend.sh  - avvio Linux/bash per VPS (dev/prod, stesso comportamento).
 |   `-- tests/ - test backend placeholder.
 |-- configs/ - configurazione versionata e template installazione.
 |   |-- README.md - categorie config, precedenza e guardrail hard.
