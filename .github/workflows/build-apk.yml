@@ -66,7 +66,7 @@ jobs:
         run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoSentinel-debug.apk
 
       - name: Upload APK come artefatto CI
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: CryptoSentinel-debug.apk
           path: CryptoSentinel-debug.apk
@@ -90,46 +90,14 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_NOTES: |
-            ## CryptoSentinel v1.2.0
-
-            ### Novità
-
-            • **Allarmi range prezzo** — notifica quando il prezzo entra o esce da un intervallo min–max
-            • **Alert immediato** — scatta subito se il prezzo supera già la soglia al momento della creazione
-            • **Grafici** — linee di soglia con stile LargeDashed e frecce ▲/▼
-            • **Notifiche** — ID deterministici (hash) per eliminare duplicati; cooldown 5 min sui preferiti
-            • **Fav alerts** — notifica popup in-app al movimento % configurabile
-            • **Schermata di avvio** — animazione faro all'avvio a freddo (tocca per saltare)
-            • **WorkManager** — fix loop di backoff esponenziale (non si ferma più dopo ore di inattività)
-            • **Header** — nuovo logo faro SVG con gradiente blu premium
-            • **Navigazione** — bottom bar con icone SVG vettoriali
-            • **Popup aggiornamento** — tasti Ignora, Dopo (snooze 4h) e Scarica
-            • **Impostazioni** — link a CoinGecko, multi-valuta USD/EUR/BTC, animazione rank
-            • **Pagina web** — landing page su GitHub Pages con download automatico
-
-            ### Aggiornamenti recenti
-
-            • **Schermata di avvio** — fix tocca-per-saltare: il tap ora funziona correttamente su tutti i dispositivi
-            • **Rilevamento aggiornamenti** — il controllo ora avviene ogni 30 minuti anche a app aperta (non solo al riavvio)
-            • **QR code donazioni** — tasto QR accanto a Copia in "Supporta sviluppatore" per Bitcoin, Lightning e EVM
-            • **Contatore download** — la pagina web ora mostra il totale cumulativo dei download da tutte le release
-            • **Alert scattati** — data e ora di scatto visibili nella card accanto al badge giallo
-            • **Fix rilevamento aggiornamenti** — confronto build number corretto (non più basato sul numero di patch semver)
-            • **Grafico interattivo** — il prezzo in alto a destra segue il pallino mentre si scorre il grafico
-            • **Alert reattivi** — la card si aggiorna come "Scattato" istantaneamente, senza ritardi
-            • **Download aggiornamento** — avvio diretto senza aprire l'app GitHub; banner di stato unificato con SettingsTab
-            • **Alert** — rimossa icona matita dalle card alert (non più necessaria)
-            • **Popup aggiornamento** — segno di spunta cliccabile apre direttamente la cartella Download senza modal intermedio
-            • **Fix freccia aggiornamento** — la freccia ora appare sempre al riavvio anche se il popup era stato ignorato
+          APP_VERSION: "1.0.${{ github.run_number }}"
         run: |
+          TAG="v1.0.${{ github.run_number }}"
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release delete v1.2.0 --yes --cleanup-tag 2>/dev/null || true
-          gh release delete v1.1.1 --yes --cleanup-tag 2>/dev/null || true
-          sleep 3
-          gh release create v1.2.0 \
-            --title "CryptoSentinel v1.2 #${{ github.run_number }}" \
-            --notes "$RELEASE_NOTES" \
+          sleep 2
+          gh release create "$TAG" \
+            --title "CryptoSentinel $TAG #${{ github.run_number }}" \
+            --notes "Build automatica dal branch main — run #${{ github.run_number }} del $(date '+%d/%m/%Y %H:%M')" \
             --latest \
             CryptoSentinel-debug.apk
 
@@ -139,14 +107,20 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     permissions:
-      contents: write
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Scarica APK dall'artefatto
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: CryptoSentinel-debug.apk
 
@@ -156,10 +130,11 @@ jobs:
           cp docs/index.html pages-dist/index.html
           cp CryptoSentinel-debug.apk pages-dist/
 
-      - name: Pubblica su branch gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload artefatto Pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: pages-dist
-          force_orphan: true
+          path: pages-dist
+
+      - name: Deploy su GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
