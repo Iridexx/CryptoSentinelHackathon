@@ -18,7 +18,7 @@ const RELEASES_API = 'https://api.github.com/repos/iridexx/CryptoSentinelHackath
 const DEV_RELEASES_API = 'https://api.github.com/repos/iridexx/CryptoSentinelHackathon/releases/tags/dev';
 
 // L'APK produzione è pubblicato su GitHub Pages, nessun login richiesto
-export const APK_PAGES_URL = 'https://iridexx.github.io/CryptoSentinelHackathon/CryptoSentinel-debug.apk';
+export const APK_PAGES_URL = 'https://iridexx.github.io/CryptoSentinelHackathon/CryptoSentinelAI-latest.apk';
 
 export interface UpdateResult {
   available: boolean;

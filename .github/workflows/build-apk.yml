@@ -71,14 +71,20 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace -PbuildNumber=${{ github.run_number }} -PbaseVersion=${{ steps.ver.outputs.base }}
 
-      - name: Rinomina APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk CryptoSentinel-debug.apk
+      - name: Rinomina APK con versione
+        run: |
+          APK_NAME="CryptoSentinelAI-v${{ steps.ver.outputs.full }}.apk"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$APK_NAME"
+          cp "$APK_NAME" CryptoSentinelAI-latest.apk
+          echo "APK_NAME=$APK_NAME" >> $GITHUB_ENV
 
       - name: Upload APK come artefatto CI
         uses: actions/upload-artifact@v4
         with:
-          name: CryptoSentinel-debug.apk
-          path: CryptoSentinel-debug.apk
+          name: apk-artifact
+          path: |
+            ${{ env.APK_NAME }}
+            CryptoSentinelAI-latest.apk
           retention-days: 30
 
       - name: Aggiorna release dev (tutti i branch)
@@ -89,10 +95,10 @@ jobs:
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           sleep 2
           gh release create dev \
-            --title "CryptoSentinel Dev v${{ steps.ver.outputs.full }}" \
+            --title "CryptoSentinelAI Dev v${{ steps.ver.outputs.full }}" \
             --notes "Branch: ${{ github.ref_name }} | Build #${{ github.run_number }} del $(date '+%d/%m/%Y %H:%M')" \
             --prerelease \
-            CryptoSentinel-debug.apk
+            "${{ env.APK_NAME }}"
 
       - name: Pubblica release latest (solo main)
         if: github.ref == 'refs/heads/main'
@@ -104,10 +110,10 @@ jobs:
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           sleep 2
           gh release create "$TAG" \
-            --title "CryptoSentinel $TAG" \
+            --title "CryptoSentinelAI $TAG" \
             --notes "Build automatica dal branch main — run #${{ github.run_number }} del $(date '+%d/%m/%Y %H:%M')" \
             --latest \
-            CryptoSentinel-debug.apk
+            "${{ env.APK_NAME }}"
 
   deploy-pages:
     needs: build
@@ -130,13 +136,14 @@ jobs:
       - name: Scarica APK dall'artefatto
         uses: actions/download-artifact@v4
         with:
-          name: CryptoSentinel-debug.apk
+          name: apk-artifact
 
       - name: Prepara cartella Pages
         run: |
           mkdir -p pages-dist
           cp docs/index.html pages-dist/index.html
-          cp CryptoSentinel-debug.apk pages-dist/
+          cp CryptoSentinelAI-latest.apk pages-dist/
+          cp CryptoSentinelAI-*.apk pages-dist/ 2>/dev/null || true
 
       - name: Upload artefatto Pages
         uses: actions/upload-pages-artifact@v3
