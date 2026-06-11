@@ -136,7 +136,7 @@ Questi vincoli sono assoluti. Il codice deve garantirli sempre, come regole hard
 
 ---
 
-## F. STRATEGIA SPOT (sintesi — documento dedicato: Strategia_Spot.md)
+## F. STRATEGIA SPOT (sintesi — documento dedicato: Strategia_Spot.md v2.1)
 
 Motore **momentum + struttura di prezzo**. *"Trovare i cavalli migliori e cavalcare il momentum."*
 
@@ -153,36 +153,41 @@ Motore **momentum + struttura di prezzo**. *"Trovare i cavalli migliori e cavalc
 
 **Entrata:** una sola (no media in perdita; aggiunta solo se in profitto + breakout confermato).
 
-**Uscite:** stop ATR (da subito), take profit parziale + trailing, stop temporale, cooldown.
+**Uscite:** stop ATR adattivo (con cap rischio 1.5% capitale per trade — se stop troppo largo, size ridotta o trade saltato), take profit parziale + trailing, stop temporale, cooldown.
 
 **V2:** relative strength (ranking sovraperformance), market structure completa, candle exhaustion, RSI 4h.
 
 ---
 
-## G. STRATEGIA PERPETUAL (sintesi — documento dedicato: Strategia_Perpetual.md)
+## G. STRATEGIA PERPETUAL (sintesi — documento dedicato: Strategia_Perpetual.md v3)
 
 Motore **Volume Profile + mean reversion**. *"Precisione e microstruttura."*
 
-**Mappa:** Rolling Volume Profile 24h su candele 5m → POC, VAH, VAL (Value Area 68%).
+**Mappa:** Rolling Volume Profile 24h su candele 5m → POC, VAH, VAL (Value Area 68%). Ricalcolo a chiusura candela (anti-overtrading).
 
-**Strategia:** rientro in value dopo eccesso (mean reversion). Long sotto VAL / Short sopra VAH, su trigger di rientro. TP1 = bordo value, TP2 = POC.
+**Strategia:** rientro in value dopo eccesso (mean reversion). Long sotto VAL / Short sopra VAH, su trigger di rientro.
 
 **Gerarchia segnali (non pesi):**
 1. Volume Profile → la mappa (dove)
 2. Delta → conferma (price action in V1; delta reale Binance aggTrades futures in V2)
-3. Trend/regime → filtro, **calcolato con VWAP** (non medie mobili classiche, che sono ritardate)
+3. Trend/regime → filtro, **calcolato con VWAP** (non medie mobili classiche, che sono ritardate — confermato da tre revisori indipendenti)
 4. Funding/OI → contesto
 5. Agent (LLM) → esecuzione
 
 **Leva:** preset 2x/3x/5x + personalizzata (cap DEX), dinamica via ATR.
 
-**Entrata:** una sola (no DCA in perdita).
+**Entrata:** una sola (no DCA, no scaglionamento in V1).
 
-**Stop:** ATR / struttura, con la liquidazione come limite invalicabile (mai oltre).
+**Stop (v3 — strutturale anticipato da V2):** estremo candela pre-segnale + ATR×coeff (default 0.5), con cap rischio per trade (max 1.5% capitale a stop colpito). Vincolo assoluto: stop sempre prima della liquidazione.
+
+**Take Profit (v3 — schema a tre livelli):**
+- TP1 = 50% posizione al bordo value → sposta stop a breakeven+
+- TP2 = 25% posizione al POC
+- TP3 = 25% trailing
 
 **LLM poteri limitati:** valuta/riduce/blocca; NON aumenta leva, NON inverte, NON cambia parametri.
 
-**V2:** delta reale (`orderflow_delta.py`, endpoint futures `/fapi`), HVN/LVN, VWAP, stop strutturale, profili multipli, whale/liquidity flow.
+**V2:** delta reale (`orderflow_delta.py`, endpoint futures `/fapi`), HVN/LVN, filtro regime multi-timeframe su VWAP, profili multipli, entrate scaglionate (con backtest), whale/liquidity flow.
 
 > **Nota execution:** Spot → TWAK. Perp → BNB AI Agent SDK / EIP-712 (NON TWAK). Due percorsi separati.
 
@@ -192,7 +197,8 @@ Motore **Volume Profile + mean reversion**. *"Precisione e microstruttura."*
 
 | Parametro | Default | Note |
 |---|---|---|
-| Capitale per trade | 6% | Configurabile |
+| Capitale per trade (size) | 6% | Configurabile — size nominale allocata |
+| **Rischio massimo per trade** | **1.5%** | **Perdita max a stop colpito (% capitale) — v3** |
 | Max posizioni aperte | 3 | Configurabile |
 | Esposizione massima totale | 30% | Tetto globale |
 | Daily Loss Limit | −8% | Stop giornaliero (−5/−8/−10 per modalità) |
@@ -202,6 +208,8 @@ Motore **Volume Profile + mean reversion**. *"Precisione e microstruttura."*
 | Correlation check | 0.8 | Evita posizioni correlate |
 | Cooldown timer | 30 min | Configurabile |
 | Riserva gas | 15% del BNB (+ floor minimo) | Mai tradabile |
+
+> **Nota rischio per trade:** "6% capitale per trade" è la size massima nominale. "1.5% rischio per trade" è la perdita effettiva massima a stop colpito — se lo stop strutturale implica di più, la size viene ridotta automaticamente o il trade saltato. I due parametri operano insieme: size del 6% è il tetto, rischio dell'1.5% è il vincolo.
 
 **Controlli aggiuntivi:**
 - Check liquidità **in uscita** (poter uscire, non solo entrare)
@@ -227,7 +235,8 @@ MODALITÀ OPERATIVA
 └── Test Scaling %: 10-100% (solo in Live)
 
 RISCHIO
-├── Capitale per trade %
+├── Capitale per trade % (size nominale)
+├── Rischio massimo per trade % (perdita max a stop colpito)
 ├── Max posizioni aperte
 ├── Esposizione massima totale %
 ├── Daily Loss Limit %
@@ -251,7 +260,10 @@ PERPETUAL
 ├── Leva: preset 2x/3x/5x / personalizzata
 ├── Leva dinamica ATR: on/off
 ├── Value Area % (68/70)
-├── Moltiplicatore ATR stop
+├── Moltiplicatore ATR stop (coeff per stop strutturale)
+├── TP1 % posizione (default 50%)
+├── TP2 % posizione (default 25%)
+├── Trailing % posizione residua (default 25%)
 └── Stop temporale (ore)
 ```
 
@@ -354,7 +366,13 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - CMC API Startup (OHLCV storico) + CMC MCP
 - Rate limiting + caching crediti
 - Traduzione testi IT → EN (i18n)
-- **Deliverable:** app che gira su dati CMC, backend con accesso dati+MCP
+- **Test automatici obbligatori (gate per completamento):**
+  - Chiamata reale CMC API → risposta con dati validi (richiede chiave CMC configurata)
+  - Rate limiter: verifica che richieste oltre soglia vengano bloccate/accodate e non inoltrate
+  - Cache crediti: verifica che il contatore scenda correttamente e che i warning soglia scattino
+  - Endpoint dati backend: risposta con struttura attesa (symbol, price, volume, OHLCV)
+  - Frontend: verifica che le viste mostrino dati CMC e non CoinGecko (nessuna chiamata a api.coingecko.com nei log di rete)
+- **Deliverable:** app che gira su dati CMC, backend con accesso dati+MCP, suite test integrazione verde
 
 ### STEP 4 — Layer di Esecuzione
 - Spot → TWAK (signing + autonomous mode); verificare gestione approvals
@@ -396,7 +414,14 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Kill switch accessibile
 - Empty states curati
 - Wallet multi-network (BSC + Base)
-- **Deliverable:** app mobile completa connessa al backend
+- **Test automatici obbligatori (gate per completamento):**
+  - Vista Spot: chiamata backend → dati posizioni/PnL spot ricevuti e renderizzati correttamente
+  - Vista Perp: chiamata backend → dati posizioni/PnL perp (leva, liquidazione, funding) ricevuti e renderizzati correttamente
+  - Vista Globale: chiamata backend → PnL totale, drawdown, esposizione ricevuti e renderizzati correttamente
+  - Kill switch: chiamata backend soft-stop → stato agente aggiornato nella UI
+  - Credenziali onboarding: validazione live → risposta backend attesa (successo/errore) gestita correttamente nella UI
+  - Empty states: mock risposta vuota dal backend → empty state corretto mostrato in ogni vista
+- **Deliverable:** app mobile completa connessa al backend, suite test integrazione verde
 
 ### STEP 8 — Dashboard Web (Vite)
 - 3 viste complete + grafici
@@ -506,4 +531,4 @@ ETH, USDT, USDC, XRP, TRX, DOGE, ZEC, ADA, LINK, BCH, DAI, TON, USD1, USDe, M, L
 
 ---
 
-*Fine del piano. Documenti collegati: Strategia_Spot.md, Strategia_Perpetual.md. Questo piano va riletto e aggiornato man mano che le questioni aperte vengono chiarite.*
+*Fine del piano. Documenti collegati: Strategia_Spot.md (v2), Strategia_Perpetual.md (v3). Questo piano va riletto e aggiornato man mano che le questioni aperte vengono chiarite.*

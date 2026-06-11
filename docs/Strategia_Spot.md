@@ -190,7 +190,8 @@ Bilanciato con anti-overtrading (cooldown, conferme di struttura).
 
 | Parametro | Default suggerito | Funzione |
 |---|---|---|
-| Capitale per trade | 6% | Capitale per singola operazione |
+| Capitale per trade (size) | 6% | Capitale allocato per singola operazione |
+| **Rischio massimo per trade** | **1.5%** | **Max perdita a stop colpito (% capitale) — coerente con Perp** |
 | Max posizioni aperte | 3 | Posizioni simultanee |
 | Esposizione massima totale | 30% | Tetto all'esposizione |
 | Daily Loss Limit | −8% | Stop giornaliero |
@@ -201,6 +202,8 @@ Bilanciato con anti-overtrading (cooldown, conferme di struttura).
 | Take profit | Parziale + trailing | — |
 | Correlation check | 0.8 | Evita posizioni correlate |
 | Cooldown timer | 30 min | Attesa prima di riaprire |
+
+> **Nota rischio per trade:** "6% capitale per trade" è la size massima nominale. "1.5% rischio per trade" è la perdita effettiva massima a stop colpito — se lo stop ATR è largo (token molto volatile), la size viene ridotta automaticamente per restare nel limite, oppure il trade viene saltato se la size risultante è sotto il minimo operativo. I due parametri operano insieme in entrambe le strategie (Spot e Perp) con la stessa logica: size del 6% è il tetto, rischio dell'1.5% è il vincolo.
 
 **Controlli aggiuntivi:** check di liquidità in uscita, riserva gas dinamica in % del BNB, skip se gas stimato > profitto atteso.
 
@@ -329,4 +332,4 @@ Distinzione finale tra i due motori:
 
 ---
 
-*Documento v2 — aggiornato dopo revisione professionale. Tutti i valori numerici sono default proposti e configurabili. La strategia Spot è la "fondamenta" del sistema; la strategia Perpetual (documento separato) è un motore distinto e complementare.*
+*Documento v2 — aggiornato dopo revisione professionale. Modifica minore v2.1: aggiunto cap rischio per trade (1.5%) per coerenza con Strategia_Perpetual v3. Tutti i valori numerici sono default proposti e configurabili.*
