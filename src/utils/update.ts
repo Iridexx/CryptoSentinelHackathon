@@ -14,11 +14,11 @@ interface AppSettingsPlugin {
 }
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 
-const RELEASES_API = 'https://api.github.com/repos/iridexx/CryptoSentinel/releases/latest';
-const DEV_RELEASES_API = 'https://api.github.com/repos/iridexx/CryptoSentinel/releases/tags/dev';
+const RELEASES_API = 'https://api.github.com/repos/iridexx/CryptoSentinelHackathon/releases/latest';
+const DEV_RELEASES_API = 'https://api.github.com/repos/iridexx/CryptoSentinelHackathon/releases/tags/dev';
 
 // L'APK produzione è pubblicato su GitHub Pages, nessun login richiesto
-export const APK_PAGES_URL = 'https://iridexx.github.io/CryptoSentinel/CryptoSentinel-debug.apk';
+export const APK_PAGES_URL = 'https://iridexx.github.io/CryptoSentinelHackathon/CryptoSentinel-debug.apk';
 
 export interface UpdateResult {
   available: boolean;
@@ -94,7 +94,7 @@ export async function getDevBuildInfo(): Promise<DevBuildInfo> {
 }
 
 export async function mergeToMain(branch: string, token: string): Promise<void> {
-  const res = await fetch('https://api.github.com/repos/iridexx/CryptoSentinel/merges', {
+  const res = await fetch('https://api.github.com/repos/iridexx/CryptoSentinelHackathon/merges', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

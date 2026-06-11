@@ -424,7 +424,7 @@ export default function App() {
                 className="text-white font-bold text-xl tracking-tight"
                 style={{ textShadow: '0 0 22px rgba(96,165,250,0.38), 0 0 48px rgba(59,130,246,0.12)' }}
               >
-                CryptoSentinel
+                CryptoSentinelAI
               </h1>
             </div>
             <div className="flex items-center gap-2">
