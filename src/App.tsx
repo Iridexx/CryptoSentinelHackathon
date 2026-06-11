@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Coin } from './types';
 import { useCryptoData, type PerPage } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
+import { useFavoriteCoinsData } from './hooks/useFavoriteCoinsData';
 import { useAlerts } from './hooks/useAlerts';
 import { useRangeAlerts } from './hooks/useRangeAlerts';
 import { useCurrency } from './hooks/useCurrency';
@@ -26,6 +27,7 @@ import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
+const PERPAGE_KEY = 'cryptosentinel_perpage';
 const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
 const FAV_UP_KEY = 'cs_fav_up_pct';
 const FAV_DOWN_KEY = 'cs_fav_down_pct';
@@ -42,7 +44,10 @@ export default function App() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
   const [batteryDismissed, setBatteryDismissed] = useState(isBatteryBannerDismissed);
   const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
-  const [perPage, setPerPage] = useState<PerPage>(50);
+  const [perPage, setPerPage] = useState<PerPage>(() => {
+    const stored = parseInt(localStorage.getItem(PERPAGE_KEY) || '50', 10);
+    return ([50, 100, 200, 400, 600].includes(stored) ? stored : 50) as PerPage;
+  });
   const [timeFrame, setTimeFrame] = useState<TimeFrame>('24h');
   const [page, setPage] = useState(1);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateResult | null>(null);
@@ -299,6 +304,7 @@ export default function App() {
   const handlePerPageChange = useCallback((n: PerPage) => {
     setPerPage(n);
     setPage(1);
+    localStorage.setItem(PERPAGE_KEY, String(n));
   }, []);
 
   const handleSort = useCallback((key: SortBy) => {
@@ -338,10 +344,7 @@ export default function App() {
     return arr;
   }, [rawDisplayCoins, sortBy, sortDesc]);
 
-  const favoriteCoins = useMemo(
-    () => coins.filter((c) => isFavorite(c.id)),
-    [coins, isFavorite]
-  );
+  const favoriteCoins = useFavoriteCoinsData(favorites, coins, refreshInterval, currency);
 
   const { bumpRefPrice } = useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct, handleFavAlert);
   bumpRefPriceRef.current = bumpRefPrice;
