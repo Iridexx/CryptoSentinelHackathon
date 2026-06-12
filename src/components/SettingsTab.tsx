@@ -209,6 +209,21 @@ const SettingsTab: FC<Props> = ({
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
   const [mergeError, setMergeError] = useState('');
 
+  type DiagState = 'idle' | 'checking' | 'done';
+  interface DiagResult {
+    backendUrl: string | null;
+    deviceTokenSet: boolean;
+    backendReachable: boolean;
+    backendLatencyMs: number | null;
+    fcmEnabled: boolean;
+    fcmConfigured: boolean;
+    tokenCount: number;
+    checkedAt: string;
+    error?: string;
+  }
+  const [diagState, setDiagState] = useState<DiagState>('idle');
+  const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
+
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
     try {
@@ -247,6 +262,56 @@ const SettingsTab: FC<Props> = ({
       setMergeError((e as Error).message);
       setMergeState('error');
     }
+  };
+
+  const handleDiagnostic = async () => {
+    setDiagState('checking');
+    const rawUrl = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ?? null;
+    const deviceTokenSet = !!(import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined);
+    let backendReachable = false;
+    let backendLatencyMs: number | null = null;
+    let fcmEnabled = false;
+    let fcmConfigured = false;
+    let tokenCount = 0;
+    let error: string | undefined;
+    if (rawUrl) {
+      try {
+        const t0 = Date.now();
+        const r = await fetch(`${rawUrl}/health/live`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+        backendLatencyMs = Date.now() - t0;
+        backendReachable = r.ok;
+      } catch (e) {
+        error = (e as Error).message;
+      }
+      if (backendReachable) {
+        try {
+          const deviceToken = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+          const r = await fetch(`${rawUrl}/api/v1/notifications/status`, {
+            headers: deviceToken ? { Authorization: `Bearer ${deviceToken}` } : {},
+            cache: 'no-store',
+            signal: AbortSignal.timeout(5000),
+          });
+          if (r.ok) {
+            const data = await r.json() as { enabled: boolean; configured: boolean; token_count: number };
+            fcmEnabled = data.enabled;
+            fcmConfigured = data.configured;
+            tokenCount = data.token_count;
+          }
+        } catch { /* FCM status non critico */ }
+      }
+    }
+    setDiagResult({
+      backendUrl: rawUrl,
+      deviceTokenSet,
+      backendReachable,
+      backendLatencyMs,
+      fcmEnabled,
+      fcmConfigured,
+      tokenCount,
+      checkedAt: new Date().toLocaleTimeString('it-IT'),
+      error,
+    });
+    setDiagState('done');
   };
 
   const handleLoadDevBuild = async () => {
@@ -751,6 +816,79 @@ const SettingsTab: FC<Props> = ({
               <button onClick={() => setDevState('locked')} className="text-gray-500 text-lg">×</button>
             </div>
             <div className="px-4 py-4 space-y-3">
+
+              {/* ── Diagnostica Backend & FCM ── */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Diagnostica</span>
+                  <button
+                    onClick={handleDiagnostic}
+                    disabled={diagState === 'checking'}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-dark-700 text-gray-300 text-xs rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
+                  >
+                    {diagState === 'checking' ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    )}
+                    {diagState === 'checking' ? 'Test…' : 'Testa'}
+                  </button>
+                </div>
+
+                <div className="bg-dark-700 rounded-lg divide-y divide-dark-600">
+                  {/* Backend URL */}
+                  <div className="px-3 py-2 flex justify-between items-center gap-2">
+                    <span className="text-xs text-gray-500 flex-shrink-0">Backend URL</span>
+                    {diagResult ? (
+                      diagResult.backendUrl
+                        ? <span className="text-xs font-mono text-gray-300 truncate text-right max-w-[55%]">{diagResult.backendUrl.replace(/https?:\/\//, '')}</span>
+                        : <span className="text-xs text-accent-red font-mono">non configurato</span>
+                    ) : <span className="text-xs text-gray-600">—</span>}
+                  </div>
+                  {/* Device Token */}
+                  <div className="px-3 py-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Device Token</span>
+                    {diagResult ? (
+                      diagResult.deviceTokenSet
+                        ? <span className="text-xs text-accent-green font-semibold">✓ configurato</span>
+                        : <span className="text-xs text-accent-red">✗ mancante</span>
+                    ) : <span className="text-xs text-gray-600">—</span>}
+                  </div>
+                  {/* Backend raggiungibile */}
+                  <div className="px-3 py-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Backend</span>
+                    {diagResult ? (
+                      diagResult.backendReachable
+                        ? <span className="text-xs text-accent-green font-semibold">✓ online {diagResult.backendLatencyMs != null ? `· ${diagResult.backendLatencyMs}ms` : ''}</span>
+                        : <span className="text-xs text-accent-red">✗ {diagResult.error ?? 'irraggiungibile'}</span>
+                    ) : <span className="text-xs text-gray-600">—</span>}
+                  </div>
+                  {/* FCM enabled */}
+                  <div className="px-3 py-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">FCM</span>
+                    {diagResult ? (
+                      diagResult.fcmConfigured
+                        ? <span className="text-xs text-accent-green font-semibold">✓ attivo</span>
+                        : diagResult.backendReachable
+                          ? <span className="text-xs text-yellow-400">⚠ non configurato</span>
+                          : <span className="text-xs text-gray-600">—</span>
+                    ) : <span className="text-xs text-gray-600">—</span>}
+                  </div>
+                  {/* Token registrati */}
+                  <div className="px-3 py-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Device registrati</span>
+                    {diagResult && diagResult.backendReachable
+                      ? <span className="text-xs text-white font-mono">{diagResult.tokenCount}</span>
+                      : <span className="text-xs text-gray-600">—</span>}
+                  </div>
+                </div>
+                {diagResult && (
+                  <p className="text-xs text-gray-600 text-right">Aggiornato alle {diagResult.checkedAt}</p>
+                )}
+              </div>
+
+              <div className="border-t border-dark-600" />
+
               {devLoadState === 'idle' && (
                 <button onClick={handleLoadDevBuild} className="w-full py-2.5 bg-dark-700 text-gray-300 text-sm rounded-lg hover:bg-dark-600 transition-colors">Controlla ultima dev build</button>
               )}
