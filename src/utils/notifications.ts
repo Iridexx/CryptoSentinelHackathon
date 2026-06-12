@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
 
@@ -53,18 +53,19 @@ async function sendPushTokenToBackend(token: string): Promise<void> {
   try {
     const baseUrl = BACKEND_API_BASE_URL?.replace(/\/+$/, '');
     if (!baseUrl || !API_DEVICE_TOKEN) return;
-    await fetch(`${baseUrl}/api/v1/notifications/devices`, {
+    await CapacitorHttp.request({
       method: 'POST',
+      url: `${baseUrl}/api/v1/notifications/devices`,
       headers: {
         Authorization: `Bearer ${API_DEVICE_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
+      data: {
         token,
         platform: 'android',
         app_version: __APP_VERSION__,
         locale: navigator.language,
-      }),
+      },
     });
   } catch {
     // Registration is retried on next app start; do not block local alerts.

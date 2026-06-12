@@ -1,6 +1,6 @@
 import { useState, useEffect, type FC } from 'react';
 import QRCode from 'qrcode';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { openNotificationSettings } from '../utils/notifications';
 import { openBatterySettings } from '../utils/energySaving';
 import { checkForUpdates, downloadAndInstall, openDownloadsFolder, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
@@ -276,31 +276,41 @@ const SettingsTab: FC<Props> = ({
     let error: string | undefined;
     if (rawUrl) {
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 6000);
         const t0 = Date.now();
-        const r = await fetch(`${rawUrl}/health/live`, { cache: 'no-store', signal: controller.signal });
-        clearTimeout(timer);
+        const r = await CapacitorHttp.request({
+          method: 'GET',
+          url: `${rawUrl}/health/live`,
+          headers: { 'Cache-Control': 'no-store' },
+          connectTimeout: 6000,
+          readTimeout: 6000,
+        });
         backendLatencyMs = Date.now() - t0;
-        backendReachable = r.ok;
-        if (!r.ok) error = `HTTP ${r.status}`;
+        backendReachable = r.status >= 200 && r.status < 300;
+        if (!backendReachable) error = `HTTP ${r.status}`;
       } catch (e) {
         const msg = (e as Error).message ?? String(e);
-        error = msg.includes('abort') ? 'timeout (6s)' : msg;
+        if (msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('timed out')) {
+          error = 'Timeout (6s) — backend lento o non raggiungibile';
+        } else if (msg.toLowerCase().includes('connection refused') || msg.toLowerCase().includes('refused')) {
+          error = 'Connessione rifiutata — backend non avviato';
+        } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('unable to resolve')) {
+          error = 'Rete non raggiungibile — controlla Tailscale/VPN';
+        } else {
+          error = msg;
+        }
       }
       if (backendReachable) {
         try {
           const deviceToken = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
-          const ctrl2 = new AbortController();
-          const t2 = setTimeout(() => ctrl2.abort(), 6000);
-          const r = await fetch(`${rawUrl}/api/v1/notifications/status`, {
+          const r2 = await CapacitorHttp.request({
+            method: 'GET',
+            url: `${rawUrl}/api/v1/notifications/status`,
             headers: deviceToken ? { Authorization: `Bearer ${deviceToken}` } : {},
-            cache: 'no-store',
-            signal: ctrl2.signal,
+            connectTimeout: 6000,
+            readTimeout: 6000,
           });
-          clearTimeout(t2);
-          if (r.ok) {
-            const data = await r.json() as { enabled: boolean; configured: boolean; token_count: number };
+          if (r2.status >= 200 && r2.status < 300) {
+            const data = r2.data as { enabled: boolean; configured: boolean; token_count: number };
             fcmEnabled = data.enabled;
             fcmConfigured = data.configured;
             tokenCount = data.token_count;
