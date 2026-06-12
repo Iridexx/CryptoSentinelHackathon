@@ -276,21 +276,29 @@ const SettingsTab: FC<Props> = ({
     let error: string | undefined;
     if (rawUrl) {
       try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 6000);
         const t0 = Date.now();
-        const r = await fetch(`${rawUrl}/health/live`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+        const r = await fetch(`${rawUrl}/health/live`, { cache: 'no-store', signal: controller.signal });
+        clearTimeout(timer);
         backendLatencyMs = Date.now() - t0;
         backendReachable = r.ok;
+        if (!r.ok) error = `HTTP ${r.status}`;
       } catch (e) {
-        error = (e as Error).message;
+        const msg = (e as Error).message ?? String(e);
+        error = msg.includes('abort') ? 'timeout (6s)' : msg;
       }
       if (backendReachable) {
         try {
           const deviceToken = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+          const ctrl2 = new AbortController();
+          const t2 = setTimeout(() => ctrl2.abort(), 6000);
           const r = await fetch(`${rawUrl}/api/v1/notifications/status`, {
             headers: deviceToken ? { Authorization: `Bearer ${deviceToken}` } : {},
             cache: 'no-store',
-            signal: AbortSignal.timeout(5000),
+            signal: ctrl2.signal,
           });
+          clearTimeout(t2);
           if (r.ok) {
             const data = await r.json() as { enabled: boolean; configured: boolean; token_count: number };
             fcmEnabled = data.enabled;
