@@ -47,8 +47,9 @@ export async function checkForUpdates(currentBuildNumber: string): Promise<Updat
   const releaseDate = new Date(release.published_at as string);
   const apkAsset = (release.assets as { name: string; browser_download_url: string }[])
     ?.find((a) => a.name.endsWith('.apk'));
-  const buildMatch = (release.name as string)?.match(/#(\d+)/);
-  const releaseBuildNumber = buildMatch ? parseInt(buildMatch[1], 10) : NaN;
+  // Tag format: "v1.0.<run_number>" — the last segment is the build number
+  const tagParts = ((release.tag_name as string) ?? '').replace(/^v/, '').split('.');
+  const releaseBuildNumber = parseInt(tagParts[tagParts.length - 1], 10);
   const currentBuildNum = parseInt(currentBuildNumber, 10);
   const available = !isNaN(currentBuildNum) && !isNaN(releaseBuildNumber)
     ? releaseBuildNumber > currentBuildNum
@@ -63,7 +64,7 @@ export async function checkForUpdates(currentBuildNumber: string): Promise<Updat
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     }),
-    buildNumber: buildMatch ? buildMatch[1] : null,
+    buildNumber: isNaN(releaseBuildNumber) ? null : String(releaseBuildNumber),
     releaseNotes: rawNotes && rawNotes.length > 0 ? rawNotes : null,
     downloadUrl: apkAsset?.browser_download_url ?? null,
   };
@@ -77,13 +78,16 @@ export async function getDevBuildInfo(): Promise<DevBuildInfo> {
   if (!res.ok) throw new Error(`GitHub API: ${res.status}`);
   const release = await res.json();
 
-  const buildMatch = (release.name as string)?.match(/#(\d+)/);
+  // Title format: "CryptoSentinelAI Dev v1.0.<run_number>" — last segment is build number
+  const titleMatch = (release.name as string)?.match(/v[\d.]+\.(\d+)/);
+  const notesMatch = (release.body as string)?.match(/Build #(\d+)/);
+  const buildNumber = titleMatch?.[1] ?? notesMatch?.[1] ?? null;
   const branchMatch = (release.body as string)?.match(/Branch: ([^\s|]+)/);
   const apkAsset = (release.assets as { name: string; browser_download_url: string }[])
     ?.find((a) => a.name.endsWith('.apk'));
 
   return {
-    buildNumber: buildMatch?.[1] ?? null,
+    buildNumber,
     branch: branchMatch?.[1] ?? null,
     buildDate: new Date(release.published_at as string).toLocaleDateString('it-IT', {
       day: '2-digit', month: '2-digit', year: 'numeric',

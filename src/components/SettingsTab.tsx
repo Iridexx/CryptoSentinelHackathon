@@ -287,7 +287,7 @@ const SettingsTab: FC<Props> = ({
             <div>
               <p className="text-sm text-white font-medium">CryptoSentinelAI</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Build: {new Date(__APP_BUILD_DATE__).toLocaleDateString('it-IT', {
+                Build #{__APP_BUILD_NUMBER__} · {new Date(__APP_BUILD_DATE__).toLocaleDateString('it-IT', {
                   day: '2-digit', month: '2-digit', year: 'numeric',
                 })}
               </p>
