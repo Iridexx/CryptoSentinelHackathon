@@ -142,6 +142,8 @@ jobs:
           cp docs/index.html pages-dist/index.html
           cp CryptoSentinelAI-latest.apk pages-dist/
           cp CryptoSentinelAI-*.apk pages-dist/ 2>/dev/null || true
+          # Alias retrocompatibilità per APK installati prima del rename
+          cp CryptoSentinelAI-latest.apk pages-dist/CryptoSentinel-debug.apk
 
       - name: Upload artefatto Pages
         uses: actions/upload-pages-artifact@v3

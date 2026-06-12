@@ -165,8 +165,10 @@ export async function openDownloadsFolder(): Promise<void> {
   }
 }
 
-export async function onDownloadComplete(handler: () => void): Promise<() => void> {
+export async function onDownloadComplete(handler: (ok: boolean) => void): Promise<() => void> {
   if (!Capacitor.isNativePlatform()) return () => {};
-  const handle = await AppSettings.addListener('downloadComplete', handler);
+  const handle = await AppSettings.addListener('downloadComplete', (data: { status: string }) => {
+    handler(data.status === 'completed');
+  });
   return () => handle.remove();
 }

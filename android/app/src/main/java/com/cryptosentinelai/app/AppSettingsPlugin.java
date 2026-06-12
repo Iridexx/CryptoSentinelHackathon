@@ -73,17 +73,36 @@ public class AppSettingsPlugin extends Plugin {
                 if (id != downloadId) return;
                 ctx.unregisterReceiver(this);
 
-                JSObject data = new JSObject();
-                data.put("status", "completed");
-                notifyListeners("downloadComplete", data);
+                // Check actual download status
+                DownloadManager.Query query = new DownloadManager.Query();
+                query.setFilterById(downloadId);
+                android.database.Cursor cursor = dm.query(query);
+                int status = DownloadManager.STATUS_FAILED;
+                String reason = "unknown";
+                if (cursor != null && cursor.moveToFirst()) {
+                    int statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+                    int reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON);
+                    if (statusIdx >= 0) status = cursor.getInt(statusIdx);
+                    if (reasonIdx >= 0) reason = String.valueOf(cursor.getInt(reasonIdx));
+                    cursor.close();
+                }
 
-                Uri apkUri = dm.getUriForDownloadedFile(downloadId);
-                if (apkUri == null) return;
-                Intent install = new Intent(Intent.ACTION_VIEW);
-                install.setDataAndType(apkUri, "application/vnd.android.package-archive");
-                install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                ctx.startActivity(install);
+                JSObject data = new JSObject();
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    data.put("status", "completed");
+                    notifyListeners("downloadComplete", data);
+                    Uri apkUri = dm.getUriForDownloadedFile(downloadId);
+                    if (apkUri == null) return;
+                    Intent install = new Intent(Intent.ACTION_VIEW);
+                    install.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                    install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    ctx.startActivity(install);
+                } else {
+                    data.put("status", "failed");
+                    data.put("reason", reason);
+                    notifyListeners("downloadComplete", data);
+                }
             }
         };
 

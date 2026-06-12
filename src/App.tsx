@@ -43,7 +43,7 @@ export default function App() {
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
   const [batteryDismissed, setBatteryDismissed] = useState(isBatteryBannerDismissed);
-  const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done'>('idle');
+  const [dlState, setDlState] = useState<'idle' | 'downloading' | 'done' | 'error'>('idle');
   const [perPage, setPerPage] = useState<PerPage>(() => {
     const stored = parseInt(localStorage.getItem(PERPAGE_KEY) || '50', 10);
     return ([50, 100, 200, 400, 600].includes(stored) ? stored : 50) as PerPage;
@@ -139,7 +139,7 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibility);
 
     let unsubDl: (() => void) | null = null;
-    onDownloadComplete(() => setDlState('done')).then((fn) => { unsubDl = fn; });
+    onDownloadComplete((ok) => setDlState(ok ? 'done' : 'error')).then((fn) => { unsubDl = fn; });
 
     const updateTimer = setTimeout(runUpdateCheck, 3000);
     const updateInterval = setInterval(runUpdateCheck, 30 * 60 * 1000);

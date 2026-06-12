@@ -4,7 +4,7 @@ import { APK_PAGES_URL, downloadAndInstall, openDownloadsFolder } from '../utils
 
 interface Props {
   update: UpdateResult;
-  dlState: 'idle' | 'downloading' | 'done';
+  dlState: 'idle' | 'downloading' | 'done' | 'error';
   onIgnore: () => void;
   onSnooze: () => void;
   onDismiss: () => void;
@@ -67,6 +67,20 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, on
           <span className="absolute w-full h-full rounded-full bg-accent-green/20 border border-accent-green/40" />
           <svg className="relative z-10 w-5 h-5 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        </button>
+      )}
+
+      {/* Errore download: tap per riprovare */}
+      {dlState === 'error' && (
+        <button
+          onClick={handleDownload}
+          className="fixed bottom-24 right-4 z-30 w-12 h-12 flex items-center justify-center"
+          aria-label="Download fallito — riprova"
+        >
+          <span className="absolute w-full h-full rounded-full bg-accent-red/20 border border-accent-red/40" />
+          <svg className="relative z-10 w-5 h-5 text-accent-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
         </button>
       )}
