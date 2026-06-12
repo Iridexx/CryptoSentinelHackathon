@@ -61,12 +61,15 @@ Questi vincoli sono assoluti. Il codice deve garantirli sempre, come regole hard
 
 ```
 ┌─────────────────────┐     ┌──────────────────────┐
-│   APP MOBILE         │     │   DASHBOARD WEB       │
-│ React+TS+Capacitor   │     │   Vite                │
-│ (essenziale, 3 viste)│     │ (completa, 3 viste +  │
-│                      │     │  System Health + demo)│
+│   APP MOBILE         │     │  DASHBOARD WEB UNICA  │
+│ React+TS+Capacitor   │     │  React + Vite         │
+│ (telefono, essenziale│     │ (browser desktop/Mac, │
+│  + funzioni agente)  │     │  TUTTO: monitoring +  │
+│                      │     │  agente + health +    │
+│                      │     │  log + replay + export│
 └──────────┬───────────┘     └───────────┬───────────┘
            │      HTTPS + auth token      │
+           │   (due client, stesso backend)│
            └──────────────┬───────────────┘
                           ▼
            ┌──────────────────────────────┐
@@ -297,6 +300,23 @@ PERPETUAL
 
 ## K. OBSERVABILITY
 
+### Canali di notifica (multi-canale con preferenza utente)
+L'utente sceglie dove ricevere le notifiche, per categoria di severità:
+```
+CANALI:
+├── Telefono (FCM push) → notifiche anche ad app chiusa (Step 2, garanzia primaria gara)
+├── Browser / dashboard web → notifiche quando la dashboard è APERTA (Livello A, V1)
+└── Entrambi
+
+PREFERENZA UTENTE (configurabile):
+├── Dove notificare: solo telefono / solo browser / entrambi
+└── Predisposta per granularità per-severità (critico/warning/info) in futuro
+
+V2 (rinviato): Web Push reale → notifiche browser anche a dashboard CHIUSA
+              (service worker web + VAPID/FCM web)
+```
+> **Principio gara:** gli alert critici (drawdown, trade falliti, portafoglio a rischio) hanno il telefono via FCM come canale primario garantito. Il browser (Livello A) è un canale aggiuntivo comodo da desktop, non sostituisce il telefono per la criticità.
+
 ### System Health (dashboard web)
 ```
 SERVIZI: backend, DB, CMC, Claude, TWAK, BNB SDK/RPC, x402 (stato + latenza)
@@ -357,9 +377,10 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 
 ### STEP 2 — Migrazione Notifiche → Backend (FCM)
 - Da push frontend-only a notifiche server-side 24/7
-- Firebase Cloud Messaging
+- Firebase Cloud Messaging (canale telefono)
 - Sistema alert (critico/warning/info)
-- **Deliverable:** notifiche funzionanti con app chiusa
+- Predisposizione routing multi-canale: il backend instrada le notifiche in base a una preferenza utente (telefono / browser / entrambi). In V1 il canale browser è Livello A (consegnato alla dashboard quando aperta, implementato allo Step 8); la struttura del routing è predisposta da subito.
+- **Deliverable:** notifiche funzionanti con app chiusa (telefono via FCM)
 
 ### STEP 3 — Migrazione CoinGecko → CMC
 - Frontend: sostituzione fonte dati
@@ -406,32 +427,45 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Modalità operative (dry-run / live / test scaling %, network)
 - **Deliverable:** agente completo funzionante in dry-run
 
-### STEP 7 — Frontend App Mobile
-- 3 viste: Spot / Perp / Globale (essenziali)
-- Icone AI sulle card coin (⚪ inattiva / 🟡 analisi / 🟢 long / 🔴 short)
-- Impostazioni Agente complete (incluso Test Scaling)
+### STEP 7 — Estensione App Mobile (SOLO ADDITIVO)
+
+> **REGOLA ASSOLUTA — protezione app esistente:** l'app mobile CryptoSentinel esistente NON va stravolta. Le funzionalità attuali (monitoring prezzi, alert soglia/range/percentuali/preferiti, grafici, ricerca, notifiche, preferiti) sono **intoccabili** nel comportamento. Lo Step 7 è **solo additivo**: si aggiungono nuovi componenti, nuove tab/viste e nuove impostazioni per l'agente. Se serve estendere un componente esistente (es. icona AI sulla CoinCard), farlo in modo additivo (prop opzionali, nuovi elementi), MAI riscrivendo o cambiando la logica esistente. Nessun file esistente va rinominato o spostato.
+
+Aggiunte all'app mobile (essenziali, mobile-first):
+- 3 viste nuove: Spot / Perp / Globale
+- Icone AI sulle card coin (⚪ inattiva / 🟡 analisi / 🟢 long / 🔴 short) — aggiunta additiva alla CoinCard
+- Impostazioni Agente complete (modalità, mercati, rischio, spot, perp, test scaling, orari) — nuova tab/sezione
 - Onboarding cross-platform + lock esclusivo (10 min) + validazione live credenziali
-- Kill switch accessibile
-- Empty states curati
+- Kill switch accessibile (soft + hard)
+- Empty states curati per le nuove viste
 - Wallet multi-network (BSC + Base)
 - **Test automatici obbligatori (gate per completamento):**
   - Vista Spot: chiamata backend → dati posizioni/PnL spot ricevuti e renderizzati correttamente
   - Vista Perp: chiamata backend → dati posizioni/PnL perp (leva, liquidazione, funding) ricevuti e renderizzati correttamente
   - Vista Globale: chiamata backend → PnL totale, drawdown, esposizione ricevuti e renderizzati correttamente
+  - Impostazioni Agente: modifica parametro → invio backend → conferma stato aggiornato
   - Kill switch: chiamata backend soft-stop → stato agente aggiornato nella UI
   - Credenziali onboarding: validazione live → risposta backend attesa (successo/errore) gestita correttamente nella UI
-  - Empty states: mock risposta vuota dal backend → empty state corretto mostrato in ogni vista
-- **Deliverable:** app mobile completa connessa al backend, suite test integrazione verde
+  - Empty states: mock risposta vuota dal backend → empty state corretto mostrato in ogni nuova vista
+  - **Regressione funzioni esistenti:** verifica che monitoring, alert e grafici esistenti funzionino esattamente come prima (nessuna regressione introdotta dalle aggiunte)
+- **Deliverable:** app mobile estesa con funzioni agente, funzioni esistenti intatte, suite test integrazione + regressione verde
 
-### STEP 8 — Dashboard Web (Vite)
-- 3 viste complete + grafici
+### STEP 8 — Dashboard Web Unificata (Vite, browser)
+
+> **Un'unica interfaccia web completa.** Non esistono due dashboard web: questa è l'unica. Contiene TUTTO ciò che serve da browser — monitoring completo, agente, System Health, log, replay, export. È un progetto Vite separato (porta 5176), distinto dall'app mobile, accessibile da qualsiasi browser desktop/Mac. L'app mobile resta sul telefono per l'uso essenziale; la dashboard web è l'interfaccia completa per desktop.
+
+- Monitoring completo (prezzi, grafici, watchlist) — versione browser ricca
+- 3 viste agente complete + grafici: Spot / Perp / Globale
 - System Health (strutturale + operativo + risorse/carburante)
-- Log viewer
+- Log viewer (filtrabile, esportabile)
 - Demo/Replay dettagliato trade-by-trade (prove on-chain)
-- Export spiegazione strategia
-- Onboarding sincronizzato (stesso stato del mobile)
-- Kill switch accessibile
-- **Deliverable:** dashboard web completa
+- Export spiegazione strategia (per i giudici)
+- Impostazioni Agente complete
+- **Notifiche browser (Livello A):** la dashboard mostra le notifiche push quando è aperta; preferenza utente per scegliere il canale (solo telefono / solo browser / entrambi). Web Push a dashboard chiusa = V2.
+- Onboarding sincronizzato (stesso stato del mobile, stesso backend)
+- Kill switch accessibile (soft + hard)
+- Layout desktop-first (sfrutta lo schermo ampio: tabelle, grafici multipli, pannelli)
+- **Deliverable:** dashboard web unica e completa, un solo URL da aprire
 
 ### STEP 9 — Testing
 - Dry-run (dati mainnet reali, esecuzione simulata)
