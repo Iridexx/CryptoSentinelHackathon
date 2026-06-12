@@ -108,7 +108,8 @@ public class AppSettingsPlugin extends Plugin {
 
         IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getContext().registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            // RECEIVER_EXPORTED required: ACTION_DOWNLOAD_COMPLETE is sent by system DownloadManager
+            getContext().registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
         } else {
             getContext().registerReceiver(receiver, filter);
         }
