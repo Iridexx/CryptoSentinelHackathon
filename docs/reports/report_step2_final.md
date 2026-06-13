@@ -16,6 +16,7 @@ Data chiusura: 13 giugno 2026
 - Corretto il riarmo involontario degli alert già notificati durante sincronizzazioni identiche.
 - Corretto il mantenimento dei prezzi di riferimento aggiornati dal backend mentre l'app è chiusa.
 - Disattivati gli eventi locali prodotti dal polling frontend: niente seconda notifica, beep o popup; l'unica origine è FCM backend.
+- Ripristinata l'evidenziazione arancione dei preferiti come stato derivato dal payload FCM; il tap sul push apre la tab Preferiti senza generare un secondo evento.
 - Aggiornati piano, README e struttura progetto.
 
 ## 2. COME È STATO FATTO

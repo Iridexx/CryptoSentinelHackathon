@@ -248,6 +248,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Artifact APK prima delle release | Il download dell'APK non deve dipendere dal successo degli step `gh release`, che sono accessori e possono fallire per collisioni/rate limit. |
 | FCM come unico percorso background | Rimossi WorkManager e BootReceiver: il backend controlla gli alert ogni 60 secondi e FCM consegna anche ad app chiusa. |
 | Backend unica fonte notifiche | Gli hook frontend non fanno scattare notifiche, beep o popup autonomi; in foreground viene mostrato localmente solo il push FCM ricevuto. |
+| Stato UI derivato dal push | Il payload FCM dei preferiti ripristina evidenziazione arancione e popup; il tap sulla notifica apre la tab Preferiti senza rieseguire controlli prezzo locali. |
 | Scope client separati | Il token device registra/rimuove solo device; il token alerts sincronizza solo alert; stato FCM richiede read e invio manuale richiede admin. |
 | Stato checker autorevole lato backend | Sincronizzazioni identiche non riarmano alert già notificati e non sovrascrivono i riferimenti preferiti aggiornati mentre l'app era chiusa. |
 | CoinGecko temporaneo nello Step 2 | Il checker riusa CoinGecko per chiudere il deliverable notifiche; lo Step 3 sostituirà la fonte con CMC. |

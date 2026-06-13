@@ -167,7 +167,16 @@ async def run_price_check() -> None:
             body = f"Movimento del {abs(pct):.1f}% verso il {label}  ·  Ora: ${_fmt(current)}"
             svc.fcm.send(
                 tokens=tokens, title=title, body=body, severity="critical",
-                data={"type": "fav_alert", "coin_id": coin.id, "direction": direction},
+                data={
+                    "type": "fav_alert",
+                    "coin_id": coin.id,
+                    "coin_name": coin.name,
+                    "coin_symbol": coin.symbol,
+                    "direction": direction,
+                    "pct": f"{abs(pct):.8f}",
+                    "current_price": f"{current:.12f}",
+                    "ref_price": f"{ref:.12f}",
+                },
             )
             state.fav_ref_prices[coin.id] = current
             state_changed = True

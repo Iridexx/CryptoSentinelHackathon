@@ -12,7 +12,75 @@ interface AppSettingsPlugin {
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 const BACKEND_API_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined;
 const API_DEVICE_TOKEN = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+const PENDING_FAV_ALERTS_KEY = 'cs_pending_fcm_fav_alerts';
 let pushRegistrationStarted = false;
+
+export interface FavAlertData {
+  coinId: string;
+  coinName: string;
+  coinSymbol: string;
+  direction: 'up' | 'down';
+  pct: number;
+  currentPrice: number;
+  refPrice: number;
+}
+
+interface FavPushEvent {
+  alert: FavAlertData;
+  openFavorites: boolean;
+}
+
+const favPushSubscribers = new Set<(event: FavPushEvent) => void>();
+
+function loadPendingFavAlerts(): Record<string, FavAlertData> {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_FAV_ALERTS_KEY) ?? '{}') as Record<string, FavAlertData>;
+  } catch {
+    return {};
+  }
+}
+
+function savePendingFavAlert(alert: FavAlertData): void {
+  const pending = loadPendingFavAlerts();
+  pending[alert.coinId] = alert;
+  localStorage.setItem(PENDING_FAV_ALERTS_KEY, JSON.stringify(pending));
+}
+
+function parseFavAlert(data: Record<string, unknown> | undefined): FavAlertData | null {
+  if (!data || data.type !== 'fav_alert' || typeof data.coin_id !== 'string') return null;
+  return {
+    coinId: data.coin_id,
+    coinName: typeof data.coin_name === 'string' ? data.coin_name : data.coin_id,
+    coinSymbol: typeof data.coin_symbol === 'string' ? data.coin_symbol : '',
+    direction: data.direction === 'down' ? 'down' : 'up',
+    pct: Number(data.pct ?? 0),
+    currentPrice: Number(data.current_price ?? 0),
+    refPrice: Number(data.ref_price ?? 0),
+  };
+}
+
+function emitFavPush(data: Record<string, unknown> | undefined, openFavorites: boolean): void {
+  const alert = parseFavAlert(data);
+  if (!alert) return;
+  savePendingFavAlert(alert);
+  favPushSubscribers.forEach((subscriber) => subscriber({ alert, openFavorites }));
+}
+
+export function subscribeFavoritePushAlerts(
+  subscriber: (event: FavPushEvent) => void,
+): () => void {
+  favPushSubscribers.add(subscriber);
+  Object.values(loadPendingFavAlerts()).forEach((alert) => {
+    subscriber({ alert, openFavorites: false });
+  });
+  return () => favPushSubscribers.delete(subscriber);
+}
+
+export function dismissFavoritePushAlert(coinId: string): void {
+  const pending = loadPendingFavAlerts();
+  delete pending[coinId];
+  localStorage.setItem(PENDING_FAV_ALERTS_KEY, JSON.stringify(pending));
+}
 
 export async function initNotifications(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
@@ -43,6 +111,7 @@ async function registerRemotePushToken(): Promise<void> {
 
     // FCM in foreground: show as local notification (Android doesn't auto-display these)
     await PushNotifications.addListener('pushNotificationReceived', async (notification) => {
+      emitFavPush(notification.data, false);
       await LocalNotifications.schedule({
         notifications: [{
           id: Math.floor(Math.random() * 1_900_000) + 1,
@@ -54,6 +123,10 @@ async function registerRemotePushToken(): Promise<void> {
           autoCancel: true,
         }],
       });
+    });
+
+    await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+      emitFavPush(action.notification.data, true);
     });
 
     const permission = await PushNotifications.requestPermissions();

@@ -6,7 +6,14 @@ import { useFavoriteCoinsData } from './hooks/useFavoriteCoinsData';
 import { useAlerts } from './hooks/useAlerts';
 import { useRangeAlerts } from './hooks/useRangeAlerts';
 import { useCurrency } from './hooks/useCurrency';
-import { getNotificationPermission, initNotifications, syncFavAlertsNative } from './utils/notifications';
+import {
+  dismissFavoritePushAlert,
+  getNotificationPermission,
+  initNotifications,
+  subscribeFavoritePushAlerts,
+  syncFavAlertsNative,
+  type FavAlertData,
+} from './utils/notifications';
 import { syncAlertsToBackend } from './utils/alertSync';
 import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, checkForUpdates, type UpdateResult } from './utils/update';
@@ -22,6 +29,7 @@ import AlertsTab from './components/AlertsTab';
 import NotificationBanner from './components/NotificationBanner';
 import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
+import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 
@@ -119,6 +127,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const unsubscribeFavPush = subscribeFavoritePushAlerts(({ alert, openFavorites }) => {
+      setPendingFavAlerts((prev) => new Map(prev).set(alert.coinId, alert));
+      if (openFavorites) setTab('favorites');
+    });
     initNotifications();
     getNotificationPermission().then(setNotifPerm);
 
@@ -146,6 +158,7 @@ export default function App() {
       unsubDl?.();
       clearTimeout(updateTimer);
       clearInterval(updateInterval);
+      unsubscribeFavPush();
     };
   }, [runUpdateCheck]);
 
@@ -187,10 +200,22 @@ export default function App() {
     localStorage.setItem(RANK_ANIM_KEY, String(n));
   }, []);
 
+  const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
+  const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
 
   const handleChartTap = useCallback((coin: Coin) => {
     setChartCoin(coin);
+  }, []);
+
+  const handleDismissFavAlert = useCallback((coinId: string) => {
+    dismissFavoritePushAlert(coinId);
+    setPendingFavAlerts((prev) => {
+      const next = new Map(prev);
+      next.delete(coinId);
+      return next;
+    });
+    setSelectedFavAlert(null);
   }, []);
 
   const { currency, changeCurrency } = useCurrency();
@@ -609,6 +634,8 @@ export default function App() {
                       onAddAlert={handleAddAlert}
                       onChartTap={handleChartTap}
                       currency={currency}
+                      alertPending={pendingFavAlerts.get(coin.id)}
+                      onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
                     />
                   ))}
                 </div>
@@ -675,6 +702,15 @@ export default function App() {
           onToggleAlert={toggleAlert}
           onToggleRangeAlert={toggleRangeAlert}
           onAddAlert={(coin) => { setChartCoin(null); setSelectedCoin(coin); }}
+        />
+      )}
+
+      {selectedFavAlert && (
+        <FavMovePopup
+          alert={selectedFavAlert}
+          currency={currency}
+          onClose={() => setSelectedFavAlert(null)}
+          onDismiss={() => handleDismissFavAlert(selectedFavAlert.coinId)}
         />
       )}
 
