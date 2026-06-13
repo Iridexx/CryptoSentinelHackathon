@@ -108,14 +108,27 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         )
 
     async def _id_map(self) -> list[dict[str, Any]]:
-        payload = await self._request_json(
-            "/v1/cryptocurrency/map",
-            params={"listing_status": "active", "limit": 5000, "sort": "cmc_rank"},
-            headers=self._headers,
-            estimated_credits=0,
-            cache_ttl_seconds=3600,
-        )
-        return list(payload.get("data", []))
+        page_size = 5000
+        start = 1
+        items: list[dict[str, Any]] = []
+        while True:
+            payload = await self._request_json(
+                "/v1/cryptocurrency/map",
+                params={
+                    "listing_status": "active",
+                    "start": start,
+                    "limit": page_size,
+                    "sort": "cmc_rank",
+                },
+                headers=self._headers,
+                estimated_credits=0,
+                cache_ttl_seconds=3600,
+            )
+            page = list(payload.get("data", []))
+            items.extend(page)
+            if len(page) < page_size:
+                return items
+            start += page_size
 
     async def _resolve_ids(self, asset_ids: list[str]) -> dict[str, dict[str, Any]]:
         requested = {

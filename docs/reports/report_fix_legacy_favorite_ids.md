@@ -6,6 +6,7 @@
 - Mantenuti invariati i preferiti salvati nel dispositivo.
 - Aggiunto un catalogo di alias tra ID storici CoinGecko e slug CMC.
 - Reso l'ID storico dell'app l'identità restituita anche quando il provider attivo è CMC.
+- Aggiunta paginazione completa del catalogo CMC oltre le prime 5.000 coin.
 - Aggiunti test su recupero mirato e lista mercato.
 
 ## 2. COME È STATO FATTO
@@ -14,12 +15,14 @@
 - CMC restituisce per le stesse coin gli slug `bnb`, `xrp` e `avalanche`.
 - L'adapter traduce gli ID solo al confine della richiesta CMC e ripristina l'ID applicativo nella risposta normalizzata.
 - Nessun preferito viene cancellato, migrato o sostituito nel `localStorage`.
+- L'endpoint CMC map viene interrogato a blocchi da 5.000 fino all'ultima pagina e ogni pagina resta in cache.
 
 ## 3. COSA È STATO VERIFICATO
 
-- Suite backend: `19 passed, 1 skipped`.
+- Suite backend: `20 passed, 1 skipped`.
 - Test multi-ID: tre preferiti legacy con slug CMC divergenti vengono tutti restituiti.
 - Test lista mercato: BNB da CMC viene normalizzato con ID applicativo `binancecoin`.
+- Test catalogo: verificato recupero di una coin nella seconda pagina CMC (`start=5001`).
 - `ruff check backend/app backend/tests`: passato.
 - `npx tsc -b`: passato.
 

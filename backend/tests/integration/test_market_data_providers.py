@@ -309,6 +309,36 @@ def test_cmc_market_list_uses_stable_application_ids() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cmc_id_map_paginates_beyond_first_5000_assets() -> None:
+    requested_starts: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        start = int(request.url.params["start"])
+        requested_starts.append(start)
+        if start == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": index, "name": f"Coin {index}", "symbol": f"C{index}", "slug": f"coin-{index}"}
+                        for index in range(1, 5001)
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            json={"data": [{"id": 5001, "name": "Deep Coin", "symbol": "DEEP", "slug": "deep-coin"}]},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await CMCProvider(settings(), client)._id_map()
+
+    assert requested_starts == [1, 5001]
+    assert len(items) == 5001
+    assert items[-1]["slug"] == "deep-coin"
+
+
+@pytest.mark.asyncio
 async def test_cmc_historical_ohlcv_is_split_into_30_day_windows() -> None:
     requested_windows: list[tuple[datetime, datetime]] = []
 
