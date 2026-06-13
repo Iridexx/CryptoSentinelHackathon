@@ -41,6 +41,21 @@ async function registerRemotePushToken(): Promise<void> {
       // Keep local notifications working even if FCM registration is unavailable.
     });
 
+    // FCM in foreground: show as local notification (Android doesn't auto-display these)
+    await PushNotifications.addListener('pushNotificationReceived', async (notification) => {
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: Math.floor(Math.random() * 1_900_000) + 1,
+          channelId: 'price_alerts',
+          title: notification.title ?? 'CryptoSentinel',
+          body: notification.body ?? '',
+          sound: 'default',
+          smallIcon: 'ic_notification',
+          autoCancel: true,
+        }],
+      });
+    });
+
     const permission = await PushNotifications.requestPermissions();
     if (permission.receive !== 'granted') return;
     await PushNotifications.register();
