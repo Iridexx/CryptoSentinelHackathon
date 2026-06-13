@@ -223,6 +223,8 @@ const SettingsTab: FC<Props> = ({
   }
   const [diagState, setDiagState] = useState<DiagState>('idle');
   const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
+  const [notifTestState, setNotifTestState] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [notifTestMsg, setNotifTestMsg] = useState<string>('');
 
   const handleCheckUpdate = async () => {
     setUpdateState('checking');
@@ -330,6 +332,34 @@ const SettingsTab: FC<Props> = ({
       error,
     });
     setDiagState('done');
+  };
+
+  const handleNotifTest = async () => {
+    const rawUrl = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ?? null;
+    const deviceToken = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+    if (!rawUrl || !deviceToken) { setNotifTestState('error'); setNotifTestMsg('Backend o token non configurati'); return; }
+    setNotifTestState('testing');
+    setNotifTestMsg('');
+    try {
+      const r = await CapacitorHttp.request({
+        method: 'POST',
+        url: `${rawUrl}/api/v1/alerts/test-notification`,
+        headers: { Authorization: `Bearer ${deviceToken}`, 'Content-Type': 'application/json' },
+        connectTimeout: 8000,
+        readTimeout: 8000,
+      });
+      const data = r.data as { status: string; device_count: number; reason?: string };
+      if (r.status >= 200 && r.status < 300 && data.status === 'sent') {
+        setNotifTestState('ok');
+        setNotifTestMsg(`Inviata a ${data.device_count} device — controlla le notifiche`);
+      } else {
+        setNotifTestState('error');
+        setNotifTestMsg(data.reason ?? data.status ?? `HTTP ${r.status}`);
+      }
+    } catch (e) {
+      setNotifTestState('error');
+      setNotifTestMsg((e as Error).message ?? 'Errore sconosciuto');
+    }
   };
 
   const handleLoadDevBuild = async () => {
@@ -905,6 +935,28 @@ const SettingsTab: FC<Props> = ({
                 {diagResult && (
                   <p className="text-xs text-gray-600 text-right">Aggiornato alle {diagResult.checkedAt}</p>
                 )}
+
+                {/* Test notifica FCM */}
+                <div className="pt-1">
+                  <button
+                    onClick={handleNotifTest}
+                    disabled={notifTestState === 'testing'}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-dark-700 text-gray-300 text-xs rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-50"
+                  >
+                    {notifTestState === 'testing' ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                    )}
+                    {notifTestState === 'testing' ? 'Invio in corso…' : 'Testa notifica FCM'}
+                  </button>
+                  {notifTestState === 'ok' && (
+                    <p className="text-xs text-accent-green text-center mt-1">✓ {notifTestMsg}</p>
+                  )}
+                  {notifTestState === 'error' && (
+                    <p className="text-xs text-accent-red text-center mt-1">✗ {notifTestMsg}</p>
+                  )}
+                </div>
               </div>
 
               <div className="border-t border-dark-600" />
