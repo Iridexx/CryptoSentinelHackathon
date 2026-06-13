@@ -345,8 +345,8 @@ const SettingsTab: FC<Props> = ({
         method: 'POST',
         url: `${rawUrl}/api/v1/alerts/test-notification`,
         headers: { Authorization: `Bearer ${deviceToken}`, 'Content-Type': 'application/json' },
-        connectTimeout: 8000,
-        readTimeout: 8000,
+        connectTimeout: 15000,
+        readTimeout: 15000,
       });
       const data = r.data as { status: string; device_count: number; reason?: string };
       if (r.status >= 200 && r.status < 300 && data.status === 'sent') {
