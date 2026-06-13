@@ -92,8 +92,8 @@ async function request<T>(
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       },
       data: options.body,
-      connectTimeout: 15_000,
-      readTimeout: 15_000,
+      connectTimeout: 20_000,
+      readTimeout: 60_000,
     });
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Market data API: ${response.status}`);

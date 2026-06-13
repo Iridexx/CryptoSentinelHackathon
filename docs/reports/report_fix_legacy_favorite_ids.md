@@ -9,6 +9,8 @@
 - Aggiunta paginazione completa del catalogo CMC oltre le prime 5.000 coin.
 - Aggiunta riconciliazione dinamica degli ID storici non presenti nel catalogo alias statico.
 - Corretta la sincronizzazione frontend/native/backend affinché invii tutti gli ID salvati, non solo quelli già risolti e visibili.
+- Impedita la scomparsa visiva dei preferiti durante richieste lente: la scheda viene costruita sempre dai 14 ID persistiti e usa righe temporanee fino al caricamento dei dati.
+- Esteso da 15 a 60 secondi il timeout di lettura HTTP Android e aggiunto retry ogni 5 secondi per il recupero mirato.
 - Aggiunti test su recupero mirato e lista mercato.
 
 ## 2. COME È STATO FATTO
@@ -19,6 +21,8 @@
 - Per gli ID ancora sconosciuti, il registry richiede al solo adapter CoinGecko nome e simbolo, quindi li associa al catalogo CMC con corrispondenza esatta nome+simbolo o simbolo univoco.
 - CoinGecko non viene usato come fallback dei prezzi: quotazioni, market list e OHLCV continuano a provenire esclusivamente dal provider globale selezionato.
 - Il frontend costruisce il payload di sincronizzazione partendo dal `Set` completo dei preferiti; gli eventuali metadati non ancora risolti non causano più la perdita dell'ID nel backend o nel worker nativo.
+- Il checker backend ha confermato prezzi CMC presenti per tutti i 14 ID reali; il problema residuo era quindi nella rappresentazione frontend quando la richiesta mirata non terminava entro il timeout nativo.
+- Le righe temporanee mantengono l'ID e lo stato preferito; vengono sostituite dai dati normalizzati senza modificare il `localStorage`.
 - Nessun preferito viene cancellato, migrato o sostituito nel `localStorage`.
 - L'endpoint CMC map viene interrogato a blocchi da 5.000 fino all'ultima pagina e ogni pagina resta in cache.
 
@@ -33,6 +37,7 @@
 - `python -m compileall -q backend/app`: passato.
 - `npx tsc -b`: passato.
 - `npm run lint`: resta non verde per errori React preesistenti; nessun nuovo errore TypeScript.
+- Verifica dati runtime: configurazione backend con 14 preferiti e stato prezzi CMC valorizzato per tutti e 14.
 
 ## 4. SCOSTAMENTI DAL PIANO
 

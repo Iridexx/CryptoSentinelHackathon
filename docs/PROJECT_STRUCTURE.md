@@ -129,11 +129,12 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
-|   |-- services/marketData.ts - client unico verso API backend normalizzate; nessuna chiamata provider diretta.
+|   |-- services/marketData.ts - client unico verso API backend normalizzate; timeout Android esteso per richieste provider lente.
 |   |-- utils/ - notifiche, update, haptics, audio, energy saving.
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
+|   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti mancanti con retry rapido e righe temporanee per tutti gli ID salvati.
 |   |-- index.css - CSS globale/Tailwind.
 |   |-- main.tsx - entrypoint React.
 |   |-- types.ts - tipi frontend.
