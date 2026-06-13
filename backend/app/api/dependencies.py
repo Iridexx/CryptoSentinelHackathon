@@ -27,6 +27,14 @@ def require_device_access(request: Request, settings: SettingsDep) -> AuthScope:
 
     return require_scope(request, settings, AuthScope.DEVICE)
 
+
+def require_alerts_access(request: Request, settings: SettingsDep) -> AuthScope:
+    """Require alert synchronization or admin API token."""
+
+    return require_scope(request, settings, AuthScope.ALERTS)
+
+
 ReadAccessDep = Annotated[AuthScope, Depends(require_read_access)]
 AdminAccessDep = Annotated[AuthScope, Depends(require_admin_access)]
 DeviceAccessDep = Annotated[AuthScope, Depends(require_device_access)]
+AlertsAccessDep = Annotated[AuthScope, Depends(require_alerts_access)]

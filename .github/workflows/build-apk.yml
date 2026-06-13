@@ -52,6 +52,7 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
           VITE_BACKEND_API_BASE_URL: ${{ secrets.VITE_BACKEND_API_BASE_URL }}
           VITE_API_DEVICE_TOKEN: ${{ secrets.VITE_API_DEVICE_TOKEN }}
+          VITE_API_ALERTS_TOKEN: ${{ secrets.VITE_API_ALERTS_TOKEN }}
         run: npm run build
 
       - name: Sync Capacitor assets in Android

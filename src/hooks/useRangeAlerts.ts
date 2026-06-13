@@ -1,35 +1,31 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Coin, RangeAlert } from '../types';
-import { sendRangeNotification } from '../utils/notifications';
-import { playAlertBeep } from '../utils/audio';
-import { syncRangeAlertsToNative, getRangeAlertsFromNative } from '../utils/update';
+import { useCallback, useState } from 'react';
+import type { RangeAlert } from '../types';
 
 const STORAGE_KEY = 'cryptosentinel_range_alerts';
-const COOLDOWN_MS = 5 * 60 * 1000;
 
 function loadRangeAlerts(): RangeAlert[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as RangeAlert[];
+    return raw ? JSON.parse(raw) as RangeAlert[] : [];
   } catch {
     return [];
   }
 }
 
-function saveRangeAlerts(alerts: RangeAlert[]) {
+function saveRangeAlerts(alerts: RangeAlert[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
-  } catch { /* quota */ }
-  syncRangeAlertsToNative(alerts);
+  } catch {
+    // Keep runtime state when browser storage is unavailable.
+  }
 }
 
-export function useRangeAlerts(coins: Coin[]) {
+export function useRangeAlerts() {
   const [rangeAlerts, setRangeAlerts] = useState<RangeAlert[]>(loadRangeAlerts);
-  const rangeAlertsRef = useRef<RangeAlert[]>(rangeAlerts);
-  rangeAlertsRef.current = rangeAlerts;
 
-  const addRangeAlert = useCallback((alert: Omit<RangeAlert, 'id' | 'isInsideRange' | 'lastNotifiedAt' | 'createdAt'>) => {
+  const addRangeAlert = useCallback((
+    alert: Omit<RangeAlert, 'id' | 'isInsideRange' | 'lastNotifiedAt' | 'createdAt'>,
+  ) => {
     const newAlert: RangeAlert = {
       ...alert,
       id: `range-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -46,7 +42,7 @@ export function useRangeAlerts(coins: Coin[]) {
 
   const removeRangeAlert = useCallback((id: string) => {
     setRangeAlerts((prev) => {
-      const next = prev.filter((a) => a.id !== id);
+      const next = prev.filter((alert) => alert.id !== id);
       saveRangeAlerts(next);
       return next;
     });
@@ -54,10 +50,17 @@ export function useRangeAlerts(coins: Coin[]) {
 
   const editRangeAlert = useCallback((id: string, minPrice: number, maxPrice: number, note?: string) => {
     setRangeAlerts((prev) => {
-      const next = prev.map((a) =>
-        a.id === id
-          ? { ...a, minPrice, maxPrice, note: note !== undefined ? note : a.note, isInsideRange: null, lastNotifiedAt: null }
-          : a
+      const next = prev.map((alert) =>
+        alert.id === id
+          ? {
+              ...alert,
+              minPrice,
+              maxPrice,
+              note: note !== undefined ? note : alert.note,
+              isInsideRange: null,
+              lastNotifiedAt: null,
+            }
+          : alert
       );
       saveRangeAlerts(next);
       return next;
@@ -66,7 +69,9 @@ export function useRangeAlerts(coins: Coin[]) {
 
   const toggleRangeAlert = useCallback((id: string) => {
     setRangeAlerts((prev) => {
-      const next = prev.map((a) => a.id === id ? { ...a, active: !(a.active ?? true) } : a);
+      const next = prev.map((alert) =>
+        alert.id === id ? { ...alert, active: !(alert.active ?? true) } : alert
+      );
       saveRangeAlerts(next);
       return next;
     });
@@ -75,101 +80,14 @@ export function useRangeAlerts(coins: Coin[]) {
   const clearRangeAlerts = useCallback(() => {
     setRangeAlerts([]);
     localStorage.removeItem(STORAGE_KEY);
-    syncRangeAlertsToNative([]);
   }, []);
 
-  // At mount: sync isInsideRange state from native worker
-  useEffect(() => {
-    getRangeAlertsFromNative().then((nativeJson) => {
-      if (!nativeJson) return;
-      try {
-        const nativeAlerts = JSON.parse(nativeJson) as Array<{ id: string; isInsideRange?: boolean | null; lastNotifiedAt?: number | null }>;
-        if (nativeAlerts.length === 0) return;
-        setRangeAlerts((prev) => {
-          const nativeMap = new Map(nativeAlerts.map((a) => [a.id, a]));
-          let changed = false;
-          const next = prev.map((a) => {
-            const native = nativeMap.get(a.id);
-            if (!native) return a;
-            const newIsInside = native.isInsideRange ?? null;
-            const newLastNotified = native.lastNotifiedAt ?? null;
-            if (newIsInside === a.isInsideRange && newLastNotified === a.lastNotifiedAt) return a;
-            changed = true;
-            return { ...a, isInsideRange: newIsInside, lastNotifiedAt: newLastNotified };
-          });
-          if (!changed) return prev;
-          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
-          return next;
-        });
-      } catch {}
-    });
-  }, []);
-
-  useEffect(() => {
-    if (coins.length === 0) return;
-
-    const now = Date.now();
-    type UpdateItem = { id: string; updates: Partial<RangeAlert> };
-    const toUpdate: UpdateItem[] = [];
-    const toNotify: Array<{ alert: RangeAlert; entered: boolean; price: number }> = [];
-
-    for (const alert of rangeAlertsRef.current) {
-      if (!(alert.active ?? true)) continue;
-      const coin = coins.find((c) => c.id === alert.coinId);
-      if (!coin) continue;
-
-      const price = coin.current_price;
-      const isInside = price >= alert.minPrice && price <= alert.maxPrice;
-
-      if (alert.isInsideRange === null) {
-        const isNew = Date.now() - alert.createdAt < 10 * 60 * 1000;
-        if (isInside && isNew) {
-          const cooldownOk = alert.lastNotifiedAt === null || now - alert.lastNotifiedAt >= COOLDOWN_MS;
-          toUpdate.push({ id: alert.id, updates: { isInsideRange: true, ...(cooldownOk ? { lastNotifiedAt: now } : {}) } });
-          if (cooldownOk) toNotify.push({ alert, entered: true, price });
-        } else {
-          toUpdate.push({ id: alert.id, updates: { isInsideRange: isInside } });
-        }
-        continue;
-      }
-
-      if (isInside === alert.isInsideRange) continue;
-
-      const cooldownOk = alert.lastNotifiedAt === null || now - alert.lastNotifiedAt >= COOLDOWN_MS;
-      if (cooldownOk) {
-        toUpdate.push({ id: alert.id, updates: { isInsideRange: isInside, lastNotifiedAt: now } });
-        toNotify.push({ alert, entered: isInside, price });
-      } else {
-        toUpdate.push({ id: alert.id, updates: { isInsideRange: isInside } });
-      }
-    }
-
-    if (toUpdate.length === 0) return;
-
-    setRangeAlerts((prev) => {
-      const updateMap = new Map(toUpdate.map((u) => [u.id, u.updates]));
-      const next = prev.map((a) => {
-        const updates = updateMap.get(a.id);
-        return updates ? { ...a, ...updates } : a;
-      });
-      saveRangeAlerts(next);
-      return next;
-    });
-
-    if (toNotify.length === 0) return;
-
-    playAlertBeep();
-    toNotify.forEach(({ alert, entered, price }) => {
-      sendRangeNotification({
-        coinName: alert.coinName,
-        minPrice: alert.minPrice,
-        maxPrice: alert.maxPrice,
-        currentPrice: price,
-        entered,
-        note: alert.note,
-      });
-    });
-  }, [coins]);
-
-  return { rangeAlerts, addRangeAlert, removeRangeAlert, editRangeAlert, toggleRangeAlert, clearRangeAlerts };
+  return {
+    rangeAlerts,
+    addRangeAlert,
+    removeRangeAlert,
+    editRangeAlert,
+    toggleRangeAlert,
+    clearRangeAlerts,
+  };
 }

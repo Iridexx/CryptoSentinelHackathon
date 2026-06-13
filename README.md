@@ -33,9 +33,9 @@
 - Popup di notifica in-app al rilevamento del movimento
 
 ### Notifiche
-- Notifiche native Android anche con app chiusa o in background
-- Worker in background (WorkManager, ogni 15 minuti) per i controlli prezzi
-- Ripristino automatico del worker dopo il riavvio del dispositivo
+- Notifiche FCM server-side anche con app chiusa o in background
+- Controllo alert backend ogni 60 secondi per soglie, range e movimenti preferiti
+- Visualizzazione push anche quando l'app è in foreground
 - Canale notifiche dedicato con vibrazione e suono
 
 ### Altro
@@ -53,8 +53,9 @@
 | Stile | Tailwind CSS |
 | Grafici | TradingView Lightweight Charts v5 |
 | Mobile | Capacitor 8 (Android) |
-| Background | Android WorkManager |
-| Notifiche | Capacitor Local Notifications |
+| Backend | Python + FastAPI |
+| Background | Task asincrono backend |
+| Notifiche | Firebase Cloud Messaging + Capacitor Local Notifications |
 | Dati | CoinGecko API (free tier) |
 
 ---
@@ -63,7 +64,7 @@
 
 - **Android** 7.0+ (API 24)
 - Compilato con SDK 36 (Android 16)
-- Nessun backend proprio — i dati vengono da CoinGecko
+- Backend FastAPI configurato e raggiungibile per registrazione device e alert FCM
 
 ---
 
@@ -115,14 +116,19 @@ src/
 │   ├── useRangeAlerts # Gestione alert di range
 │   └── useFavoritePriceAlerts  # Alert movimento sui preferiti
 └── utils/
-    ├── notifications  # Invio notifiche native via Capacitor
+    ├── alertSync      # Sincronizzazione configurazione alert al backend
+    ├── notifications  # Registrazione FCM e notifiche locali foreground
     └── update         # Comunicazione con il plugin nativo AppSettings
 
-android/app/src/main/java/com/cryptosentinel/app/
-├── MainActivity.java       # Entry point, registra il plugin e avvia il worker
-├── PriceCheckWorker.java   # WorkManager: controlla prezzi e invia notifiche
-├── AppSettingsPlugin.java  # Plugin Capacitor per funzionalità native
-└── BootReceiver.java       # Ripristina il worker dopo riavvio dispositivo
+backend/app/notifications/
+├── alert_store.py     # Configurazione alert e stato checker persistiti
+├── price_checker.py   # Controllo prezzi ogni 60 secondi e invio FCM
+├── service.py         # Orchestrazione notifiche
+└── fcm/               # Client Firebase e registro device token
+
+android/app/src/main/java/com/cryptosentinelai/app/
+├── MainActivity.java       # Entry point Android
+└── AppSettingsPlugin.java  # Plugin Capacitor per funzionalità native
 ```
 
 ---

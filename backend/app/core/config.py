@@ -245,6 +245,7 @@ class Settings(BaseSettings):
     api_read_token: str | None = Field(default=None, alias="API_READ_TOKEN")
     api_admin_token: str | None = Field(default=None, alias="API_ADMIN_TOKEN")
     api_device_token: str | None = Field(default=None, alias="API_DEVICE_TOKEN")
+    api_alerts_token: str | None = Field(default=None, alias="API_ALERTS_TOKEN")
     token_hash_pepper: str | None = Field(default=None, alias="TOKEN_HASH_PEPPER")
 
     database_url: str = Field(default="sqlite+aiosqlite:///./backend/local.db", alias="DATABASE_URL")

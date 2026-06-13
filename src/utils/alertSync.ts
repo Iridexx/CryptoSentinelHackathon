@@ -2,7 +2,7 @@ import { CapacitorHttp } from '@capacitor/core';
 import type { PriceAlert, RangeAlert } from '../types';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
-const DEVICE_TOKEN = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+const ALERTS_TOKEN = import.meta.env.VITE_API_ALERTS_TOKEN as string | undefined;
 
 export interface FavSyncConfig {
   coins: { id: string; name: string; symbol: string }[];
@@ -17,13 +17,13 @@ export async function syncAlertsToBackend(
   rangeAlerts: RangeAlert[],
   fav: FavSyncConfig,
 ): Promise<void> {
-  if (!BACKEND_URL || !DEVICE_TOKEN) return;
+  if (!BACKEND_URL || !ALERTS_TOKEN) return;
   try {
     await CapacitorHttp.request({
       method: 'POST',
       url: `${BACKEND_URL}/api/v1/alerts/sync`,
       headers: {
-        Authorization: `Bearer ${DEVICE_TOKEN}`,
+        Authorization: `Bearer ${ALERTS_TOKEN}`,
         'Content-Type': 'application/json',
       },
       data: {

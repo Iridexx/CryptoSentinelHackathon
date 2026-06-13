@@ -12,7 +12,6 @@ import { isBatteryBannerDismissed } from './utils/energySaving';
 import { onDownloadComplete, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
-import { useFavoritePriceAlerts, type FavAlertData } from './hooks/useFavoritePriceAlerts';
 import { hapticLight } from './utils/haptics';
 import UpdateNotification from './components/UpdateNotification';
 import Navbar, { type Tab } from './components/Navbar';
@@ -23,7 +22,6 @@ import AlertsTab from './components/AlertsTab';
 import NotificationBanner from './components/NotificationBanner';
 import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
-import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 
@@ -56,7 +54,6 @@ export default function App() {
   const [sortDesc, setSortDesc] = useState(true);
   const lastUpdateCheckRef = useRef<number>(0);
   const favSyncRef = useRef({ coinsJson: '[]', upPct: 0, downPct: 0, refPricesJson: '{}', currency: 'usd' });
-  const bumpRefPriceRef = useRef<(coinId: string, price: number) => void>(() => {});
 
   // dismiss è session-only: non si carica da localStorage, così il riavvio mostra sempre la freccia
   const [dismissedBuild, setDismissedBuild] = useState<string | null>(null);
@@ -190,25 +187,10 @@ export default function App() {
     localStorage.setItem(RANK_ANIM_KEY, String(n));
   }, []);
 
-  const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
-  const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
 
   const handleChartTap = useCallback((coin: Coin) => {
     setChartCoin(coin);
-  }, []);
-
-  const handleFavAlert = useCallback((alert: FavAlertData) => {
-    setPendingFavAlerts(prev => new Map(prev).set(alert.coinId, alert));
-  }, []);
-
-  const handleDismissFavAlert = useCallback((coinId: string) => {
-    setPendingFavAlerts(prev => {
-      const next = new Map(prev);
-      next.delete(coinId);
-      return next;
-    });
-    setSelectedFavAlert(null);
   }, []);
 
   const { currency, changeCurrency } = useCurrency();
@@ -257,8 +239,8 @@ export default function App() {
 
   const { results: searchResults, searching } = useSearch(search, currency);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
-  const { alerts, addAlert, removeAlert, resetAlert, editAlert, toggleAlert, clearAlerts, history, clearHistory } = useAlerts(coins);
-  const { rangeAlerts, addRangeAlert, removeRangeAlert, editRangeAlert, toggleRangeAlert } = useRangeAlerts(coins);
+  const { alerts, addAlert, removeAlert, resetAlert, editAlert, toggleAlert, clearAlerts, history, clearHistory } = useAlerts();
+  const { rangeAlerts, addRangeAlert, removeRangeAlert, editRangeAlert, toggleRangeAlert } = useRangeAlerts();
 
   const [refreshFlash, setRefreshFlash] = useState(false);
 
@@ -329,9 +311,6 @@ export default function App() {
   }, [rawDisplayCoins, sortBy, sortDesc]);
 
   const favoriteCoins = useFavoriteCoinsData(favorites, coins, refreshInterval, currency);
-
-  const { bumpRefPrice } = useFavoritePriceAlerts(favoriteCoins, favMoveUpPct, favMoveDownPct, handleFavAlert);
-  bumpRefPriceRef.current = bumpRefPrice;
 
   // Keep favSyncRef up-to-date on every render so the background handler always has fresh data
   favSyncRef.current = {
@@ -630,8 +609,6 @@ export default function App() {
                       onAddAlert={handleAddAlert}
                       onChartTap={handleChartTap}
                       currency={currency}
-                      alertPending={pendingFavAlerts.get(coin.id)}
-                      onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
                     />
                   ))}
                 </div>
@@ -701,14 +678,6 @@ export default function App() {
         />
       )}
 
-      {selectedFavAlert && (
-        <FavMovePopup
-          alert={selectedFavAlert}
-          currency={currency}
-          onClose={() => setSelectedFavAlert(null)}
-          onDismiss={() => handleDismissFavAlert(selectedFavAlert.coinId)}
-        />
-      )}
     </div>
     </>
   );

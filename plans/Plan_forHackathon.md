@@ -376,10 +376,20 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - **Deliverable:** backend avviabile, autenticato, con logging e health check
 
 ### STEP 2 — Migrazione Notifiche → Backend (FCM)
+
+> **Stato al 13 giugno 2026: COMPLETATO.** Il deliverable è stato verificato dall'utente su dispositivo reale con app aperta, in background e chiusa.
+
 - Da push frontend-only a notifiche server-side 24/7
 - Firebase Cloud Messaging (canale telefono)
 - Sistema alert (critico/warning/info)
-- Predisposizione routing multi-canale: il backend instrada le notifiche in base a una preferenza utente (telefono / browser / entrambi). In V1 il canale browser è Livello A (consegnato alla dashboard quando aperta, implementato allo Step 8); la struttura del routing è predisposta da subito.
+- Checker backend ogni 60 secondi per alert soglia, range e movimenti percentuali dei preferiti
+- Sincronizzazione configurazione alert app → backend e persistenza temporanea JSON fino allo Step 5
+- Registrazione token FCM via Capacitor; visualizzazione garantita anche in foreground tramite notifica locale
+- Backend come unica fonte degli eventi: disattivati beep, popup e notifiche generate dal polling frontend per evitare duplicati
+- Rimosso il precedente `PriceCheckWorker`: FCM/backend è il percorso unico per le notifiche ad app chiusa
+- Confine auth: token device limitato a registrazione/rimozione device; token alerts limitato alla sincronizzazione alert; stato richiede read, invio manuale richiede admin
+- Predisposizione multi-canale tramite severity model e servizio notifiche centralizzato. Preferenza telefono/browser/entrambi e canale browser Livello A saranno completati nello Step 8, quando esisterà la dashboard.
+- Dipendenza transitoria: il checker usa CoinGecko; viene sostituito dall'adapter CMC nello Step 3.
 - **Deliverable:** notifiche funzionanti con app chiusa (telefono via FCM)
 
 ### STEP 3 — Migrazione CoinGecko → CMC

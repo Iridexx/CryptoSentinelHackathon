@@ -2,7 +2,7 @@
 
 FastAPI backend for the BNB Hack Track 1 autonomous trading agent.
 
-The backend currently includes server-side Firebase Cloud Messaging foundations on top of the Step 1 API shell: device token registration, persistent token registry, notification severity levels, FCM delivery wrapper, notification API endpoints, and the refactored Settings loader for secrets, installation config, and functional strategy config. Trading, persistence DB, external market data, and agent decisions are implemented in later steps.
+The backend includes the completed Step 2 notification path on top of the Step 1 API shell: device token registration, persistent token and alert registries, a 60-second price checker, notification severity levels, FCM delivery, alert synchronization endpoints, and the centralized Settings loader. Trading, database persistence, CMC market data, and agent decisions are implemented in later steps.
 
 ## Current Scope
 
@@ -16,6 +16,8 @@ The backend currently includes server-side Firebase Cloud Messaging foundations 
 - In-memory heartbeat loop used by health checks.
 - Server-side notification service with `critical`, `warning`, and `info` severities.
 - FCM token registry persisted to local JSON until database persistence is introduced.
+- Alert configuration and checker state persisted to local JSON until database persistence is introduced.
+- Background price checker for price thresholds, ranges, and favorite-coin percentage moves.
 - Firebase Admin SDK delivery client that returns `skipped` when FCM is not configured instead of pretending success.
 - Single `Settings` loader that merges `.env` secrets with `configs/*.yaml`.
 - Startup guardrails for competition qualification: portfolio floor, daily trade minimum, drawdown cap, and 149 eligible tokens.
@@ -68,6 +70,7 @@ Minimum local `.env` secrets for authenticated endpoints:
 API_READ_TOKEN=replace-with-local-read-token
 API_ADMIN_TOKEN=replace-with-local-admin-token
 API_DEVICE_TOKEN=replace-with-limited-device-registration-token
+API_ALERTS_TOKEN=replace-with-limited-alert-sync-token
 ```
 
 Minimum `configs/instance.yaml` installation values for real FCM delivery:
@@ -112,6 +115,7 @@ Application code must read configuration only through `backend.app.core.config.S
 | POST | `/api/v1/notifications/devices` | Device/Admin token | Register an FCM device token. |
 | POST | `/api/v1/notifications/devices/unregister` | Device/Admin token | Remove an FCM device token. |
 | POST | `/api/v1/notifications/send` | Admin token | Send an FCM notification to registered devices. |
+| POST | `/api/v1/alerts/sync` | Alerts/Admin token | Replace the mobile alert configuration used by the backend checker. |
 
 Authentication accepts either:
 
@@ -132,9 +136,10 @@ The mobile app uses `@capacitor/push-notifications` to obtain the FCM registrati
 ```env
 VITE_BACKEND_API_BASE_URL=https://your-backend.example
 VITE_API_DEVICE_TOKEN=replace-with-limited-device-registration-token
+VITE_API_ALERTS_TOKEN=replace-with-limited-alert-sync-token
 ```
 
-If those variables are missing, local notifications continue to work and remote push registration is skipped.
+If those variables are missing, foreground local notifications continue to work while remote push registration and closed-app delivery are skipped.
 
 ## Directory Structure
 
@@ -148,7 +153,7 @@ backend/
 |   |-- domain/ - domain models split by common, spot, perp, and global state.
 |   |-- execution/ - trading execution adapters for TWAK, BNB SDK/EIP-712, x402, and wallet custody.
 |   |-- i18n/ - translation files and localization helpers.
-|   |-- notifications/ - server-side notification integrations, starting with FCM.
+|   |-- notifications/ - alert state, background price checker, notification service, and FCM integration.
 |   |-- observability/ - logging, metrics, health, and replay/export support.
 |   |-- persistence/ - database models, repositories, and migrations.
 |   |-- schemas/ - API schemas and DTOs.
@@ -163,6 +168,7 @@ backend/
 
 - `API_READ_TOKEN` can read health/status endpoints.
 - `API_DEVICE_TOKEN` can only register/unregister push tokens.
+- `API_ALERTS_TOKEN` can only replace the current alert configuration.
 - `API_ADMIN_TOKEN` can call admin endpoints and send notifications.
 - Device token registration deliberately does not use read or admin tokens in the mobile app.
 - If tokens are missing, protected endpoints return `503` instead of silently running unauthenticated.

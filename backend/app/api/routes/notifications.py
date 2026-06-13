@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 
 @router.get("/status")
 async def notification_status(
-    _: DeviceAccessDep,
+    _: ReadAccessDep,
     service: NotificationService = Depends(get_notification_service),
 ) -> NotificationStatusResponse:
     """Return FCM subsystem status."""

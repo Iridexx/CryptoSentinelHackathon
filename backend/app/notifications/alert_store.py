@@ -37,10 +37,35 @@ class AlertStore:
         with self._lock:
             merged_ref = dict(self._state.fav_ref_prices)
             for coin_id, price in config.fav_ref_prices.items():
-                merged_ref[coin_id] = price
+                merged_ref.setdefault(coin_id, price)
+
+            active_price_keys = {
+                f"{alert.coin_id}:{alert.direction}:{alert.threshold}"
+                for alert in config.price_alerts
+            }
+            active_range_keys = {
+                f"{alert.coin_id}:{alert.min_price}:{alert.max_price}"
+                for alert in config.range_alerts
+            }
+            active_fav_ids = {coin.id for coin in config.fav_coins}
+
             self._config = config
-            self._state.triggered_keys = set()
-            self._state.fav_ref_prices = merged_ref
+            self._state.triggered_keys.intersection_update(active_price_keys)
+            self._state.range_last_notified = {
+                key: value
+                for key, value in self._state.range_last_notified.items()
+                if key in active_range_keys
+            }
+            self._state.range_is_inside = {
+                key: value
+                for key, value in self._state.range_is_inside.items()
+                if key in active_range_keys
+            }
+            self._state.fav_ref_prices = {
+                coin_id: price
+                for coin_id, price in merged_ref.items()
+                if coin_id in active_fav_ids
+            }
             self._persist_locked()
 
     def get_config(self) -> AlertSyncRequest | None:

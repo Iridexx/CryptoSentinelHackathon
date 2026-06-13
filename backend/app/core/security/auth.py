@@ -14,6 +14,7 @@ class AuthScope(StrEnum):
 
     READ = "read"
     DEVICE = "device"
+    ALERTS = "alerts"
     ADMIN = "admin"
 
 
@@ -49,6 +50,8 @@ def require_scope(request: Request, settings: Settings, scope: AuthScope) -> Aut
         valid = _token_matches(token, settings.api_read_token) or _token_matches(token, settings.api_admin_token)
     elif scope == AuthScope.DEVICE:
         valid = _token_matches(token, settings.api_device_token) or _token_matches(token, settings.api_admin_token)
+    elif scope == AuthScope.ALERTS:
+        valid = _token_matches(token, settings.api_alerts_token) or _token_matches(token, settings.api_admin_token)
     else:
         valid = _token_matches(token, settings.api_admin_token)
 

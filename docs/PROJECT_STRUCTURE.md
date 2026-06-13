@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-10
+Ultimo aggiornamento: 2026-06-13
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -13,12 +13,10 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, restore sicuro google-services da secret, artifact prima delle release e deploy Pages su gh-pages solo da main.
 |-- android/ - progetto Android Capacitor esistente.
 |   |-- app/ - modulo Android principale.
-|   |   |-- src/main/AndroidManifest.xml - dichiarazioni activity, receiver, provider, permessi e FCM.
+|   |   |-- src/main/AndroidManifest.xml - dichiarazioni activity, provider, permessi e FCM.
 |   |   |-- src/main/java/com/cryptosentinelai/app/ - codice nativo Java.
-|   |   |   |-- MainActivity.java - entrypoint Android, plugin custom e worker scheduling.
-|   |   |   |-- AppSettingsPlugin.java - bridge Capacitor per impostazioni, download APK e sync alert.
-|   |   |   |-- PriceCheckWorker.java - WorkManager per alert/preferiti in background.
-|   |   |   `-- BootReceiver.java - ripristina il worker dopo reboot dispositivo.
+|   |   |   |-- MainActivity.java - entrypoint Android e registrazione plugin custom.
+|   |   |   `-- AppSettingsPlugin.java - bridge Capacitor per impostazioni e download APK.
 |   |   |-- src/main/res/ - risorse Android: icone, splash, layout, stringhe, stili e XML provider.
 |   |   |-- src/test/ - test JVM Android di esempio.
 |   |   |-- src/androidTest/ - test strumentali Android di esempio.
@@ -43,6 +41,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
 |   |   |       |-- __init__.py - aggrega router health/status/admin/notifications.
+|   |   |       |-- alerts.py - sincronizzazione configurazione alert dal device.
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con stato notifiche e DB not_checked fino Step 5.
 |   |   |       |-- notifications.py - registrazione token device, status FCM e invio admin push.
@@ -70,19 +69,25 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- execution/ - adapter esecuzione futuri: spot_twak, perp_bnb_sdk, wallet, x402.
 |   |   |-- i18n/locales/ - traduzioni backend en.json e it.json.
 |   |   |-- notifications/ - sistema notifiche server-side.
+|   |   |   |-- alert_store.py - persistenza JSON configurazione alert e stato checker fino allo Step 5.
+|   |   |   |-- price_checker.py - controllo prezzi ogni 60 secondi e invio alert FCM.
 |   |   |   |-- service.py - orchestration registry + FCM client.
 |   |   |   `-- fcm/ - integrazione Firebase Cloud Messaging.
 |   |   |       |-- client.py - wrapper Firebase Admin SDK, delivery e skipped se non configurato.
 |   |   |       `-- token_store.py - registro token FCM persistente su JSON fino allo Step 5.
 |   |   |-- observability/ - namespace metriche, health, replay/export futuri.
 |   |   |-- persistence/ - migrazioni, modelli DB e repository futuri.
-|   |   |-- schemas/notifications.py - schema device token, notification request/response e status.
+|   |   |-- schemas/ - schemi API.
+|   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti.
+|   |   |   `-- notifications.py - device token, notification request/response e status.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
 |   |-- scripts/ - script di avvio backend.
 |   |   |-- run_backend.ps1 - avvio Windows PowerShell (dev/prod, legge host:port da Settings).
 |   |   `-- run_backend.sh  - avvio Linux/bash per VPS (dev/prod, stesso comportamento).
-|   `-- tests/ - test backend placeholder.
+|   `-- tests/ - test backend.
+|       |-- unit/test_alert_store.py - regressione stato alert tra sincronizzazioni.
+|       `-- unit/test_auth_scopes.py - separazione scope device, alerts e admin.
 |-- configs/ - configurazione versionata e template installazione.
 |   |-- README.md - categorie config, precedenza e guardrail hard.
 |   |-- instance.example.yaml - template installazione non segreta; copiare in instance.yaml locale gitignored.
@@ -100,6 +105,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step0.md - report Step 0.
 |       |-- report_step1.md - report Step 1.
 |       |-- report_step2.md - report Step 2.
+|       |-- report_step2_final.md - chiusura finale Step 2 dopo test reali e revisione commit.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -110,7 +116,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- components/ - componenti UI CryptoSentinel.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- utils/ - notifiche, update, haptics, audio, energy saving.
-|   |   `-- notifications.ts - notifiche locali + registrazione token FCM verso backend via env Vite.
+|   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
+|   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web.
 |   |-- index.css - CSS globale/Tailwind.
 |   |-- main.tsx - entrypoint React.
@@ -191,6 +198,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 | API_ADMIN_TOKEN | Token admin per operazioni privilegiate, future config changes ed execution. |
 | API_DEVICE_TOKEN | Token limitato per registrare/rimuovere token push device. |
 | VITE_API_DEVICE_TOKEN | Copia build-time frontend/mobile del token device limitato. |
+| API_ALERTS_TOKEN | Token limitato alla sincronizzazione della configurazione alert. |
+| VITE_API_ALERTS_TOKEN | Copia build-time frontend/mobile del token alert limitato. |
 | TOKEN_HASH_PEPPER | Pepper segreto per hash token/credenziali locali future. |
 | DATABASE_URL | URL database solo quando contiene credenziali o punta a DB gestito sensibile. |
 | CMC_API_KEY | Chiave API CoinMarketCap. |
@@ -213,7 +222,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 |---|---|---|
 | Step 0 - Setup & Architettura | Completato | Scaffold backend, env, gitignore, requirements, i18n, signal engine modulare, report e documentazione. |
 | Step 1 - Backend FastAPI fondamenta | Completato | Server FastAPI avviabile, token auth read/admin, logging strutturato, health/readiness, heartbeat interno. |
-| Step 2 - Migrazione Notifiche a Backend FCM | Parziale | Backend FCM, token registry, severity model, endpoint e mobile token registration implementati; delivery reale richiede credenziali Firebase e build Android. |
+| Step 2 - Migrazione Notifiche a Backend FCM | Completato | Checker backend 60s, sync alert, persistenza temporanea, FCM con app aperta/background/chiusa verificato dall'utente; boundary auth e regressione stato notifiche verificati. |
 | Task intermedio - Ambiente + config refactor | Parziale | Config refactor completato e verificato; build APK riuscita in CI, deploy Pages corretto per usare branch `gh-pages` solo da `main`. |
 | Task istruzioni agenti | Completato | Creato `AGENTS.md` con regole permanenti operative, sicurezza, documentazione, config, CI e step boundary. |
 | Task Android package rename | Completato | Package Android/appId rinominato da `com.cryptosentinel.app` a `com.cryptosentinelai.app` per evitare conflitto con il fork/app esistente. |
@@ -237,6 +246,11 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Package Android dedicato | Il fork hackathon usa `com.cryptosentinelai.app` per non collidere con l'app CryptoSentinel esistente sul device e su Firebase/Play metadata. |
 | `google-services.json` solo da secret CI | Il file Android Firebase resta gitignored e viene ricostruito in CI da `GOOGLE_SERVICES_JSON` base64 senza stampare il contenuto. |
 | Artifact APK prima delle release | Il download dell'APK non deve dipendere dal successo degli step `gh release`, che sono accessori e possono fallire per collisioni/rate limit. |
+| FCM come unico percorso background | Rimossi WorkManager e BootReceiver: il backend controlla gli alert ogni 60 secondi e FCM consegna anche ad app chiusa. |
+| Backend unica fonte notifiche | Gli hook frontend non fanno scattare notifiche, beep o popup autonomi; in foreground viene mostrato localmente solo il push FCM ricevuto. |
+| Scope client separati | Il token device registra/rimuove solo device; il token alerts sincronizza solo alert; stato FCM richiede read e invio manuale richiede admin. |
+| Stato checker autorevole lato backend | Sincronizzazioni identiche non riarmano alert già notificati e non sovrascrivono i riferimenti preferiti aggiornati mentre l'app era chiusa. |
+| CoinGecko temporaneo nello Step 2 | Il checker riusa CoinGecko per chiudere il deliverable notifiche; lo Step 3 sostituirà la fonte con CMC. |
 | Dashboard futura su porta 5176 | `configs/instance.example.yaml` include `dashboard.port: 5176` e CORS per localhost/127.0.0.1:5176. |
 | Questioni Telegram non bloccanti | Si procede con default prudenziali del piano e si aggiornano quando arrivano risposte. |
 | `AGENTS.md` come fonte regole | Centralizza le istruzioni ricorrenti per evitare di ripeterle a ogni sessione. |
@@ -253,6 +267,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | GitHub Releases | Gli step release sono non bloccanti; se falliscono, controllare il job ma scaricare comunque l'APK dagli artifact CI. |
 | Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
 | Step 5 | Trasformare readiness DB da `not_checked` a check reale di connettività e migrare token FCM JSON su DB. |
+| Step 3 | Sostituire la chiamata CoinGecko del price checker con l'adapter CMC centralizzato senza cambiare il contratto alert. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Step boundary | Step 3 non iniziato: nessuna migrazione CoinGecko -> CMC implementata. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |
