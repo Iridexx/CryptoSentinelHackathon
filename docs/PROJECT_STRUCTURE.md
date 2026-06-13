@@ -68,6 +68,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- data/ - integrazioni dati mercato.
 |   |   |   |-- market_data/ - astrazione multi-provider Step 3.
 |   |   |   |   |-- base.py - interfaccia MarketDataProvider e modelli normalizzati.
+|   |   |   |   |-- aliases.py - mapping ID storico app/CoinGecko verso slug CMC.
 |   |   |   |   |-- registry.py - selettore globale CMC/CoinGecko senza fallback automatico.
 |   |   |   |   |-- cmc.py - adapter CMC REST primario.
 |   |   |   |   |-- coingecko.py - adapter CoinGecko secondario dal codice esistente.
@@ -269,7 +270,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Stato checker autorevole lato backend | Sincronizzazioni identiche non riarmano alert già notificati e non sovrascrivono i riferimenti preferiti aggiornati mentre l'app era chiusa. |
 | Adapter multi-provider, non migrazione | CMC resta il default e CoinGecko rimane selezionabile; consumer, checker e frontend dipendono solo dal contratto normalizzato. |
 | Selettore globale senza fallback | Il provider è unico per tutto il processo; il cambio richiede admin e il default da Settings torna al riavvio. Fallback automatico e selezione per funzione restano V2. |
-| ID interno per slug | L'app continua a usare slug stabili (`bitcoin`, `bnb`) mentre gli adapter mantengono separati gli ID provider. |
+| ID applicativo stabile | L'app conserva gli ID storici usati prima dello Step 3 (`bitcoin`, `binancecoin`, ecc.); gli adapter mantengono separati slug e ID nativi dei provider. |
+| Compatibilità preferiti pre-Step 3 | Gli ID CoinGecko persistiti dalle release precedenti restano l'identità dell'app; l'adapter CMC traduce alias come `binancecoin/bnb`, `ripple/xrp` e `avalanche-2/avalanche` in entrambe le direzioni. |
 | Cache prima del conteggio crediti | Una cache hit non incrementa richieste o crediti CMC; il budget osservato espone livelli ok/warning/critical/exhausted. |
 | MCP CMC separato da REST | Lo stato espone endpoint/header ufficiali senza chiavi; REST serve i flussi applicativi, MCP resta disponibile per futuri client agente. |
 | OHLCV CMC segmentato | Startup include un mese di storico. Le richieste OHLCV usano `time_start`/`time_end`, finestre massime di 30 giorni e deduplicazione dei punti di confine; dati più vecchi della profondità del piano possono comunque essere rifiutati. |

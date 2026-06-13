@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from backend.app.core.config import Settings
+from backend.app.data.market_data.aliases import app_id_for_cmc_slug, cmc_slug_for_app_id
 from backend.app.data.market_data.base import (
     MarketAsset,
     MarketDataProvider,
@@ -78,12 +79,18 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         return {}
 
     @classmethod
-    def _asset(cls, item: dict[str, Any], currency: str) -> MarketAsset:
+    def _asset(
+        cls,
+        item: dict[str, Any],
+        currency: str,
+        app_id: str | None = None,
+    ) -> MarketAsset:
         normalized_currency = currency.upper()
         quote = cls._quote_for(item, normalized_currency)
         provider_id = str(item["id"])
+        cmc_slug = str(item.get("slug") or provider_id)
         return MarketAsset(
-            id=str(item.get("slug") or provider_id),
+            id=app_id or app_id_for_cmc_slug(cmc_slug),
             symbol=str(item.get("symbol", "")).upper(),
             name=str(item.get("name", item.get("slug", provider_id))),
             image_url=f"https://s2.coinmarketcap.com/static/img/coins/64x64/{provider_id}.png",
@@ -111,21 +118,24 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         return list(payload.get("data", []))
 
     async def _resolve_ids(self, asset_ids: list[str]) -> dict[str, dict[str, Any]]:
-        requested = {asset_id.lower() for asset_id in asset_ids}
+        requested = {
+            asset_id.lower(): cmc_slug_for_app_id(asset_id)
+            for asset_id in asset_ids
+        }
+        requested_candidates = set(requested.values()) | set(requested)
         resolved: dict[str, dict[str, Any]] = {}
         for item in await self._id_map():
             slug = str(item.get("slug", "")).lower()
             symbol = str(item.get("symbol", "")).lower()
             provider_id = str(item.get("id", ""))
             for candidate in (slug, symbol, provider_id):
-                if candidate in requested and candidate not in resolved:
+                if candidate in requested_candidates and candidate not in resolved:
                     resolved[candidate] = item
-            if slug in requested:
-                resolved[slug] = item
         return {
-            asset_id: resolved.get(asset_id.lower())
+            asset_id: resolved.get(requested[asset_id.lower()]) or resolved.get(asset_id.lower())
             for asset_id in asset_ids
-            if resolved.get(asset_id.lower()) is not None
+            if resolved.get(requested[asset_id.lower()]) is not None
+            or resolved.get(asset_id.lower()) is not None
         }
 
     @staticmethod
@@ -298,7 +308,11 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
     ) -> list[MarketAsset]:
         if asset_ids:
             resolved = await self._resolve_ids(asset_ids)
-            provider_ids = [str(item["id"]) for item in resolved.values()]
+            app_id_by_provider_id = {
+                str(item["id"]): app_id
+                for app_id, item in resolved.items()
+            }
+            provider_ids = list(app_id_by_provider_id)
             if not provider_ids:
                 return []
             payload = await self._request_json(
@@ -307,7 +321,10 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
                 headers=self._headers,
                 estimated_credits=max(1, ceil(len(provider_ids) / 100)),
             )
-            return [self._asset(item, currency) for item in self._quote_items(payload)]
+            return [
+                self._asset(item, currency, app_id_by_provider_id.get(str(item["id"])))
+                for item in self._quote_items(payload)
+            ]
 
         bounded_limit = min(limit, 5000)
         payload = await self._request_json(

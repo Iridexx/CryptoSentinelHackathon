@@ -258,6 +258,57 @@ async def test_cmc_v3_quote_array_is_normalized() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cmc_preserves_legacy_favorite_ids_for_slug_aliases() -> None:
+    mapped_assets = [
+        {"id": 1839, "name": "BNB", "symbol": "BNB", "slug": "bnb"},
+        {"id": 52, "name": "XRP", "symbol": "XRP", "slug": "xrp"},
+        {"id": 5805, "name": "Avalanche", "symbol": "AVAX", "slug": "avalanche"},
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/map"):
+            return httpx.Response(200, json={"data": mapped_assets})
+        requested_ids = set(request.url.params["id"].split(","))
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    **item,
+                    "quote": [{"symbol": "USD", "price": 100.0, "volume_24h": 50.0}],
+                }
+                for item in mapped_assets
+                if str(item["id"]) in requested_ids
+            ],
+        )
+
+    favorite_ids = ["binancecoin", "ripple", "avalanche-2"]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await CMCProvider(settings(), client).get_market_list(
+            "usd",
+            len(favorite_ids),
+            asset_ids=favorite_ids,
+        )
+
+    assert {item.id for item in items} == set(favorite_ids)
+    assert {item.symbol for item in items} == {"BNB", "XRP", "AVAX"}
+
+
+def test_cmc_market_list_uses_stable_application_ids() -> None:
+    item = CMCProvider._asset(
+        {
+            "id": 1839,
+            "name": "BNB",
+            "symbol": "BNB",
+            "slug": "bnb",
+            "quote": {"USD": {"price": 600}},
+        },
+        "usd",
+    )
+
+    assert item.id == "binancecoin"
+
+
+@pytest.mark.asyncio
 async def test_cmc_historical_ohlcv_is_split_into_30_day_windows() -> None:
     requested_windows: list[tuple[datetime, datetime]] = []
 
