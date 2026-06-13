@@ -1,42 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Coin } from '../types';
+import { fetchMarkets } from '../services/marketData';
 
 export type PerPage = 50 | 100 | 200 | 400 | 600;
 
 const CACHE_KEY = 'cryptosentinel_coins_cache';
-const API_CHUNK = 200;
-
-function buildUrl(perPage: number, page: number, currency: string): string {
-  return `https://api.coingecko.com/api/v3/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=${perPage}&page=${page}&sparkline=false&price_change_percentage=1h,24h,7d`;
-}
-
 async function fetchCoinsAll(perPage: PerPage, page: number, currency: string, signal: AbortSignal): Promise<Coin[]> {
-  if (perPage <= API_CHUNK) {
-    const res = await fetch(buildUrl(perPage, page, currency), { signal });
-    if (!res.ok) throw new Error(`Errore API: ${res.status}`);
-    return res.json();
-  }
-
-  // Split into parallel chunks of API_CHUNK
-  const numChunks = Math.ceil(perPage / API_CHUNK);
-  const baseApiPage = (page - 1) * numChunks;
-  const chunks: Array<{ size: number; apiPage: number }> = [];
-  let remaining = perPage;
-  for (let i = 0; i < numChunks; i++) {
-    chunks.push({ size: Math.min(remaining, API_CHUNK), apiPage: baseApiPage + i + 1 });
-    remaining -= API_CHUNK;
-  }
-
-  const results = await Promise.all(
-    chunks.map(({ size, apiPage }) =>
-      fetch(buildUrl(size, apiPage, currency), { signal }).then(r => {
-        if (!r.ok) throw new Error(`Errore API: ${r.status}`);
-        return r.json() as Promise<Coin[]>;
-      })
-    )
-  );
-
-  return results.flat();
+  return fetchMarkets(perPage, page, currency, signal);
 }
 
 function loadCachedCoins(): Coin[] {
@@ -82,7 +52,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
         retryRef.current = setTimeout(() => fetchRef.current(), isRateLimit ? 15_000 : 10_000);
         return;
       }
-      setError('Impossibile caricare i prezzi. Dati dalla cache.');
+      setError('Unable to load prices. Showing cached data.');
     } finally {
       setLoading(false);
     }

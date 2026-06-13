@@ -117,7 +117,7 @@ Questi vincoli sono assoluti. Il codice deve garantirli sempre, come regole hard
 | Dashboard web | Vite |
 | Backend | Python, FastAPI |
 | AI | Claude API (meta-controller) |
-| Dati mercato | CoinMarketCap (piano Startup: OHLCV storico) + CMC MCP |
+| Dati mercato | CoinMarketCap (piano Startup: OHLCV storico) + CMC MCP — primario; CoinGecko come provider secondario selezionabile (astrazione multi-provider) |
 | Esecuzione spot | Trust Wallet Agent Kit (TWAK) |
 | Esecuzione perp | BNB AI Agent SDK / EIP-712 |
 | Pagamenti dati | x402 (su BSC via BNB SDK; servizi terzi es. AgentData) |
@@ -235,6 +235,7 @@ GENERALI
 MODALITÀ OPERATIVA
 ├── Network: Testnet / Mainnet
 ├── Esecuzione: Dry-Run / Live
+├── Provider dati: CMC / CoinGecko (selettore globale, impostazioni sviluppatore)
 └── Test Scaling %: 10-100% (solo in Live)
 
 RISCHIO
@@ -289,7 +290,7 @@ PERPETUAL
 - Backup automatico DB + export configurazione, runbook ripristino rapido
 
 ### Modalità degradata ("when in doubt, don't trade")
-- Fonte dati giù → niente nuove posizioni, posizioni aperte protette dagli stop meccanici
+- Fonte dati giù → niente nuove posizioni, posizioni aperte protette dagli stop meccanici. (V2: fallback automatico al provider secondario per alert/monitoring; la strategia resta in degradata se il fallback è di qualità inferiore)
 - Claude giù → niente nuove posizioni, stop meccanici attivi, fallback inference x402 opzionale
 - RPC BSC giù → RPC alternativi (multi endpoint), attesa condizioni migliori
 - Carburante basso (gas/USDC/crediti) → modalità risparmio + alert
@@ -392,18 +393,31 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Dipendenza transitoria: il checker usa CoinGecko; viene sostituito dall'adapter CMC nello Step 3.
 - **Deliverable:** notifiche funzionanti con app chiusa (telefono via FCM)
 
-### STEP 3 — Migrazione CoinGecko → CMC
-- Frontend: sostituzione fonte dati
-- CMC API Startup (OHLCV storico) + CMC MCP
-- Rate limiting + caching crediti
+### STEP 3 — Astrazione Dati Multi-Provider (CMC + CoinGecko)
+
+> **Cambio di approccio rispetto alla "migrazione" originale:** CoinGecko NON viene buttato. Si introduce un'astrazione `MarketDataProvider` con due implementazioni intercambiabili, così è possibile scegliere la fonte dati (utile quando scade il piano CMC Startup, o per innestare in futuro provider più economici). Il pattern adapter è la vera ragione architetturale: rende l'aggiunta di un terzo provider un inserimento, non una riscrittura.
+
+- **Interfaccia astratta `MarketDataProvider`**: metodi comuni (prezzi, OHLCV, ricerca, market list) con un formato dati interno normalizzato. Tutto il resto del codice (agente, checker notifiche, frontend) dipende dall'interfaccia, mai dal provider concreto.
+- **`CMCProvider`** (primario, default): CMC API Startup (OHLCV storico) + CMC MCP
+- **`CoinGeckoProvider`** (secondario): riadattamento del codice CoinGecko esistente dentro la stessa interfaccia (non riscrittura da zero)
+- **Selettore manuale globale** nelle impostazioni sviluppatore: sceglie quale provider è attivo. Statico (un provider per tutto).
+- Rate limiting + caching crediti (per CMC)
+- Normalizzazione dati: i due provider hanno formati/simboli/granularità diversi → mappati a un formato interno comune
+- **Confine di qualità esplicito:** CoinGecko è pienamente valido per monitoring e alert. Per il Volume Profile (perp, OHLCV 5m) la granularità CoinGecko potrebbe essere insufficiente → documentato come limite noto del provider secondario.
+- Sostituzione del checker notifiche Step 2 (che usa CoinGecko diretto) con l'astrazione provider
 - Traduzione testi IT → EN (i18n)
 - **Test automatici obbligatori (gate per completamento):**
   - Chiamata reale CMC API → risposta con dati validi (richiede chiave CMC configurata)
+  - Chiamata CoinGecko via interfaccia → dati validi nel formato interno normalizzato (smoke test del provider secondario)
+  - Selettore provider: cambio CMC↔CoinGecko → il sistema usa effettivamente il provider selezionato
+  - Normalizzazione: stessa coin da CMC e da CoinGecko → stesso formato interno (campi coerenti)
   - Rate limiter: verifica che richieste oltre soglia vengano bloccate/accodate e non inoltrate
   - Cache crediti: verifica che il contatore scenda correttamente e che i warning soglia scattino
   - Endpoint dati backend: risposta con struttura attesa (symbol, price, volume, OHLCV)
-  - Frontend: verifica che le viste mostrino dati CMC e non CoinGecko (nessuna chiamata a api.coingecko.com nei log di rete)
-- **Deliverable:** app che gira su dati CMC, backend con accesso dati+MCP, suite test integrazione verde
+  - Frontend: verifica che le viste mostrino dati dal provider selezionato (con CMC default, nessuna chiamata diretta a api.coingecko.com fuori dall'astrazione)
+- **Deliverable:** app su astrazione multi-provider (CMC default + CoinGecko selezionabile), backend con accesso dati+MCP, suite test integrazione verde
+
+> **Rinviato a V2:** (1) fallback automatico — se il provider primario cade, alert e monitoring continuano sul secondario, ma la strategia di trading va in modalità degradata (non opera su dati potenzialmente degradati); (2) selettore per-funzione (provider diverso per strategia vs monitoring); (3) predisposizione per un terzo provider (es. servizio x402/AgentData a costo inferiore) — l'astrazione lo rende un semplice inserimento.
 
 ### STEP 4 — Layer di Esecuzione
 - Spot → TWAK (signing + autonomous mode); verificare gestione approvals

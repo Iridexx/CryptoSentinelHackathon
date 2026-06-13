@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Coin } from '../types';
+import { fetchMarkets } from '../services/marketData';
 
 export function useFavoriteCoinsData(
   favorites: Set<string>,
@@ -24,10 +25,13 @@ export function useFavoriteCoinsData(
       abortRef.current?.abort();
       abortRef.current = new AbortController();
       try {
-        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=${currency}&ids=${missingIds.join(',')}&order=market_cap_desc&per_page=${missingIds.length}&page=1&sparkline=false&price_change_percentage=1h,24h,7d`;
-        const res = await fetch(url, { signal: abortRef.current.signal });
-        if (!res.ok) return;
-        const data: Coin[] = await res.json();
+        const data = await fetchMarkets(
+          missingIds.length,
+          1,
+          currency,
+          abortRef.current.signal,
+          missingIds,
+        );
         setExtraCoins(data);
       } catch (err) {
         if ((err as Error).name !== 'AbortError') { /* silent */ }

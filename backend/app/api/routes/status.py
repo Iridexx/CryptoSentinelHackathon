@@ -28,5 +28,6 @@ async def status(settings: SettingsDep, _: ReadAccessDep) -> dict[str, Any]:
             "max_drawdown_pct": settings.risk_max_drawdown_pct,
             "min_portfolio_value_usd": settings.min_portfolio_value_usd,
         },
-        "step": "step_1_foundations",
+        "market_data_provider": settings.market_data_provider,
+        "step": "step_3_multi_provider_market_data",
     }

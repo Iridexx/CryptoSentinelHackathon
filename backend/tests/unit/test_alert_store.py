@@ -4,6 +4,7 @@ from backend.app.notifications.alert_store import AlertStore, CheckerState
 from backend.app.schemas.alerts import (
     AlertSyncRequest,
     FavCoin,
+    PendingFavAlert,
     PriceAlertItem,
     RangeAlertItem,
 )
@@ -69,3 +70,49 @@ def test_removed_alerts_prune_checker_state(tmp_path: Path) -> None:
     store.save_config(AlertSyncRequest())
 
     assert store.get_state() == CheckerState()
+
+
+def test_pending_favorite_alert_survives_sync_until_acknowledged(tmp_path: Path) -> None:
+    store = AlertStore(tmp_path / "alerts.json")
+    config = _config()
+    store.save_config(config)
+    state = store.get_state()
+    state.pending_fav_alerts["bnb"] = PendingFavAlert(
+        coin_id="bnb",
+        coin_name="BNB",
+        coin_symbol="BNB",
+        direction="up",
+        pct=5.0,
+        current_price=630,
+        ref_price=600,
+    )
+    store.update_state(state)
+
+    store.save_config(config)
+
+    pending = store.pending_fav_alerts()
+    assert len(pending) == 1
+    assert pending[0].coin_id == "bnb"
+    assert store.dismiss_pending_fav_alert("bnb") is True
+    assert store.pending_fav_alerts() == []
+    assert store.dismiss_pending_fav_alert("bnb") is False
+
+
+def test_removed_favorite_prunes_pending_badge(tmp_path: Path) -> None:
+    store = AlertStore(tmp_path / "alerts.json")
+    store.save_config(_config())
+    state = store.get_state()
+    state.pending_fav_alerts["bnb"] = PendingFavAlert(
+        coin_id="bnb",
+        coin_name="BNB",
+        coin_symbol="BNB",
+        direction="down",
+        pct=4.0,
+        current_price=576,
+        ref_price=600,
+    )
+    store.update_state(state)
+
+    store.save_config(AlertSyncRequest())
+
+    assert store.pending_fav_alerts() == []

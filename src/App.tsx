@@ -10,6 +10,7 @@ import {
   dismissFavoritePushAlert,
   getNotificationPermission,
   initNotifications,
+  refreshPendingFavoritePushAlerts,
   subscribeFavoritePushAlerts,
   syncFavAlertsNative,
   type FavAlertData,
@@ -132,10 +133,12 @@ export default function App() {
       if (openFavorites) setTab('favorites');
     });
     initNotifications();
+    refreshPendingFavoritePushAlerts();
     getNotificationPermission().then(setNotifPerm);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
+        refreshPendingFavoritePushAlerts();
         getNotificationPermission().then(setNotifPerm);
         if (Date.now() - lastUpdateCheckRef.current > 30 * 60 * 1000) {
           runUpdateCheck();

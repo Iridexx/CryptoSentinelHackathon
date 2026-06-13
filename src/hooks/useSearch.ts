@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Coin } from '../types';
-
-const SEARCH_URL = 'https://api.coingecko.com/api/v3/search';
-const MARKETS_URL = 'https://api.coingecko.com/api/v3/coins/markets';
+import { searchMarkets } from '../services/marketData';
 
 export function useSearch(query: string, currency = 'usd') {
   const [results, setResults] = useState<Coin[]>([]);
@@ -27,19 +25,7 @@ export function useSearch(query: string, currency = 'usd') {
       const { signal } = abortRef.current;
 
       try {
-        const searchRes = await fetch(`${SEARCH_URL}?query=${encodeURIComponent(query.trim())}`, { signal });
-        if (!searchRes.ok) throw new Error();
-        const { coins } = await searchRes.json() as { coins: { id: string }[] };
-
-        if (coins.length === 0) { setResults([]); return; }
-
-        const ids = coins.slice(0, 25).map((c) => c.id).join(',');
-        const marketsRes = await fetch(
-          `${MARKETS_URL}?vs_currency=${currency}&ids=${ids}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`,
-          { signal }
-        );
-        if (!marketsRes.ok) throw new Error();
-        setResults(await marketsRes.json() as Coin[]);
+        setResults(await searchMarkets(query.trim(), currency, signal));
       } catch (err) {
         if ((err as Error).name !== 'AbortError') setResults([]);
       } finally {

@@ -1,17 +1,9 @@
 import { useState, useEffect } from 'react';
 import { type UTCTimestamp } from 'lightweight-charts';
+import { fetchOHLCV } from '../services/marketData';
 
 export interface LinePoint { time: UTCTimestamp; value: number }
 export interface CandlePoint { time: UTCTimestamp; open: number; high: number; low: number; close: number }
-
-const BASE = 'https://api.coingecko.com/api/v3/coins';
-
-function ohlcDays(days: number): number {
-  if (days <= 1) return 1;
-  if (days <= 7) return 7;
-  if (days <= 30) return 30;
-  return 365;
-}
 
 export function useCoinChart(
   coinId: string,
@@ -36,31 +28,25 @@ export function useCoinChart(
 
       (async () => {
         try {
-          if (mode === 'line') {
-            const res = await fetch(
-              `${BASE}/${coinId}/market_chart?vs_currency=${currency}&days=${days}`,
-              { signal: ctrl.signal },
-            );
-            if (!res.ok) throw new Error();
-            const json = await res.json() as { prices: [number, number][] };
-            setLineData(json.prices.map(([ts, v]) => ({ time: Math.floor(ts / 1000) as UTCTimestamp, value: v })));
-          } else {
-            const res = await fetch(
-              `${BASE}/${coinId}/ohlc?vs_currency=${currency}&days=${ohlcDays(days)}`,
-              { signal: ctrl.signal },
-            );
-            if (!res.ok) throw new Error();
-            const json = await res.json() as [number, number, number, number, number][];
-            const seen = new Set<number>();
-            const pts: CandlePoint[] = [];
-            for (const [ts, o, h, l, c] of json) {
-              const t = Math.floor(ts / 1000);
-              if (seen.has(t)) continue;
-              seen.add(t);
-              pts.push({ time: t as UTCTimestamp, open: o, high: h, low: l, close: c });
-            }
-            setCandleData(pts);
+          const bars = await fetchOHLCV(coinId, currency, days, ctrl.signal);
+          const seen = new Set<number>();
+          const candles: CandlePoint[] = [];
+          const line: LinePoint[] = [];
+          for (const bar of bars) {
+            const time = Math.floor(new Date(bar.timestamp).getTime() / 1000);
+            if (seen.has(time)) continue;
+            seen.add(time);
+            line.push({ time: time as UTCTimestamp, value: bar.close });
+            candles.push({
+              time: time as UTCTimestamp,
+              open: bar.open,
+              high: bar.high,
+              low: bar.low,
+              close: bar.close,
+            });
           }
+          if (mode === 'line') setLineData(line);
+          else setCandleData(candles);
         } catch (e) {
           if ((e as Error).name !== 'AbortError') setError(true);
         } finally {

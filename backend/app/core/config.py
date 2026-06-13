@@ -82,6 +82,15 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "mcp_server_url": "cmc_mcp_server_url",
         "credit_warning_threshold": "cmc_credit_warning_threshold",
         "credit_critical_threshold": "cmc_credit_critical_threshold",
+        "monthly_credit_limit": "cmc_monthly_credit_limit",
+    },
+    "market_data": {
+        "provider": "market_data_provider",
+        "cache_ttl_seconds": "market_data_cache_ttl_seconds",
+        "request_timeout_seconds": "market_data_request_timeout_seconds",
+        "coingecko_base_url": "coingecko_base_url",
+        "coingecko_requests_per_minute": "coingecko_requests_per_minute",
+        "cmc_requests_per_minute": "cmc_requests_per_minute",
     },
     "anthropic": {
         "model": "anthropic_model",
@@ -231,7 +240,7 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development", alias="APP_ENV")
     app_name: str = Field(default="CryptoSentinel Agent Backend", alias="APP_NAME")
-    app_version: str = Field(default="0.1.0-step2", alias="APP_VERSION")
+    app_version: str = Field(default="0.1.0-step3", alias="APP_VERSION")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
     api_base_url: str = Field(default="http://127.0.0.1:8000", alias="API_BASE_URL")
@@ -264,6 +273,19 @@ class Settings(BaseSettings):
     cmc_mcp_server_url: str | None = Field(default=None, alias="CMC_MCP_SERVER_URL")
     cmc_credit_warning_threshold: int = Field(default=20, alias="CMC_CREDIT_WARNING_THRESHOLD")
     cmc_credit_critical_threshold: int = Field(default=10, alias="CMC_CREDIT_CRITICAL_THRESHOLD")
+    cmc_monthly_credit_limit: int = Field(default=450_000, alias="CMC_MONTHLY_CREDIT_LIMIT")
+    market_data_provider: Literal["cmc", "coingecko"] = Field(default="cmc", alias="MARKET_DATA_PROVIDER")
+    market_data_cache_ttl_seconds: int = Field(default=60, alias="MARKET_DATA_CACHE_TTL_SECONDS")
+    market_data_request_timeout_seconds: float = Field(
+        default=15.0,
+        alias="MARKET_DATA_REQUEST_TIMEOUT_SECONDS",
+    )
+    coingecko_base_url: str = Field(
+        default="https://api.coingecko.com/api/v3",
+        alias="COINGECKO_BASE_URL",
+    )
+    coingecko_requests_per_minute: int = Field(default=25, alias="COINGECKO_REQUESTS_PER_MINUTE")
+    cmc_requests_per_minute: int = Field(default=120, alias="CMC_REQUESTS_PER_MINUTE")
 
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_model: str = Field(default="claude-sonnet-4-5", alias="ANTHROPIC_MODEL")

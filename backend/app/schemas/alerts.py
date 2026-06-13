@@ -42,3 +42,17 @@ class AlertSyncResponse(BaseModel):
     price_alert_count: int
     range_alert_count: int
     fav_coin_count: int
+
+
+class PendingFavAlert(BaseModel):
+    coin_id: str
+    coin_name: str
+    coin_symbol: str = ""
+    direction: str
+    pct: float
+    current_price: float
+    ref_price: float
+
+
+class PendingFavAlertsResponse(BaseModel):
+    items: list[PendingFavAlert] = Field(default_factory=list)

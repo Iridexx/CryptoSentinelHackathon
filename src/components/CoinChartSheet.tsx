@@ -195,7 +195,7 @@ const CoinChartSheet: FC<Props> = ({
               <div>
                 <button
                   className="flex items-center gap-1.5 text-white font-bold text-lg leading-tight hover:text-accent-blue transition-colors active:opacity-70"
-                  onClick={() => openExternalUrl(`https://www.coingecko.com/en/coins/${coin.id}`)}
+                  onClick={() => openExternalUrl(`https://coinmarketcap.com/currencies/${coin.id}`)}
                 >
                   {coin.name}
                   <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

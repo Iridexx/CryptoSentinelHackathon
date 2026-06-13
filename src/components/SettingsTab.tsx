@@ -5,6 +5,12 @@ import { openNotificationSettings } from '../utils/notifications';
 import { openBatterySettings } from '../utils/energySaving';
 import { checkForUpdates, downloadAndInstall, openDownloadsFolder, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
 import type { Currency } from '../hooks/useCurrency';
+import {
+  getProviderStatus,
+  selectProvider as updateMarketDataProvider,
+  type ProviderName,
+  type ProviderSelectionResponse,
+} from '../services/marketData';
 
 const DONATION_OPTIONS = [
   {
@@ -208,12 +214,16 @@ const SettingsTab: FC<Props> = ({
   const [showToken, setShowToken] = useState(false);
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
   const [mergeError, setMergeError] = useState('');
+  const [adminToken, setAdminToken] = useState('');
+  const [providerState, setProviderState] = useState<ProviderSelectionResponse | null>(null);
+  const [providerLoadState, setProviderLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
 
   type DiagState = 'idle' | 'checking' | 'done';
   interface DiagResult {
     backendUrl: string | null;
     deviceTokenSet: boolean;
     alertsTokenSet: boolean;
+    readTokenSet: boolean;
     backendReachable: boolean;
     backendLatencyMs: number | null;
     checkedAt: string;
@@ -267,6 +277,7 @@ const SettingsTab: FC<Props> = ({
     const rawUrl = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ?? null;
     const deviceTokenSet = !!(import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined);
     const alertsTokenSet = !!(import.meta.env.VITE_API_ALERTS_TOKEN as string | undefined);
+    const readTokenSet = !!(import.meta.env.VITE_API_READ_TOKEN as string | undefined);
     let backendReachable = false;
     let backendLatencyMs: number | null = null;
     let error: string | undefined;
@@ -300,12 +311,34 @@ const SettingsTab: FC<Props> = ({
       backendUrl: rawUrl,
       deviceTokenSet,
       alertsTokenSet,
+      readTokenSet,
       backendReachable,
       backendLatencyMs,
       checkedAt: new Date().toLocaleTimeString('it-IT'),
       error,
     });
     setDiagState('done');
+  };
+
+  const handleLoadProvider = async () => {
+    setProviderLoadState('loading');
+    try {
+      setProviderState(await getProviderStatus());
+      setProviderLoadState('idle');
+    } catch {
+      setProviderLoadState('error');
+    }
+  };
+
+  const handleProviderChange = async (provider: ProviderName) => {
+    if (!adminToken || provider === providerState?.active) return;
+    setProviderLoadState('loading');
+    try {
+      setProviderState(await updateMarketDataProvider(provider, adminToken));
+      setProviderLoadState('idle');
+    } catch {
+      setProviderLoadState('error');
+    }
   };
 
   const handleLoadDevBuild = async () => {
@@ -851,6 +884,14 @@ const SettingsTab: FC<Props> = ({
                     ) : <span className="text-xs text-gray-600">—</span>}
                   </div>
                   <div className="px-3 py-2 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">Read Token</span>
+                    {diagResult ? (
+                      diagResult.readTokenSet
+                        ? <span className="text-xs text-accent-green font-semibold">configurato</span>
+                        : <span className="text-xs text-accent-red">mancante</span>
+                    ) : <span className="text-xs text-gray-600">-</span>}
+                  </div>
+                  <div className="px-3 py-2 flex justify-between items-center">
                     <span className="text-xs text-gray-500">Alert Token</span>
                     {diagResult ? (
                       diagResult.alertsTokenSet
@@ -870,6 +911,51 @@ const SettingsTab: FC<Props> = ({
                 </div>
                 {diagResult && (
                   <p className="text-xs text-gray-600 text-right">Aggiornato alle {diagResult.checkedAt}</p>
+                )}
+              </div>
+
+              <div className="border-t border-dark-600" />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Market data provider</span>
+                  <button
+                    onClick={handleLoadProvider}
+                    disabled={providerLoadState === 'loading'}
+                    className="px-3 py-1 bg-dark-700 text-gray-300 text-xs rounded-lg disabled:opacity-50"
+                  >
+                    {providerLoadState === 'loading' ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['cmc', 'coingecko'] as ProviderName[]).map(provider => (
+                    <button
+                      key={provider}
+                      onClick={() => handleProviderChange(provider)}
+                      disabled={!adminToken || providerLoadState === 'loading'}
+                      className={`py-2 rounded-lg text-xs font-semibold uppercase transition-colors disabled:opacity-40 ${
+                        providerState?.active === provider
+                          ? 'bg-accent-blue text-white'
+                          : 'bg-dark-700 text-gray-400'
+                      }`}
+                    >
+                      {provider}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="password"
+                  value={adminToken}
+                  onChange={(event) => setAdminToken(event.target.value)}
+                  placeholder="Admin token (session only)"
+                  autoComplete="off"
+                  className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-accent-blue font-mono"
+                />
+                <p className="text-xs text-gray-600">
+                  Global selection, no automatic fallback. The configured default is restored after backend restart.
+                </p>
+                {providerLoadState === 'error' && (
+                  <p className="text-xs text-accent-red">Unable to read or update the provider.</p>
                 )}
               </div>
 

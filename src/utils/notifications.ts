@@ -12,6 +12,7 @@ interface AppSettingsPlugin {
 const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 const BACKEND_API_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined;
 const API_DEVICE_TOKEN = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
+const API_ALERTS_TOKEN = import.meta.env.VITE_API_ALERTS_TOKEN as string | undefined;
 const PENDING_FAV_ALERTS_KEY = 'cs_pending_fcm_fav_alerts';
 let pushRegistrationStarted = false;
 
@@ -80,6 +81,42 @@ export function dismissFavoritePushAlert(coinId: string): void {
   const pending = loadPendingFavAlerts();
   delete pending[coinId];
   localStorage.setItem(PENDING_FAV_ALERTS_KEY, JSON.stringify(pending));
+  dismissFavoritePushAlertOnBackend(coinId);
+}
+
+export async function refreshPendingFavoritePushAlerts(): Promise<void> {
+  const baseUrl = BACKEND_API_BASE_URL?.replace(/\/+$/, '');
+  if (!baseUrl || !API_ALERTS_TOKEN) return;
+  try {
+    const response = await CapacitorHttp.request({
+      method: 'GET',
+      url: `${baseUrl}/api/v1/alerts/pending-favorites`,
+      headers: { Authorization: `Bearer ${API_ALERTS_TOKEN}` },
+      connectTimeout: 6000,
+      readTimeout: 6000,
+    });
+    if (response.status < 200 || response.status >= 300) return;
+    const items = (response.data as { items?: Record<string, unknown>[] })?.items ?? [];
+    for (const item of items) emitFavPush({ ...item, type: 'fav_alert' }, false);
+  } catch {
+    // The local persisted badge remains available while the backend is unreachable.
+  }
+}
+
+async function dismissFavoritePushAlertOnBackend(coinId: string): Promise<void> {
+  const baseUrl = BACKEND_API_BASE_URL?.replace(/\/+$/, '');
+  if (!baseUrl || !API_ALERTS_TOKEN) return;
+  try {
+    await CapacitorHttp.request({
+      method: 'DELETE',
+      url: `${baseUrl}/api/v1/alerts/pending-favorites/${encodeURIComponent(coinId)}`,
+      headers: { Authorization: `Bearer ${API_ALERTS_TOKEN}` },
+      connectTimeout: 6000,
+      readTimeout: 6000,
+    });
+  } catch {
+    // Best effort: a later backend refresh may restore the badge until acknowledgement succeeds.
+  }
 }
 
 export async function initNotifications(): Promise<void> {

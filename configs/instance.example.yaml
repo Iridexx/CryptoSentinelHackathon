@@ -5,7 +5,7 @@
 app:
   env: development
   name: CryptoSentinel Agent Backend
-  version: 0.1.0-step2
+  version: 0.1.0-step3
   default_user_id: "00000000-0000-0000-0000-000000000001"
 
 api:
@@ -59,9 +59,20 @@ wallet:
 cmc:
   base_url: https://pro-api.coinmarketcap.com
   mcp_enabled: false
-  mcp_server_url: ""
+  mcp_server_url: https://mcp.coinmarketcap.com/mcp
   credit_warning_threshold: 20
   credit_critical_threshold: 10
+  monthly_credit_limit: 450000
+
+market_data:
+  # Global static default. Runtime changes in developer settings last until restart.
+  provider: cmc
+  cache_ttl_seconds: 60
+  request_timeout_seconds: 15
+  coingecko_base_url: https://api.coingecko.com/api/v3
+  coingecko_requests_per_minute: 25
+  # Startup allows 600/min overall; quotes/latest v3 documents 120/min.
+  cmc_requests_per_minute: 120
 
 anthropic:
   model: claude-sonnet-4-5

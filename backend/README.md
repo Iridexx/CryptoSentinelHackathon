@@ -2,7 +2,7 @@
 
 FastAPI backend for the BNB Hack Track 1 autonomous trading agent.
 
-The backend includes the completed Step 2 notification path on top of the Step 1 API shell: device token registration, persistent token and alert registries, a 60-second price checker, notification severity levels, FCM delivery, alert synchronization endpoints, and the centralized Settings loader. Trading, database persistence, CMC market data, and agent decisions are implemented in later steps.
+The backend includes the Step 3 provider-neutral market data layer on top of the Step 2 notification path: CoinMarketCap and CoinGecko adapters, one global manual selector, normalized responses, CMC rate limiting and credit-aware caching, CMC MCP metadata, and a notification checker that uses the selected provider. Trading, database persistence, and agent decisions are implemented in later steps.
 
 ## Current Scope
 
@@ -12,6 +12,9 @@ The backend includes the completed Step 2 notification path on top of the Step 1
 - Admin-only manual heartbeat endpoint.
 - Structured JSON/console logging via `structlog`.
 - CORS and reverse-proxy header support for future HTTPS deployment.
+- Provider-neutral market list, price, search, and OHLCV endpoints.
+- CMC primary adapter and CoinGecko secondary adapter with no automatic fallback.
+- Admin-only global provider selection, reset to the configured default on restart.
 - Conservative security headers, with HSTS enabled when `API_BASE_URL` uses `https://`.
 - In-memory heartbeat loop used by health checks.
 - Server-side notification service with `critical`, `warning`, and `info` severities.
@@ -71,6 +74,7 @@ API_READ_TOKEN=replace-with-local-read-token
 API_ADMIN_TOKEN=replace-with-local-admin-token
 API_DEVICE_TOKEN=replace-with-limited-device-registration-token
 API_ALERTS_TOKEN=replace-with-limited-alert-sync-token
+CMC_API_KEY=replace-with-cmc-key
 ```
 
 Minimum `configs/instance.yaml` installation values for real FCM delivery:
@@ -116,6 +120,18 @@ Application code must read configuration only through `backend.app.core.config.S
 | POST | `/api/v1/notifications/devices/unregister` | Device/Admin token | Remove an FCM device token. |
 | POST | `/api/v1/notifications/send` | Admin token | Send an FCM notification to registered devices. |
 | POST | `/api/v1/alerts/sync` | Alerts/Admin token | Replace the mobile alert configuration used by the backend checker. |
+| GET | `/api/v1/alerts/pending-favorites` | Alerts/Admin token | Return favorite-move badges awaiting user acknowledgement. |
+| DELETE | `/api/v1/alerts/pending-favorites/{coin_id}` | Alerts/Admin token | Acknowledge and remove one favorite-move badge. |
+| GET | `/api/v1/market-data/provider` | Read/Admin token | Active provider, rate/cache/credit diagnostics, and CMC MCP status. |
+| PUT | `/api/v1/market-data/provider` | Admin token | Select CMC or CoinGecko globally until backend restart. |
+| GET | `/api/v1/market-data/markets` | Read/Admin token | Normalized market-cap list from the selected provider. |
+| GET | `/api/v1/market-data/prices` | Read/Admin token | Normalized current prices for assets and currencies. |
+| GET | `/api/v1/market-data/search` | Read/Admin token | Search through the selected provider. |
+| GET | `/api/v1/market-data/ohlcv` | Read/Admin token | Normalized OHLCV history where supported. |
+
+The default provider is configured under `market_data.provider`. Developer settings may change it at runtime with an admin token held only in component state. No automatic fallback is implemented.
+
+CMC Startup includes one month of historical data. OHLCV requests always send explicit `time_start` and `time_end` values and are split into windows of at most 30 days; boundary points are deduplicated after normalization. Requests older than the plan's one-month historical depth may still be rejected by CMC even when correctly segmented. The documented 5-minute historical capability is quotes-only, so unsupported 5-minute OHLCV is rejected instead of being synthesized.
 
 Authentication accepts either:
 
@@ -135,6 +151,7 @@ The mobile app uses `@capacitor/push-notifications` to obtain the FCM registrati
 
 ```env
 VITE_BACKEND_API_BASE_URL=https://your-backend.example
+VITE_API_READ_TOKEN=replace-with-limited-read-token
 VITE_API_DEVICE_TOKEN=replace-with-limited-device-registration-token
 VITE_API_ALERTS_TOKEN=replace-with-limited-alert-sync-token
 ```

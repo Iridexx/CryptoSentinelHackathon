@@ -5,16 +5,16 @@ from __future__ import annotations
 import asyncio
 import time
 
-import httpx
-
 from backend.app.core.logging import get_logger
+from backend.app.data.market_data.base import ProviderError
+from backend.app.data.market_data.registry import MarketDataRegistry, get_market_data_registry
 from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
-from backend.app.notifications.alert_store import CheckerState, get_alert_store
+from backend.app.notifications.alert_store import get_alert_store
 from backend.app.notifications.service import get_notification_service
+from backend.app.schemas.alerts import PendingFavAlert
 
 logger = get_logger("notifications.price_checker")
 
-_COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
 CHECK_INTERVAL_S = 60
 RANGE_COOLDOWN_MS = 5 * 60 * 1000
 
@@ -31,21 +31,28 @@ def _price_key(coin_id: str, direction: str, threshold: float) -> str:
     return f"{coin_id}:{direction}:{threshold}"
 
 
-async def _fetch_prices(coin_ids: list[str], vs_currencies: list[str]) -> dict:
+async def _fetch_prices(
+    coin_ids: list[str],
+    vs_currencies: list[str],
+    registry: MarketDataRegistry | None = None,
+) -> dict[str, dict[str, float]]:
+    selected_registry = registry or get_market_data_registry()
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.get(
-                _COINGECKO_URL,
-                params={"ids": ",".join(coin_ids), "vs_currencies": ",".join(vs_currencies)},
-            )
-            r.raise_for_status()
-            return r.json()
-    except Exception as exc:
-        logger.warning("coingecko_fetch_failed", error=str(exc))
+        quotes = await selected_registry.active.get_prices(coin_ids, vs_currencies)
+        prices: dict[str, dict[str, float]] = {}
+        for quote in quotes:
+            prices.setdefault(quote.asset_id, {})[quote.currency] = quote.price
+        return prices
+    except ProviderError as exc:
+        logger.warning(
+            "market_data_fetch_failed",
+            provider=selected_registry.active_name.value,
+            error=str(exc),
+        )
         return {}
 
 
-async def run_price_check() -> None:
+async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
     """Single price-check tick."""
     store = get_alert_store()
     config = store.get_config()
@@ -72,7 +79,7 @@ async def run_price_check() -> None:
     if not coin_ids:
         return
 
-    prices = await _fetch_prices(coin_ids, list(vs))
+    prices = await _fetch_prices(coin_ids, list(vs), registry)
     if not prices:
         return
 
@@ -165,7 +172,7 @@ async def run_price_check() -> None:
             label = "rialzo" if direction == "up" else "ribasso"
             title = f"{arrow} {coin.name} ({coin.symbol.upper()}) — {label} del {abs(pct):.1f}%"
             body = f"Movimento del {abs(pct):.1f}% verso il {label}  ·  Ora: ${_fmt(current)}"
-            svc.fcm.send(
+            delivery = svc.fcm.send(
                 tokens=tokens, title=title, body=body, severity="critical",
                 data={
                     "type": "fav_alert",
@@ -178,6 +185,16 @@ async def run_price_check() -> None:
                     "ref_price": f"{ref:.12f}",
                 },
             )
+            if delivery.success_count > 0:
+                state.pending_fav_alerts[coin.id] = PendingFavAlert(
+                    coin_id=coin.id,
+                    coin_name=coin.name,
+                    coin_symbol=coin.symbol,
+                    direction=direction,
+                    pct=abs(pct),
+                    current_price=current,
+                    ref_price=ref,
+                )
             state.fav_ref_prices[coin.id] = current
             state_changed = True
             logger.info("fcm_fav_alert_fired", coin=coin.id, direction=direction, pct=round(abs(pct), 2))
