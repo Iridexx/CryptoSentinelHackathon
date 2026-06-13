@@ -38,7 +38,7 @@ async def _fetch_prices(
 ) -> dict[str, dict[str, float]]:
     selected_registry = registry or get_market_data_registry()
     try:
-        quotes = await selected_registry.active.get_prices(coin_ids, vs_currencies)
+        quotes = await selected_registry.get_prices(coin_ids, vs_currencies)
         prices: dict[str, dict[str, float]] = {}
         for quote in quotes:
             prices.setdefault(quote.asset_id, {})[quote.currency] = quote.price

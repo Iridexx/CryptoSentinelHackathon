@@ -61,6 +61,15 @@ class PriceQuote(BaseModel):
     last_updated: datetime | None = None
 
 
+class AssetIdentity(BaseModel):
+    """Provider-neutral identity used to reconcile historical application IDs."""
+
+    app_id: str
+    provider_id: str
+    symbol: str
+    name: str
+
+
 class OHLCVBar(BaseModel):
     """Normalized OHLCV point. Volume may be absent when upstream omits it."""
 
@@ -92,6 +101,14 @@ class MarketDataProvider(ABC):
     """Common interface consumed by the agent, notifications, API, and UI."""
 
     name: ProviderName
+
+    @abstractmethod
+    async def resolve_asset_identities(
+        self,
+        asset_ids: list[str],
+        identity_hints: list[AssetIdentity] | None = None,
+    ) -> list[AssetIdentity]:
+        """Resolve application IDs to native provider IDs without fetching prices."""
 
     @abstractmethod
     async def get_prices(self, asset_ids: list[str], currencies: list[str]) -> list[PriceQuote]:

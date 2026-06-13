@@ -339,30 +339,39 @@ export default function App() {
   }, [rawDisplayCoins, sortBy, sortDesc]);
 
   const favoriteCoins = useFavoriteCoinsData(favorites, coins, refreshInterval, currency);
+  const syncedFavoriteCoins = useMemo(() => {
+    const resolvedFavorites = new Map(
+      favoriteCoins.map(c => [c.id, { id: c.id, name: c.name, symbol: c.symbol }]),
+    );
+    return [...favorites].map(id => (
+      resolvedFavorites.get(id) ?? { id, name: id, symbol: '' }
+    ));
+  }, [favoriteCoins, favorites]);
 
   // Keep favSyncRef up-to-date on every render so the background handler always has fresh data
-  favSyncRef.current = {
-    coinsJson: JSON.stringify(favoriteCoins.map(c => ({ id: c.id, name: c.name, symbol: c.symbol }))),
-    upPct: favMoveUpPct,
-    downPct: favMoveDownPct,
-    refPricesJson: localStorage.getItem('cs_fav_ref_prices') ?? '{}',
-    currency,
-  };
+  useEffect(() => {
+    favSyncRef.current = {
+      coinsJson: JSON.stringify(syncedFavoriteCoins),
+      upPct: favMoveUpPct,
+      downPct: favMoveDownPct,
+      refPricesJson: localStorage.getItem('cs_fav_ref_prices') ?? '{}',
+      currency,
+    };
+  }, [syncedFavoriteCoins, favMoveUpPct, favMoveDownPct, currency]);
 
   // Sync alert config to backend (FCM) and native SharedPreferences whenever it changes
   useEffect(() => {
-    const coinsData = favoriteCoins.map(c => ({ id: c.id, name: c.name, symbol: c.symbol }));
     const refPricesJson = localStorage.getItem('cs_fav_ref_prices') ?? '{}';
     const refPrices: Record<string, number> = (() => { try { return JSON.parse(refPricesJson); } catch { return {}; } })();
-    syncFavAlertsNative(JSON.stringify(coinsData), favMoveUpPct, favMoveDownPct, refPricesJson, currency);
+    syncFavAlertsNative(JSON.stringify(syncedFavoriteCoins), favMoveUpPct, favMoveDownPct, refPricesJson, currency);
     syncAlertsToBackend(alerts, rangeAlerts, {
-      coins: coinsData,
+      coins: syncedFavoriteCoins,
       upPct: favMoveUpPct,
       downPct: favMoveDownPct,
       currency,
       refPrices,
     });
-  }, [alerts, rangeAlerts, favoriteCoins, favMoveUpPct, favMoveDownPct, currency]);
+  }, [alerts, rangeAlerts, syncedFavoriteCoins, favMoveUpPct, favMoveDownPct, currency]);
 
   const handleAddAlert = useCallback((coin: Coin) => {
     setSelectedCoin(coin);

@@ -9,6 +9,7 @@ import pytest
 
 from backend.app.core.config import Settings
 from backend.app.data.market_data.base import (
+    AssetIdentity,
     MarketAsset,
     MarketDataProvider,
     OHLCVBar,
@@ -37,6 +38,22 @@ class StubProvider(MarketDataProvider):
     def __init__(self, name: ProviderName) -> None:
         self.name = name
         self.calls = 0
+
+    async def resolve_asset_identities(
+        self,
+        asset_ids: list[str],
+        identity_hints: list[AssetIdentity] | None = None,
+    ) -> list[AssetIdentity]:
+        del identity_hints
+        return [
+            AssetIdentity(
+                app_id=asset_id,
+                provider_id=asset_id,
+                symbol=asset_id.upper(),
+                name=asset_id.title(),
+            )
+            for asset_id in asset_ids
+        ]
 
     async def get_prices(self, asset_ids: list[str], currencies: list[str]) -> list[PriceQuote]:
         self.calls += 1
@@ -127,6 +144,68 @@ async def test_global_selector_routes_calls_to_selected_provider() -> None:
     await registry.active.get_market_list("usd", 1)
     assert cmc.calls == 1
     assert coingecko.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_registry_reconciles_legacy_coingecko_id_without_price_fallback() -> None:
+    class IdentityProvider(StubProvider):
+        async def resolve_asset_identities(
+            self,
+            asset_ids: list[str],
+            identity_hints: list[AssetIdentity] | None = None,
+        ) -> list[AssetIdentity]:
+            if self.name is ProviderName.COINGECKO:
+                return [
+                    AssetIdentity(
+                        app_id=asset_id,
+                        provider_id=asset_id,
+                        symbol="OLD",
+                        name="Legacy Coin",
+                    )
+                    for asset_id in asset_ids
+                ]
+            if identity_hints:
+                return [
+                    AssetIdentity(
+                        app_id=hint.app_id,
+                        provider_id="999",
+                        symbol=hint.symbol,
+                        name=hint.name,
+                    )
+                    for hint in identity_hints
+                ]
+            return []
+
+        async def get_prices(
+            self,
+            asset_ids: list[str],
+            currencies: list[str],
+        ) -> list[PriceQuote]:
+            self.calls += 1
+            return [
+                PriceQuote(
+                    asset_id=asset_ids[0],
+                    currency=currencies[0],
+                    price=42.0,
+                    provider=self.name,
+                    provider_id=asset_ids[0],
+                )
+            ]
+
+    cmc = IdentityProvider(ProviderName.CMC)
+    coingecko = IdentityProvider(ProviderName.COINGECKO)
+    registry = MarketDataRegistry(
+        settings(),
+        providers={ProviderName.CMC: cmc, ProviderName.COINGECKO: coingecko},
+    )
+
+    quotes = await registry.get_prices(["legacy-coingecko-id"], ["usd"])
+
+    assert quotes[0].asset_id == "legacy-coingecko-id"
+    assert quotes[0].provider is ProviderName.CMC
+    assert quotes[0].price == 42.0
+    assert cmc.calls == 1
+    assert coingecko.calls == 0
 
 
 @pytest.mark.asyncio
@@ -291,6 +370,46 @@ async def test_cmc_preserves_legacy_favorite_ids_for_slug_aliases() -> None:
 
     assert {item.id for item in items} == set(favorite_ids)
     assert {item.symbol for item in items} == {"BNB", "XRP", "AVAX"}
+
+
+@pytest.mark.asyncio
+async def test_cmc_matches_historical_id_from_normalized_name_and_symbol() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/map")
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": 999,
+                        "name": "Legacy Coin",
+                        "symbol": "OLD",
+                        "slug": "renamed-legacy-coin",
+                    }
+                ]
+            },
+        )
+
+    hint = AssetIdentity(
+        app_id="old-coingecko-slug",
+        provider_id="old-coingecko-slug",
+        symbol="OLD",
+        name="Legacy Coin",
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        identities = await CMCProvider(settings(), client).resolve_asset_identities(
+            [hint.app_id],
+            [hint],
+        )
+
+    assert identities == [
+        AssetIdentity(
+            app_id="old-coingecko-slug",
+            provider_id="999",
+            symbol="OLD",
+            name="Legacy Coin",
+        )
+    ]
 
 
 def test_cmc_market_list_uses_stable_application_ids() -> None:

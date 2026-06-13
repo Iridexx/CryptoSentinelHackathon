@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from math import ceil
+import re
 from typing import Any
 
 import httpx
@@ -11,6 +12,7 @@ import httpx
 from backend.app.core.config import Settings
 from backend.app.data.market_data.aliases import app_id_for_cmc_slug, cmc_slug_for_app_id
 from backend.app.data.market_data.base import (
+    AssetIdentity,
     MarketAsset,
     MarketDataProvider,
     OHLCVBar,
@@ -28,6 +30,10 @@ def _parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _identity_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
 class CMCProvider(CachedHttpProvider, MarketDataProvider):
@@ -150,6 +156,52 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
             if resolved.get(requested[asset_id.lower()]) is not None
             or resolved.get(asset_id.lower()) is not None
         }
+
+    async def resolve_asset_identities(
+        self,
+        asset_ids: list[str],
+        identity_hints: list[AssetIdentity] | None = None,
+    ) -> list[AssetIdentity]:
+        if not asset_ids:
+            return []
+        id_map = await self._id_map()
+        direct = await self._resolve_ids(asset_ids)
+        resolved = {
+            app_id: AssetIdentity(
+                app_id=app_id,
+                provider_id=str(item["id"]),
+                symbol=str(item.get("symbol", "")).upper(),
+                name=str(item.get("name", app_id)),
+            )
+            for app_id, item in direct.items()
+        }
+        hints = {hint.app_id: hint for hint in identity_hints or []}
+        by_symbol: dict[str, list[dict[str, Any]]] = {}
+        for item in id_map:
+            by_symbol.setdefault(str(item.get("symbol", "")).upper(), []).append(item)
+
+        for app_id in asset_ids:
+            if app_id in resolved or app_id not in hints:
+                continue
+            hint = hints[app_id]
+            candidates = by_symbol.get(hint.symbol.upper(), [])
+            exact = next(
+                (
+                    item
+                    for item in candidates
+                    if _identity_key(str(item.get("name", ""))) == _identity_key(hint.name)
+                ),
+                None,
+            )
+            match = exact or (candidates[0] if len(candidates) == 1 else None)
+            if match is not None:
+                resolved[app_id] = AssetIdentity(
+                    app_id=app_id,
+                    provider_id=str(match["id"]),
+                    symbol=str(match.get("symbol", "")).upper(),
+                    name=str(match.get("name", hint.name)),
+                )
+        return [resolved[asset_id] for asset_id in asset_ids if asset_id in resolved]
 
     @staticmethod
     def _quote_items(payload: Any) -> list[dict[str, Any]]:

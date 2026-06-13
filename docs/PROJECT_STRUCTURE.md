@@ -67,11 +67,11 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- wallet_custody.py - regola chiavi private solo cifrate e mai in chiaro.
 |   |   |-- data/ - integrazioni dati mercato.
 |   |   |   |-- market_data/ - astrazione multi-provider Step 3.
-|   |   |   |   |-- base.py - interfaccia MarketDataProvider e modelli normalizzati.
+|   |   |   |   |-- base.py - interfaccia MarketDataProvider, identità asset e modelli normalizzati.
 |   |   |   |   |-- aliases.py - mapping ID storico app/CoinGecko verso slug CMC.
-|   |   |   |   |-- registry.py - selettore globale CMC/CoinGecko senza fallback automatico.
-|   |   |   |   |-- cmc.py - adapter CMC REST primario.
-|   |   |   |   |-- coingecko.py - adapter CoinGecko secondario dal codice esistente.
+|   |   |   |   |-- registry.py - selettore globale e riconciliazione ID storici verso il provider attivo, senza fallback prezzi.
+|   |   |   |   |-- cmc.py - adapter CMC REST primario con matching identità per nome e simbolo.
+|   |   |   |   |-- coingecko.py - adapter CoinGecko secondario e catalogo identità degli ID storici.
 |   |   |   |   |-- http.py - client condiviso con cache, rate limiting e contatore crediti.
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
@@ -133,7 +133,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- utils/ - notifiche, update, haptics, audio, energy saving.
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
-|   |-- App.tsx - root app mobile/web.
+|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
 |   |-- index.css - CSS globale/Tailwind.
 |   |-- main.tsx - entrypoint React.
 |   |-- types.ts - tipi frontend.

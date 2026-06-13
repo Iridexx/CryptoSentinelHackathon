@@ -66,7 +66,7 @@ async def market_list(
 
     asset_ids = [item.strip() for item in ids.split(",") if item.strip()] if ids else None
     try:
-        items = await registry.active.get_market_list(currency, limit, page, asset_ids)
+        items = await registry.get_market_list(currency, limit, page, asset_ids)
     except ProviderError as exc:
         _raise_provider_error(exc)
     return MarketListResponse(provider=registry.active_name, currency=currency.lower(), items=items)
@@ -84,7 +84,7 @@ async def prices(
     asset_ids = [item.strip() for item in ids.split(",") if item.strip()]
     currency_list = [item.strip().lower() for item in currencies.split(",") if item.strip()]
     try:
-        items = await registry.active.get_prices(asset_ids, currency_list)
+        items = await registry.get_prices(asset_ids, currency_list)
     except ProviderError as exc:
         _raise_provider_error(exc)
     return PriceListResponse(provider=registry.active_name, items=items)
@@ -119,7 +119,7 @@ async def ohlcv(
     """Return normalized OHLCV history from the selected provider."""
 
     try:
-        items = await registry.active.get_ohlcv(asset_id, currency, days, interval)
+        items = await registry.get_ohlcv(asset_id, currency, days, interval)
     except ProviderError as exc:
         _raise_provider_error(exc)
     return OHLCVResponse(

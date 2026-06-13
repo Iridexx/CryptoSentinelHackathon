@@ -9,6 +9,7 @@ import httpx
 
 from backend.app.core.config import Settings
 from backend.app.data.market_data.base import (
+    AssetIdentity,
     MarketAsset,
     MarketDataProvider,
     OHLCVBar,
@@ -36,6 +37,35 @@ class CoinGeckoProvider(CachedHttpProvider, MarketDataProvider):
             cache_ttl_seconds=settings.market_data_cache_ttl_seconds,
             client=client,
         )
+
+    async def resolve_asset_identities(
+        self,
+        asset_ids: list[str],
+        identity_hints: list[AssetIdentity] | None = None,
+    ) -> list[AssetIdentity]:
+        del identity_hints
+        if not asset_ids:
+            return []
+        payload = await self._request_json(
+            "/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "ids": ",".join(asset_ids),
+                "order": "market_cap_desc",
+                "per_page": min(len(asset_ids), 250),
+                "page": 1,
+                "sparkline": "false",
+            },
+        )
+        return [
+            AssetIdentity(
+                app_id=str(item["id"]),
+                provider_id=str(item["id"]),
+                symbol=str(item.get("symbol", "")).upper(),
+                name=str(item.get("name", item["id"])),
+            )
+            for item in payload
+        ]
 
     @staticmethod
     def _asset(item: dict[str, Any], currency: str) -> MarketAsset:
