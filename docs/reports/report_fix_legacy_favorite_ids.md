@@ -11,6 +11,8 @@
 - Corretta la sincronizzazione frontend/native/backend affinché invii tutti gli ID salvati, non solo quelli già risolti e visibili.
 - Impedita la scomparsa visiva dei preferiti durante richieste lente: la scheda viene costruita sempre dai 14 ID persistiti e usa righe temporanee fino al caricamento dei dati.
 - Esteso da 15 a 60 secondi il timeout di lettura HTTP Android e aggiunto retry ogni 5 secondi per il recupero mirato.
+- Resa non bloccante la riconciliazione identità: un errore o rate limit CoinGecko non elimina più gli asset già risolti da CMC.
+- Estesa a 24 ore la cache delle identità storiche CoinGecko.
 - Aggiunti test su recupero mirato e lista mercato.
 
 ## 2. COME È STATO FATTO
@@ -23,12 +25,13 @@
 - Il frontend costruisce il payload di sincronizzazione partendo dal `Set` completo dei preferiti; gli eventuali metadati non ancora risolti non causano più la perdita dell'ID nel backend o nel worker nativo.
 - Il checker backend ha confermato prezzi CMC presenti per tutti i 14 ID reali; il problema residuo era quindi nella rappresentazione frontend quando la richiesta mirata non terminava entro il timeout nativo.
 - Le righe temporanee mantengono l'ID e lo stato preferito; vengono sostituite dai dati normalizzati senza modificare il `localStorage`.
+- Il registry restituisce i risultati CMC parziali già disponibili anche quando il solo catalogo identità secondario fallisce; CoinGecko non viene usato come fallback dei prezzi.
 - Nessun preferito viene cancellato, migrato o sostituito nel `localStorage`.
 - L'endpoint CMC map viene interrogato a blocchi da 5.000 fino all'ultima pagina e ogni pagina resta in cache.
 
 ## 3. COSA È STATO VERIFICATO
 
-- Suite backend: `22 passed, 1 skipped`.
+- Suite backend: `23 passed, 1 skipped`.
 - Test multi-ID: tre preferiti legacy con slug CMC divergenti vengono tutti restituiti.
 - Test lista mercato: BNB da CMC viene normalizzato con ID applicativo `binancecoin`.
 - Test catalogo: verificato recupero di una coin nella seconda pagina CMC (`start=5001`).
@@ -38,6 +41,7 @@
 - `npx tsc -b`: passato.
 - `npm run lint`: resta non verde per errori React preesistenti; nessun nuovo errore TypeScript.
 - Verifica dati runtime: configurazione backend con 14 preferiti e stato prezzi CMC valorizzato per tutti e 14.
+- Test resilienza: verificato che un errore del catalogo identità non trasformi una risposta CMC valida in una lista vuota.
 
 ## 4. SCOSTAMENTI DAL PIANO
 

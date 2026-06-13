@@ -56,6 +56,7 @@ class CoinGeckoProvider(CachedHttpProvider, MarketDataProvider):
                 "page": 1,
                 "sparkline": "false",
             },
+            cache_ttl_seconds=86_400,
         )
         return [
             AssetIdentity(

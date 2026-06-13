@@ -12,6 +12,7 @@ from backend.app.data.market_data.base import (
     OHLCVBar,
     PriceQuote,
     ProviderName,
+    ProviderError,
     ProviderRuntimeStatus,
 )
 from backend.app.data.market_data.cmc import CMCProvider
@@ -61,7 +62,10 @@ class MarketDataRegistry:
         if not unresolved:
             return resolved
         identity_source = self._providers[ProviderName.COINGECKO]
-        hints = await identity_source.resolve_asset_identities(unresolved)
+        try:
+            hints = await identity_source.resolve_asset_identities(unresolved)
+        except ProviderError:
+            return resolved
         return resolved + await self.active.resolve_asset_identities(unresolved, hints)
 
     async def get_market_list(

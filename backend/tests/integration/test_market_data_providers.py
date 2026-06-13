@@ -209,6 +209,73 @@ async def test_registry_reconciles_legacy_coingecko_id_without_price_fallback() 
 
 
 @pytest.mark.asyncio
+async def test_registry_keeps_cmc_results_when_identity_lookup_fails() -> None:
+    class PartialCMCProvider(StubProvider):
+        async def resolve_asset_identities(
+            self,
+            asset_ids: list[str],
+            identity_hints: list[AssetIdentity] | None = None,
+        ) -> list[AssetIdentity]:
+            del identity_hints
+            return [
+                AssetIdentity(
+                    app_id=asset_ids[0],
+                    provider_id="101",
+                    symbol="ONE",
+                    name="Resolved Coin",
+                )
+            ]
+
+        async def get_market_list(
+            self,
+            currency: str,
+            limit: int,
+            page: int = 1,
+            asset_ids: list[str] | None = None,
+        ) -> list[MarketAsset]:
+            del limit, page
+            return [
+                MarketAsset(
+                    id=asset_ids[0],
+                    symbol="ONE",
+                    name="Resolved Coin",
+                    price=1.0,
+                    currency=currency,
+                    provider=self.name,
+                    provider_id=asset_ids[0],
+                )
+            ]
+
+    class FailingIdentityProvider(StubProvider):
+        async def resolve_asset_identities(
+            self,
+            asset_ids: list[str],
+            identity_hints: list[AssetIdentity] | None = None,
+        ) -> list[AssetIdentity]:
+            del asset_ids, identity_hints
+            from backend.app.data.market_data.base import ProviderError
+
+            raise ProviderError("identity source unavailable")
+
+    registry = MarketDataRegistry(
+        settings(),
+        providers={
+            ProviderName.CMC: PartialCMCProvider(ProviderName.CMC),
+            ProviderName.COINGECKO: FailingIdentityProvider(ProviderName.COINGECKO),
+        },
+    )
+
+    items = await registry.get_market_list(
+        "usd",
+        2,
+        asset_ids=["resolved-coin", "unresolved-coin"],
+    )
+
+    assert [item.id for item in items] == ["resolved-coin"]
+    assert items[0].price == 1.0
+
+
+@pytest.mark.asyncio
 async def test_cmc_and_coingecko_normalize_to_same_market_asset_shape() -> None:
     def cmc_handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["X-CMC_PRO_API_KEY"] == "test-key"
