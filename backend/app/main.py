@@ -15,6 +15,7 @@ from backend.app.api.routes import api_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.core.security.headers import add_security_headers
+from backend.app.notifications.price_checker import price_checker_loop
 
 settings = get_settings()
 configure_logging(settings)
@@ -34,7 +35,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop backend runtime tasks."""
 
     heartbeat.beat("startup")
-    task = asyncio.create_task(_heartbeat_loop(settings))
+    heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
+    price_checker_task = asyncio.create_task(price_checker_loop())
     logger.info(
         "backend_started",
         environment=settings.app_env,
@@ -45,11 +47,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            logger.info("heartbeat_loop_stopped")
+        heartbeat_task.cancel()
+        price_checker_task.cancel()
+        for t in (heartbeat_task, price_checker_task):
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
         logger.info("backend_stopped")
 
 

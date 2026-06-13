@@ -6,9 +6,10 @@ import { useFavoriteCoinsData } from './hooks/useFavoriteCoinsData';
 import { useAlerts } from './hooks/useAlerts';
 import { useRangeAlerts } from './hooks/useRangeAlerts';
 import { useCurrency } from './hooks/useCurrency';
-import { getNotificationPermission, initNotifications, syncFavAlertsNative, getAndClearPendingFavAlerts } from './utils/notifications';
+import { getNotificationPermission, initNotifications, syncFavAlertsNative } from './utils/notifications';
+import { syncAlertsToBackend } from './utils/alertSync';
 import { isBatteryBannerDismissed } from './utils/energySaving';
-import { onDownloadComplete, triggerImmediateCheck, checkForUpdates, type UpdateResult } from './utils/update';
+import { onDownloadComplete, checkForUpdates, type UpdateResult } from './utils/update';
 import { useSearch } from './hooks/useSearch';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
 import { useFavoritePriceAlerts, type FavAlertData } from './hooks/useFavoritePriceAlerts';
@@ -131,7 +132,6 @@ export default function App() {
           runUpdateCheck();
         }
       } else {
-        triggerImmediateCheck();
         const s = favSyncRef.current;
         syncFavAlertsNative(s.coinsJson, s.upPct, s.downPct, s.refPricesJson, s.currency);
       }
@@ -202,25 +202,6 @@ export default function App() {
     setPendingFavAlerts(prev => new Map(prev).set(alert.coinId, alert));
   }, []);
 
-  // Legge e applica gli alert pendenti dal WorkManager nativo.
-  // Chiamata sia su cold start (visibilitychange non scatta) sia su foreground resume.
-  const applyPendingFavAlerts = useCallback(async () => {
-    const json = await getAndClearPendingFavAlerts();
-    try {
-      const pending: FavAlertData[] = JSON.parse(json);
-      if (pending.length === 0) return;
-      const refMap: Record<string, number> = JSON.parse(
-        localStorage.getItem('cs_fav_ref_prices') ?? '{}'
-      );
-      for (const a of pending) {
-        bumpRefPriceRef.current(a.coinId, a.currentPrice);
-        refMap[a.coinId] = a.currentPrice;
-        handleFavAlert(a);
-      }
-      localStorage.setItem('cs_fav_ref_prices', JSON.stringify(refMap));
-    } catch { /* ignore */ }
-  }, [handleFavAlert]);
-
   const handleDismissFavAlert = useCallback((coinId: string) => {
     setPendingFavAlerts(prev => {
       const next = new Map(prev);
@@ -289,23 +270,15 @@ export default function App() {
 
   const { containerRef: mainRef, indicatorRef: ptrRef, isRefreshing: ptrRefreshing } = usePullToRefresh(handleRefresh, isUpdateVisible);
 
-  // Cold start: visibilitychange non scatta se l'app parte già visibile (uccisa da Android).
-  // Leggiamo subito gli alert accumulati dal WorkManager durante il tempo in background.
-  useEffect(() => {
-    applyPendingFavAlerts();
-  }, [applyPendingFavAlerts]);
-
-  // Foreground resume: refresh prezzi e lettura alert in parallelo.
-  // refresh() parte subito senza aspettare il bridge nativo (~50ms vs ~500ms+ per l'API).
+  // Foreground resume: aggiorna i prezzi quando l'app torna visibile.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       refresh();
-      applyPendingFavAlerts();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refresh, applyPendingFavAlerts]);
+  }, [refresh]);
 
   const handleIntervalChange = useCallback((ms: number) => {
     setRefreshInterval(ms);
@@ -369,12 +342,20 @@ export default function App() {
     currency,
   };
 
-  // Sync favorite alert config + reference prices to the native WorkManager every price cycle
+  // Sync alert config to backend (FCM) and native SharedPreferences whenever it changes
   useEffect(() => {
     const coinsData = favoriteCoins.map(c => ({ id: c.id, name: c.name, symbol: c.symbol }));
     const refPricesJson = localStorage.getItem('cs_fav_ref_prices') ?? '{}';
+    const refPrices: Record<string, number> = (() => { try { return JSON.parse(refPricesJson); } catch { return {}; } })();
     syncFavAlertsNative(JSON.stringify(coinsData), favMoveUpPct, favMoveDownPct, refPricesJson, currency);
-  }, [favoriteCoins, favMoveUpPct, favMoveDownPct, currency]);
+    syncAlertsToBackend(alerts, rangeAlerts, {
+      coins: coinsData,
+      upPct: favMoveUpPct,
+      downPct: favMoveDownPct,
+      currency,
+      refPrices,
+    });
+  }, [alerts, rangeAlerts, favoriteCoins, favMoveUpPct, favMoveDownPct, currency]);
 
   const handleAddAlert = useCallback((coin: Coin) => {
     setSelectedCoin(coin);

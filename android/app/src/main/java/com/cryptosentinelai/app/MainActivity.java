@@ -16,7 +16,6 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.parseColor("#0a0e1a"));
         clearHttpCacheOnUpdate();
-        PriceCheckWorker.schedule(this);
     }
 
     private void clearHttpCacheOnUpdate() {

@@ -8,7 +8,6 @@ interface AppSettingsPlugin {
   getAlerts(): Promise<{ json: string }>;
   syncRangeAlerts(options: { json: string }): Promise<void>;
   getRangeAlerts(): Promise<{ json: string }>;
-  scheduleImmediateCheck(): Promise<void>;
   openWithChooser(options: { url: string; title?: string }): Promise<void>;
   addListener(event: 'downloadComplete', handler: (data: { status: string }) => void): Promise<PluginListenerHandle>;
 }
@@ -152,11 +151,6 @@ export async function getRangeAlertsFromNative(): Promise<string | null> {
 export async function syncRangeAlertsToNative(alerts: unknown[]): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   try { await AppSettings.syncRangeAlerts({ json: JSON.stringify(alerts) }); } catch { /* ignore */ }
-}
-
-export async function triggerImmediateCheck(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  try { await AppSettings.scheduleImmediateCheck(); } catch { /* ignore */ }
 }
 
 export async function openDownloadsFolder(): Promise<void> {
