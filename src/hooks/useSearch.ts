@@ -8,8 +8,10 @@ export function useSearch(query: string, currency = 'usd') {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestVersionRef = useRef(0);
 
   useEffect(() => {
+    const requestVersion = ++requestVersionRef.current;
     if (timerRef.current) clearTimeout(timerRef.current);
     abortRef.current?.abort();
 
@@ -27,19 +29,23 @@ export function useSearch(query: string, currency = 'usd') {
       const { signal } = abortRef.current;
 
       try {
-        setResults(await searchMarkets(query.trim(), currency, signal));
+        const nextResults = await searchMarkets(query.trim(), currency, signal);
+        if (requestVersion !== requestVersionRef.current) return;
+        setResults(nextResults);
         setError(null);
       } catch (err) {
+        if (requestVersion !== requestVersionRef.current) return;
         if ((err as Error).name !== 'AbortError') {
           setResults([]);
           setError((err as Error).message || 'Market data search failed');
         }
       } finally {
-        setSearching(false);
+        if (requestVersion === requestVersionRef.current) setSearching(false);
       }
     }, 400);
 
     return () => {
+      requestVersionRef.current += 1;
       if (timerRef.current) clearTimeout(timerRef.current);
       abortRef.current?.abort();
     };

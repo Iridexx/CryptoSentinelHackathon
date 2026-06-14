@@ -379,34 +379,13 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
 
     async def search(self, query: str, currency: str, limit: int = 25) -> list[MarketAsset]:
         needle = query.strip().lower()
-        matches: list[dict[str, Any]] = []
-        page_size = 1000
-        start = 1
-        while len(matches) < limit:
-            payload = await self._request_json(
-                "/v1/cryptocurrency/map",
-                params={
-                    "listing_status": "active",
-                    "start": start,
-                    "limit": page_size,
-                    "sort": "cmc_rank",
-                },
-                headers=self._headers,
-                estimated_credits=0,
-                cache_ttl_seconds=3600,
-            )
-            page = list(payload.get("data", []))
-            matches.extend(
-                item
-                for item in page
-                if needle in str(item.get("name", "")).lower()
-                or needle in str(item.get("symbol", "")).lower()
-                or needle in str(item.get("slug", "")).lower()
-            )
-            if matches or len(page) < page_size:
-                break
-            start += page_size
-        matches = matches[:limit]
+        matches = [
+            item
+            for item in await self._id_map()
+            if needle in str(item.get("name", "")).lower()
+            or needle in str(item.get("symbol", "")).lower()
+            or needle in str(item.get("slug", "")).lower()
+        ][:limit]
         if not matches:
             return []
         app_id_by_provider_id = {

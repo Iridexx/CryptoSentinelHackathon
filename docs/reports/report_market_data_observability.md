@@ -9,6 +9,9 @@
 - Aggiunta diagnostica locale frontend degli ultimi 100 eventi market-data.
 - Aggiunto un gate CI che impedisce di pubblicare APK senza URL backend e token Vite obbligatori.
 - Resi visibili nell'app gli errori di configurazione market-data precedenti alla rete.
+- Deduplicate le chiamate provider identiche già in corso per evitare code sul rate limiter.
+- La ricerca CMC riutilizza il catalogo paginato da 5.000 già usato per la risoluzione dei preferiti.
+- Le risposte Android obsolete non possono più sovrascrivere selettore, lista o ricerca correnti.
 
 ## 2. COME È STATO FATTO
 
@@ -28,6 +31,8 @@
 - `npx tsc -b`: passato.
 - Nessun token, header Authorization o chiave provider viene registrato.
 - I log reali hanno mostrato richieste alert funzionanti ma nessuna richiesta market-data: la causa era `VITE_API_READ_TOKEN` mancante nell'APK, quindi il client si fermava prima della rete.
+- Dopo la configurazione del token, i log hanno evidenziato richieste concorrenti accumulate per `40-163` secondi: cache stampede, ricerca con pagine separate da 1.000 e risposte native non annullabili.
+- Test concorrente: dieci richieste provider identiche producono una sola chiamata HTTP.
 
 ## 4. SCOSTAMENTI DAL PIANO
 

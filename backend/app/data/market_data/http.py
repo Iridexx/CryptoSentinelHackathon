@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping
 from time import perf_counter
@@ -66,6 +67,7 @@ class CachedHttpProvider:
         self.rate_limiter = AsyncRateLimiter(requests_per_minute)
         self.cache = TTLCache(cache_ttl_seconds)
         self._client = client
+        self._request_locks: dict[str, asyncio.Lock] = {}
         self.credits_used = 0
         self.requests_made = 0
 
@@ -89,6 +91,31 @@ class CachedHttpProvider:
             logger.info("provider_cache_hit", endpoint=path, **_params_summary(params))
             return cached
 
+        request_lock = self._request_locks.setdefault(key, asyncio.Lock())
+        async with request_lock:
+            cached = self.cache.get(key)
+            if cached is not None:
+                logger.info("provider_cache_wait_hit", endpoint=path, **_params_summary(params))
+                return cached
+            return await self._perform_request(
+                path,
+                params=params,
+                headers=headers,
+                estimated_credits=estimated_credits,
+                cache_ttl_seconds=cache_ttl_seconds,
+                cache_key=key,
+            )
+
+    async def _perform_request(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, Any],
+        headers: Mapping[str, str] | None,
+        estimated_credits: int,
+        cache_ttl_seconds: int | None,
+        cache_key: str,
+    ) -> Any:
         started = perf_counter()
         logger.info("provider_request_started", endpoint=path, **_params_summary(params))
         await self.rate_limiter.acquire()
@@ -114,7 +141,7 @@ class CachedHttpProvider:
         self.requests_made += 1
         status = payload.get("status", {}) if isinstance(payload, dict) else {}
         self.credits_used += int(status.get("credit_count") or estimated_credits)
-        self.cache.set(key, payload, cache_ttl_seconds)
+        self.cache.set(cache_key, payload, cache_ttl_seconds)
         data = payload.get("data") if isinstance(payload, dict) else None
         item_count = len(payload) if isinstance(payload, list) else len(data) if isinstance(data, list) else None
         logger.info(

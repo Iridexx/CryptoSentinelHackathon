@@ -29,13 +29,16 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<() => Promise<void>>(async () => {});
   const coinsRef = useRef<Coin[]>(page === 1 ? loadCachedCoins() : []);
+  const requestVersionRef = useRef(0);
 
   const fetchCoins = useCallback(async () => {
+    const requestVersion = ++requestVersionRef.current;
     if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
       const data = await fetchCoinsAll(perPage, page, currency, abortRef.current.signal);
+      if (requestVersion !== requestVersionRef.current) return;
       coinsRef.current = data;
       setCoins(data);
       setError(null);
@@ -44,6 +47,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
       }
     } catch (err) {
+      if (requestVersion !== requestVersionRef.current) return;
       if ((err as Error).name === 'AbortError') return;
       const msg = (err as Error).message ?? '';
       const isConfigurationError = msg.includes('not configured');
@@ -59,7 +63,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
       }
       setError('Unable to load prices. Showing cached data.');
     } finally {
-      setLoading(false);
+      if (requestVersion === requestVersionRef.current) setLoading(false);
     }
   }, [perPage, page, currency]);
 
@@ -78,6 +82,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
     fetchCoins();
     timerRef.current = setInterval(fetchCoins, intervalMs);
     return () => {
+      requestVersionRef.current += 1;
       if (timerRef.current !== null) clearInterval(timerRef.current);
       timerRef.current = null;
       if (retryRef.current !== null) clearTimeout(retryRef.current);
