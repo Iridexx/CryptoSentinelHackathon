@@ -60,7 +60,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- perp/orderflow_delta_v2.py - placeholder order-flow delta V2.
 |   |   |-- core/ - configurazione, logging e sicurezza.
 |   |   |   |-- config.py - unico loader Settings: fonde .env + configs/*.yaml, valida guardrail hard.
-|   |   |   |-- logging.py - setup logging strutturato structlog JSON/console.
+|   |   |   |-- logging.py - structlog JSON/console con file giornaliero rotante e retention configurabile.
 |   |   |   `-- security/ - sicurezza API/custody.
 |   |   |       |-- auth.py - autenticazione token read/device/admin fail-closed.
 |   |   |       |-- headers.py - security headers e HSTS condizionale.
@@ -129,9 +129,10 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
-|   |-- services/marketData.ts - client unico verso API backend normalizzate; timeout Android esteso per richieste provider lente.
+|   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- utils/ - notifiche, update, haptics, audio, energy saving.
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
+|   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
 |   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti mancanti con retry rapido e righe temporanee per tutti gli ID salvati.
@@ -264,6 +265,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Package Android dedicato | Il fork hackathon usa `com.cryptosentinelai.app` per non collidere con l'app CryptoSentinel esistente sul device e su Firebase/Play metadata. |
 | `google-services.json` solo da secret CI | Il file Android Firebase resta gitignored e viene ricostruito in CI da `GOOGLE_SERVICES_JSON` base64 senza stampare il contenuto. |
 | Artifact APK prima delle release | Il download dell'APK non deve dipendere dal successo degli step `gh release`, che sono accessori e possono fallire per collisioni/rate limit. |
+| Gate segreti build APK | La CI interrompe la build prima di Vite se URL backend o token client obbligatori sono assenti, evitando APK parzialmente funzionanti. |
 | FCM come unico percorso background | Rimossi WorkManager e BootReceiver: il backend controlla gli alert ogni 60 secondi e FCM consegna anche ad app chiusa. |
 | Backend unica fonte notifiche | Gli hook frontend non fanno scattare notifiche, beep o popup autonomi; in foreground viene mostrato localmente solo il push FCM ricevuto. |
 | Stato UI derivato dal push | Il payload FCM dei preferiti ripristina evidenziazione arancione e popup; il tap sulla notifica apre la tab Preferiti senza rieseguire controlli prezzo locali. |

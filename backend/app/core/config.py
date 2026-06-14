@@ -51,6 +51,8 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
     "logging": {
         "level": "log_level",
         "format": "log_format",
+        "file_enabled": "log_file_enabled",
+        "file_path": "log_file_path",
         "retention_days": "log_retention_days",
         "decision_retention_days": "decision_log_retention_days",
     },
@@ -264,6 +266,8 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: Literal["json", "console"] = Field(default="json", alias="LOG_FORMAT")
+    log_file_enabled: bool = Field(default=True, alias="LOG_FILE_ENABLED")
+    log_file_path: str = Field(default="logs/backend.log", alias="LOG_FILE_PATH")
     log_retention_days: int = Field(default=14, alias="LOG_RETENTION_DAYS")
     decision_log_retention_days: int = Field(default=30, alias="DECISION_LOG_RETENTION_DAYS")
 

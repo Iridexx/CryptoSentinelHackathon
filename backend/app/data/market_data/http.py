@@ -4,14 +4,49 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from time import perf_counter
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 
 from backend.app.data.market_data.base import ProviderError
+from backend.app.core.logging import get_logger
 from backend.app.data.market_data.cache import TTLCache
 from backend.app.data.market_data.rate_limit import AsyncRateLimiter
+
+
+logger = get_logger("market_data.http")
+
+_LOGGABLE_PARAM_KEYS = {
+    "convert",
+    "id",
+    "ids",
+    "interval",
+    "limit",
+    "page",
+    "start",
+    "symbol",
+    "time_end",
+    "time_period",
+    "time_start",
+}
+
+
+def _params_summary(params: Mapping[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "param_keys": sorted(
+            key for key, value in params.items() if value is not None and key in _LOGGABLE_PARAM_KEYS
+        )
+    }
+    for key in ("start", "limit", "page", "convert", "time_period", "interval"):
+        if params.get(key) is not None:
+            summary[key] = params[key]
+    for key in ("id", "ids", "symbol"):
+        value = params.get(key)
+        if value:
+            summary[f"{key}_count"] = len(str(value).split(","))
+    return summary
 
 
 class CachedHttpProvider:
@@ -51,8 +86,11 @@ class CachedHttpProvider:
         key = self._cache_key(path, params)
         cached = self.cache.get(key)
         if cached is not None:
+            logger.info("provider_cache_hit", endpoint=path, **_params_summary(params))
             return cached
 
+        started = perf_counter()
+        logger.info("provider_request_started", endpoint=path, **_params_summary(params))
         await self.rate_limiter.acquire()
         client = self._client or httpx.AsyncClient(timeout=self.timeout_seconds)
         owns_client = self._client is None
@@ -61,6 +99,13 @@ class CachedHttpProvider:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "provider_request_failed",
+                endpoint=path,
+                elapsed_ms=round((perf_counter() - started) * 1000, 2),
+                error_type=type(exc).__name__,
+                **_params_summary(params),
+            )
             raise ProviderError(f"Provider request failed for {path}: {exc}") from exc
         finally:
             if owns_client:
@@ -70,4 +115,15 @@ class CachedHttpProvider:
         status = payload.get("status", {}) if isinstance(payload, dict) else {}
         self.credits_used += int(status.get("credit_count") or estimated_credits)
         self.cache.set(key, payload, cache_ttl_seconds)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        item_count = len(payload) if isinstance(payload, list) else len(data) if isinstance(data, list) else None
+        logger.info(
+            "provider_request_completed",
+            endpoint=path,
+            status_code=response.status_code,
+            elapsed_ms=round((perf_counter() - started) * 1000, 2),
+            item_count=item_count,
+            credit_count=int(status.get("credit_count") or estimated_credits),
+            **_params_summary(params),
+        )
         return payload

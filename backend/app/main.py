@@ -5,7 +5,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from time import perf_counter
 from typing import Any
+from uuid import uuid4
 
+import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -73,7 +75,8 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-API-Token"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Token", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
     )
 
     @app.middleware("http")
@@ -82,17 +85,37 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_logging_middleware(request: Request, call_next: Any) -> Response:
+        request_id = request.headers.get("X-Request-ID") or uuid4().hex
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(request_id=request_id)
         started = perf_counter()
-        response = await call_next(request)
-        elapsed_ms = round((perf_counter() - started) * 1000, 2)
         logger.info(
-            "request_completed",
+            "request_started",
             method=request.method,
             path=request.url.path,
-            status_code=response.status_code,
-            elapsed_ms=elapsed_ms,
+            client=request.client.host if request.client else None,
         )
-        return response
+        try:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            logger.info(
+                "request_completed",
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                elapsed_ms=round((perf_counter() - started) * 1000, 2),
+            )
+            return response
+        except Exception:
+            logger.exception(
+                "request_failed",
+                method=request.method,
+                path=request.url.path,
+                elapsed_ms=round((perf_counter() - started) * 1000, 2),
+            )
+            raise
+        finally:
+            structlog.contextvars.clear_contextvars()
 
     app.include_router(api_router)
     return app

@@ -4,6 +4,30 @@ FastAPI backend for the BNB Hack Track 1 autonomous trading agent.
 
 The backend includes the Step 3 provider-neutral market data layer on top of the Step 2 notification path: CoinMarketCap and CoinGecko adapters, one global manual selector, normalized responses, CMC rate limiting and credit-aware caching, CMC MCP metadata, and a notification checker that uses the selected provider. Trading, database persistence, and agent decisions are implemented in later steps.
 
+## Market data diagnostics
+
+Structured logs are written to the console and, by default, to `logs/backend.log`.
+The file rotates daily and keeps 14 days unless changed in `configs/instance.yaml`.
+
+Each API request receives an `X-Request-ID`. Market-data events with the same ID include:
+
+- `request_started`, `request_completed`, or `request_failed`
+- `provider_cache_hit`, `provider_request_started`, `provider_request_completed`, or `provider_request_failed`
+- `market_list_completed`, `market_search_completed`, `identity_resolution_completed`, and `price_list_completed`
+
+Useful PowerShell commands:
+
+```powershell
+Get-Content .\logs\backend.log -Wait
+Select-String -Path .\logs\backend.log -Pattern 'market_list_completed|market_search_completed|identity_resolution_completed|provider_request_failed'
+```
+
+Logs contain endpoint names, counts, timings, missing asset IDs, status, and credit usage. Authorization headers, API tokens, and provider keys are never logged.
+
+If alert requests reach the backend but no `/api/v1/market-data/*` request is
+logged, verify the APK build-time `VITE_API_READ_TOKEN`: market-data requests
+require it before any network call is attempted.
+
 ## Current Scope
 
 - FastAPI application factory in `backend/app/main.py`.

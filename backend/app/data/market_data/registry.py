@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from time import perf_counter
 
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.logging import get_logger
 from backend.app.data.market_data.base import (
     AssetIdentity,
     MarketAsset,
@@ -17,6 +19,8 @@ from backend.app.data.market_data.base import (
 )
 from backend.app.data.market_data.cmc import CMCProvider
 from backend.app.data.market_data.coingecko import CoinGeckoProvider
+
+logger = get_logger("market_data.registry")
 
 
 class MarketDataRegistry:
@@ -54,14 +58,40 @@ class MarketDataRegistry:
         return [provider.status() for provider in self._providers.values()]
 
     async def _active_identities(self, asset_ids: list[str]) -> list[AssetIdentity]:
+        started = perf_counter()
         if self._active is not ProviderName.CMC:
-            return await self.active.resolve_asset_identities(asset_ids)
+            identities = await self.active.resolve_asset_identities(asset_ids)
+            logger.info(
+                "identity_resolution_completed",
+                provider=self._active.value,
+                requested_count=len(asset_ids),
+                resolved_count=len(identities),
+                unresolved_ids=[asset_id for asset_id in asset_ids if asset_id not in {item.app_id for item in identities}],
+                elapsed_ms=round((perf_counter() - started) * 1000, 2),
+            )
+            return identities
         identity_source = self._providers[ProviderName.COINGECKO]
         try:
             hints = await identity_source.resolve_asset_identities(asset_ids)
-        except ProviderError:
+        except ProviderError as exc:
+            logger.warning(
+                "identity_hint_failed",
+                requested_count=len(asset_ids),
+                error_type=type(exc).__name__,
+            )
             hints = []
-        return await self.active.resolve_asset_identities(asset_ids, hints)
+        identities = await self.active.resolve_asset_identities(asset_ids, hints)
+        resolved_ids = {item.app_id for item in identities}
+        logger.info(
+            "identity_resolution_completed",
+            provider=self._active.value,
+            requested_count=len(asset_ids),
+            hint_count=len(hints),
+            resolved_count=len(identities),
+            unresolved_ids=[asset_id for asset_id in asset_ids if asset_id not in resolved_ids],
+            elapsed_ms=round((perf_counter() - started) * 1000, 2),
+        )
+        return identities
 
     async def get_market_list(
         self,
@@ -70,8 +100,20 @@ class MarketDataRegistry:
         page: int = 1,
         asset_ids: list[str] | None = None,
     ) -> list[MarketAsset]:
+        started = perf_counter()
         if not asset_ids:
-            return await self.active.get_market_list(currency, limit, page)
+            items = await self.active.get_market_list(currency, limit, page)
+            logger.info(
+                "market_list_completed",
+                provider=self._active.value,
+                mode="ranked",
+                requested_count=limit,
+                returned_count=len(items),
+                page=page,
+                currency=currency.lower(),
+                elapsed_ms=round((perf_counter() - started) * 1000, 2),
+            )
+            return items
         identities = await self._active_identities(asset_ids)
         app_id_by_provider_id = {
             identity.provider_id: identity.app_id for identity in identities
@@ -82,27 +124,64 @@ class MarketDataRegistry:
             page,
             list(app_id_by_provider_id),
         )
-        return [
+        normalized = [
             item.model_copy(update={"id": app_id_by_provider_id.get(item.id, item.id)})
             for item in items
         ]
+        logger.info(
+            "market_list_completed",
+            provider=self._active.value,
+            mode="ids",
+            requested_count=len(asset_ids),
+            identity_count=len(identities),
+            returned_count=len(normalized),
+            missing_ids=[asset_id for asset_id in asset_ids if asset_id not in {item.id for item in normalized}],
+            currency=currency.lower(),
+            elapsed_ms=round((perf_counter() - started) * 1000, 2),
+        )
+        return normalized
 
     async def get_prices(
         self,
         asset_ids: list[str],
         currencies: list[str],
     ) -> list[PriceQuote]:
+        started = perf_counter()
         identities = await self._active_identities(asset_ids)
         app_id_by_provider_id = {
             identity.provider_id: identity.app_id for identity in identities
         }
         quotes = await self.active.get_prices(list(app_id_by_provider_id), currencies)
-        return [
+        normalized = [
             quote.model_copy(
                 update={"asset_id": app_id_by_provider_id.get(quote.asset_id, quote.asset_id)}
             )
             for quote in quotes
         ]
+        logger.info(
+            "price_list_completed",
+            provider=self._active.value,
+            requested_asset_count=len(asset_ids),
+            identity_count=len(identities),
+            returned_quote_count=len(normalized),
+            currencies=currencies,
+            elapsed_ms=round((perf_counter() - started) * 1000, 2),
+        )
+        return normalized
+
+    async def search(self, query: str, currency: str, limit: int) -> list[MarketAsset]:
+        started = perf_counter()
+        items = await self.active.search(query, currency, limit)
+        logger.info(
+            "market_search_completed",
+            provider=self._active.value,
+            query=query,
+            requested_count=limit,
+            returned_count=len(items),
+            currency=currency.lower(),
+            elapsed_ms=round((perf_counter() - started) * 1000, 2),
+        )
+        return items
 
     async def get_ohlcv(
         self,

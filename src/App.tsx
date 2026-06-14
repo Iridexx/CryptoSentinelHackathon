@@ -265,7 +265,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [coins, rankAnimTopN]);
 
-  const { results: searchResults, searching } = useSearch(search, currency);
+  const { results: searchResults, searching, error: searchError } = useSearch(search, currency);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
   const { alerts, addAlert, removeAlert, resetAlert, editAlert, toggleAlert, clearAlerts, history, clearHistory } = useAlerts();
   const { rangeAlerts, addRangeAlert, removeRangeAlert, editRangeAlert, toggleRangeAlert } = useRangeAlerts();
@@ -599,9 +599,11 @@ export default function App() {
                 <div className="text-center py-12">
                   <div className="text-4xl mb-3">🔍</div>
                   <p className="text-gray-500 text-sm">
-                    {isSearching
+                    {isSearching && searchError
+                      ? searchError
+                      : isSearching
                       ? `Nessuna criptovaluta trovata per "${search}"`
-                      : 'Nessuna criptovaluta disponibile'}
+                      : error ?? 'Nessuna criptovaluta disponibile'}
                   </p>
                 </div>
               ) : (

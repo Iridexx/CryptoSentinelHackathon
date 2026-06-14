@@ -54,7 +54,17 @@ jobs:
           VITE_API_READ_TOKEN: ${{ secrets.VITE_API_READ_TOKEN }}
           VITE_API_DEVICE_TOKEN: ${{ secrets.VITE_API_DEVICE_TOKEN }}
           VITE_API_ALERTS_TOKEN: ${{ secrets.VITE_API_ALERTS_TOKEN }}
-        run: npm run build
+        run: |
+          missing=()
+          [ -n "$VITE_BACKEND_API_BASE_URL" ] || missing+=("VITE_BACKEND_API_BASE_URL")
+          [ -n "$VITE_API_READ_TOKEN" ] || missing+=("VITE_API_READ_TOKEN")
+          [ -n "$VITE_API_DEVICE_TOKEN" ] || missing+=("VITE_API_DEVICE_TOKEN")
+          [ -n "$VITE_API_ALERTS_TOKEN" ] || missing+=("VITE_API_ALERTS_TOKEN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing required APK build secrets: ${missing[*]}"
+            exit 1
+          fi
+          npm run build
 
       - name: Sync Capacitor assets in Android
         run: npx cap sync android

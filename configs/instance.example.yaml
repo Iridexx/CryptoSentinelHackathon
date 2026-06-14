@@ -31,6 +31,8 @@ database:
 logging:
   level: INFO
   format: json
+  file_enabled: true
+  file_path: logs/backend.log
   retention_days: 14
   decision_retention_days: 30
 

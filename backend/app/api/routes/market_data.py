@@ -101,7 +101,7 @@ async def search(
     """Search assets through the selected provider."""
 
     try:
-        items = await registry.active.search(q, currency, limit)
+        items = await registry.search(q, currency, limit)
     except ProviderError as exc:
         _raise_provider_error(exc)
     return MarketListResponse(provider=registry.active_name, currency=currency.lower(), items=items)

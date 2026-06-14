@@ -46,7 +46,12 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       const msg = (err as Error).message ?? '';
+      const isConfigurationError = msg.includes('not configured');
       const isRateLimit = msg.includes('429');
+      if (isConfigurationError) {
+        setError(msg);
+        return;
+      }
       // Retry silently if rate-limited or if we already have data to display
       if (isRateLimit || coinsRef.current.length > 0) {
         retryRef.current = setTimeout(() => fetchRef.current(), isRateLimit ? 15_000 : 10_000);
