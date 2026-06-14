@@ -19,6 +19,7 @@ from backend.app.data.market_data.base import (
     PriceQuote,
     ProviderCapabilityError,
     ProviderConfigurationError,
+    ProviderError,
     ProviderName,
     ProviderRuntimeStatus,
 )
@@ -118,18 +119,23 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         start = 1
         items: list[dict[str, Any]] = []
         while True:
-            payload = await self._request_json(
-                "/v1/cryptocurrency/map",
-                params={
-                    "listing_status": "active",
-                    "start": start,
-                    "limit": page_size,
-                    "sort": "cmc_rank",
-                },
-                headers=self._headers,
-                estimated_credits=0,
-                cache_ttl_seconds=3600,
-            )
+            try:
+                payload = await self._request_json(
+                    "/v1/cryptocurrency/map",
+                    params={
+                        "listing_status": "active",
+                        "start": start,
+                        "limit": page_size,
+                        "sort": "cmc_rank",
+                    },
+                    headers=self._headers,
+                    estimated_credits=0,
+                    cache_ttl_seconds=3600,
+                )
+            except ProviderError:
+                if items:
+                    return items
+                raise
             page = list(payload.get("data", []))
             items.extend(page)
             if len(page) < page_size:
@@ -137,9 +143,22 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
             start += page_size
 
     async def _resolve_ids(self, asset_ids: list[str]) -> dict[str, dict[str, Any]]:
+        numeric = {
+            asset_id: {
+                "id": asset_id,
+                "slug": asset_id,
+                "symbol": "",
+                "name": asset_id,
+            }
+            for asset_id in asset_ids
+            if asset_id.isdigit()
+        }
+        remaining_ids = [asset_id for asset_id in asset_ids if asset_id not in numeric]
+        if not remaining_ids:
+            return numeric
         requested = {
             asset_id.lower(): cmc_slug_for_app_id(asset_id)
-            for asset_id in asset_ids
+            for asset_id in remaining_ids
         }
         requested_candidates = set(requested.values()) | set(requested)
         resolved: dict[str, dict[str, Any]] = {}
@@ -150,12 +169,13 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
             for candidate in (slug, symbol, provider_id):
                 if candidate in requested_candidates and candidate not in resolved:
                     resolved[candidate] = item
-        return {
+        mapped = {
             asset_id: resolved.get(requested[asset_id.lower()]) or resolved.get(asset_id.lower())
-            for asset_id in asset_ids
+            for asset_id in remaining_ids
             if resolved.get(requested[asset_id.lower()]) is not None
             or resolved.get(asset_id.lower()) is not None
         }
+        return {**numeric, **mapped}
 
     async def resolve_asset_identities(
         self,
@@ -201,6 +221,46 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
                     symbol=str(match.get("symbol", "")).upper(),
                     name=str(match.get("name", hint.name)),
                 )
+
+        unresolved_hints = [
+            hints[app_id]
+            for app_id in asset_ids
+            if app_id not in resolved and app_id in hints and hints[app_id].symbol
+        ]
+        if unresolved_hints:
+            payload = await self._request_json(
+                "/v3/cryptocurrency/quotes/latest",
+                params={
+                    "symbol": ",".join(sorted({hint.symbol.upper() for hint in unresolved_hints})),
+                    "convert": "USD",
+                    "skip_invalid": "true",
+                },
+                headers=self._headers,
+                estimated_credits=max(1, ceil(len(unresolved_hints) / 100)),
+            )
+            quote_items = self._quote_items(payload)
+            for hint in unresolved_hints:
+                candidates = [
+                    item
+                    for item in quote_items
+                    if str(item.get("symbol", "")).upper() == hint.symbol.upper()
+                ]
+                exact = next(
+                    (
+                        item
+                        for item in candidates
+                        if _identity_key(str(item.get("name", ""))) == _identity_key(hint.name)
+                    ),
+                    None,
+                )
+                match = exact or (candidates[0] if len(candidates) == 1 else None)
+                if match is not None:
+                    resolved[hint.app_id] = AssetIdentity(
+                        app_id=hint.app_id,
+                        provider_id=str(match["id"]),
+                        symbol=str(match.get("symbol", "")).upper(),
+                        name=str(match.get("name", hint.name)),
+                    )
         return [resolved[asset_id] for asset_id in asset_ids if asset_id in resolved]
 
     @staticmethod

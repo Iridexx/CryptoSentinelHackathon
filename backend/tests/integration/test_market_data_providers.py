@@ -525,6 +525,105 @@ async def test_cmc_id_map_paginates_beyond_first_5000_assets() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cmc_id_map_keeps_first_page_when_later_page_fails() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params["start"] == "1":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": index, "name": f"Coin {index}", "symbol": f"C{index}", "slug": f"coin-{index}"}
+                        for index in range(1, 5001)
+                    ]
+                },
+            )
+        return httpx.Response(500, json={"status": {"error_message": "page unavailable"}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await CMCProvider(settings(), client)._id_map()
+
+    assert len(items) == 5000
+    assert items[0]["slug"] == "coin-1"
+    assert items[-1]["slug"] == "coin-5000"
+
+
+@pytest.mark.asyncio
+async def test_cmc_resolves_identity_hint_by_symbol_when_map_does_not_contain_asset() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/map"):
+            return httpx.Response(200, json={"data": []})
+        assert request.url.params["symbol"] == "NIGHT"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 12345,
+                    "name": "Midnight",
+                    "symbol": "NIGHT",
+                    "slug": "midnight",
+                    "quote": [{"symbol": "USD", "price": 0.03}],
+                }
+            ],
+        )
+
+    hint = AssetIdentity(
+        app_id="midnight-3",
+        provider_id="midnight-3",
+        symbol="NIGHT",
+        name="Midnight",
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        identities = await CMCProvider(settings(), client).resolve_asset_identities(
+            [hint.app_id],
+            [hint],
+        )
+
+    assert identities == [
+        AssetIdentity(
+            app_id="midnight-3",
+            provider_id="12345",
+            symbol="NIGHT",
+            name="Midnight",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_cmc_fetches_resolved_numeric_provider_id_without_map_lookup() -> None:
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        assert request.url.path == "/v3/cryptocurrency/quotes/latest"
+        assert request.url.params["id"] == "12345"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 12345,
+                    "name": "Midnight",
+                    "symbol": "NIGHT",
+                    "slug": "midnight",
+                    "quote": [{"symbol": "USD", "price": 0.03, "percent_change_24h": 4.0}],
+                }
+            ],
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await CMCProvider(settings(), client).get_market_list(
+            "usd",
+            1,
+            asset_ids=["12345"],
+        )
+
+    assert requested_paths == ["/v3/cryptocurrency/quotes/latest"]
+    assert items[0].id == "12345"
+    assert items[0].price == 0.03
+    assert items[0].percent_change_24h == 4.0
+    assert items[0].image_url.endswith("/12345.png")
+
+
+@pytest.mark.asyncio
 async def test_cmc_historical_ohlcv_is_split_into_30_day_windows() -> None:
     requested_windows: list[tuple[datetime, datetime]] = []
 

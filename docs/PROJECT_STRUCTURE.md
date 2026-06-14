@@ -70,7 +70,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- base.py - interfaccia MarketDataProvider, identità asset e modelli normalizzati.
 |   |   |   |   |-- aliases.py - mapping ID storico app/CoinGecko verso slug CMC.
 |   |   |   |   |-- registry.py - selettore globale e riconciliazione ID storici resiliente: conserva i risultati CMC se il catalogo identità è indisponibile.
-|   |   |   |   |-- cmc.py - adapter CMC REST primario con matching identità per nome e simbolo.
+|   |   |   |   |-- cmc.py - adapter CMC REST primario con map resiliente, matching nome/simbolo e accesso diretto tramite ID numerico.
 |   |   |   |   |-- coingecko.py - adapter CoinGecko secondario e catalogo identità degli ID storici con cache giornaliera.
 |   |   |   |   |-- http.py - client condiviso con cache, rate limiting e contatore crediti.
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.

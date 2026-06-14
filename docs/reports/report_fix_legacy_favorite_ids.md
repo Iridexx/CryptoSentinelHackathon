@@ -13,6 +13,9 @@
 - Esteso da 15 a 60 secondi il timeout di lettura HTTP Android e aggiunto retry ogni 5 secondi per il recupero mirato.
 - Resa non bloccante la riconciliazione identità: un errore o rate limit CoinGecko non elimina più gli asset già risolti da CMC.
 - Estesa a 24 ore la cache delle identità storiche CoinGecko.
+- Resa resiliente la paginazione del catalogo CMC: un errore su una pagina successiva conserva gli asset già caricati.
+- Aggiunta risoluzione CMC per simbolo degli asset non presenti nelle pagine map disponibili.
+- Gli ID numerici CMC già risolti vengono inviati direttamente a `quotes/latest`, evitando una seconda scansione del catalogo.
 - Aggiunti test su recupero mirato e lista mercato.
 
 ## 2. COME È STATO FATTO
@@ -26,12 +29,13 @@
 - Il checker backend ha confermato prezzi CMC presenti per tutti i 14 ID reali; il problema residuo era quindi nella rappresentazione frontend quando la richiesta mirata non terminava entro il timeout nativo.
 - Le righe temporanee mantengono l'ID e lo stato preferito; vengono sostituite dai dati normalizzati senza modificare il `localStorage`.
 - Il registry restituisce i risultati CMC parziali già disponibili anche quando il solo catalogo identità secondario fallisce; CoinGecko non viene usato come fallback dei prezzi.
+- Per gli asset a bassa capitalizzazione o oltre la pagina CMC disponibile, CoinGecko fornisce soltanto nome/simbolo; prezzo, percentuale e URL icona sono sempre costruiti dalla risposta CMC.
 - Nessun preferito viene cancellato, migrato o sostituito nel `localStorage`.
 - L'endpoint CMC map viene interrogato a blocchi da 5.000 fino all'ultima pagina e ogni pagina resta in cache.
 
 ## 3. COSA È STATO VERIFICATO
 
-- Suite backend: `23 passed, 1 skipped`.
+- Suite backend: `26 passed, 1 skipped`.
 - Test multi-ID: tre preferiti legacy con slug CMC divergenti vengono tutti restituiti.
 - Test lista mercato: BNB da CMC viene normalizzato con ID applicativo `binancecoin`.
 - Test catalogo: verificato recupero di una coin nella seconda pagina CMC (`start=5001`).
@@ -42,6 +46,9 @@
 - `npm run lint`: resta non verde per errori React preesistenti; nessun nuovo errore TypeScript.
 - Verifica dati runtime: configurazione backend con 14 preferiti e stato prezzi CMC valorizzato per tutti e 14.
 - Test resilienza: verificato che un errore del catalogo identità non trasformi una risposta CMC valida in una lista vuota.
+- Test paginazione: verificato che una seconda pagina CMC fallita non cancelli i primi 5.000 asset.
+- Test simbolo: verificata la risoluzione di `midnight-3` tramite `NIGHT`.
+- Test ID nativo: verificato recupero diretto di prezzo, percentuale e icona tramite ID numerico CMC senza nuova chiamata map.
 
 ## 4. SCOSTAMENTI DAL PIANO
 
