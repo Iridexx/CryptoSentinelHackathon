@@ -185,57 +185,83 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         if not asset_ids:
             return []
         hints = {hint.app_id: hint for hint in identity_hints or []}
-        resolved: dict[str, AssetIdentity] = {}
-        usable_hints = [hints[app_id] for app_id in asset_ids if app_id in hints and hints[app_id].symbol]
-        if usable_hints:
-            payload = await self._request_json(
-                "/v3/cryptocurrency/quotes/latest",
-                params={
-                    "symbol": ",".join(sorted({hint.symbol.upper() for hint in usable_hints})),
-                    "convert": "USD",
-                    "skip_invalid": "true",
-                },
-                headers=self._headers,
-                estimated_credits=max(1, ceil(len(usable_hints) / 100)),
+        direct = await self._resolve_ids(asset_ids)
+        resolved = {
+            app_id: AssetIdentity(
+                app_id=app_id,
+                provider_id=str(item["id"]),
+                symbol=str(item.get("symbol", "")).upper(),
+                name=str(item.get("name", app_id)),
             )
-            quote_items = self._quote_items(payload)
-            for hint in usable_hints:
-                candidates = [
-                    item
-                    for item in quote_items
-                    if str(item.get("symbol", "")).upper() == hint.symbol.upper()
-                ]
-                exact = next(
-                    (
-                        item
-                        for item in candidates
-                        if _identity_key(str(item.get("name", ""))) == _identity_key(hint.name)
-                    ),
-                    None,
-                )
-                match = exact or (candidates[0] if len(candidates) == 1 else None)
-                if match is not None:
-                    resolved[hint.app_id] = AssetIdentity(
-                        app_id=hint.app_id,
-                        provider_id=str(match["id"]),
-                        symbol=str(match.get("symbol", "")).upper(),
-                        name=str(match.get("name", hint.name)),
-                    )
+            for app_id, item in direct.items()
+        }
 
         unresolved = [asset_id for asset_id in asset_ids if asset_id not in resolved]
         if unresolved:
-            direct = await self._resolve_ids(unresolved)
-            resolved.update(
-                {
-                    app_id: AssetIdentity(
+            catalog = await self._id_map()
+            for app_id in unresolved:
+                hint = hints.get(app_id)
+                if hint is None:
+                    continue
+                matches = [
+                    item
+                    for item in catalog
+                    if _identity_key(str(item.get("name", ""))) == _identity_key(hint.name)
+                ]
+                if len(matches) != 1 and hint.symbol:
+                    matches = [
+                        item
+                        for item in catalog
+                        if str(item.get("symbol", "")).upper() == hint.symbol.upper()
+                    ]
+                if len(matches) == 1:
+                    item = matches[0]
+                    resolved[app_id] = AssetIdentity(
                         app_id=app_id,
                         provider_id=str(item["id"]),
                         symbol=str(item.get("symbol", "")).upper(),
-                        name=str(item.get("name", app_id)),
+                        name=str(item.get("name", hint.name)),
                     )
-                    for app_id, item in direct.items()
-                }
+
+        unresolved = [asset_id for asset_id in asset_ids if asset_id not in resolved]
+        for app_id in unresolved:
+            hint = hints.get(app_id)
+            if hint is None or not hint.symbol:
+                continue
+            try:
+                payload = await self._request_json(
+                    "/v3/cryptocurrency/quotes/latest",
+                    params={
+                        "symbol": hint.symbol.upper(),
+                        "convert": "USD",
+                        "skip_invalid": "true",
+                    },
+                    headers=self._headers,
+                    estimated_credits=1,
+                )
+            except ProviderError:
+                continue
+            candidates = [
+                item
+                for item in self._quote_items(payload)
+                if str(item.get("symbol", "")).upper() == hint.symbol.upper()
+            ]
+            exact = next(
+                (
+                    item
+                    for item in candidates
+                    if _identity_key(str(item.get("name", ""))) == _identity_key(hint.name)
+                ),
+                None,
             )
+            match = exact or (candidates[0] if len(candidates) == 1 else None)
+            if match is not None:
+                resolved[app_id] = AssetIdentity(
+                    app_id=app_id,
+                    provider_id=str(match["id"]),
+                    symbol=str(match.get("symbol", "")).upper(),
+                    name=str(match.get("name", hint.name)),
+                )
         return [resolved[asset_id] for asset_id in asset_ids if asset_id in resolved]
 
     @staticmethod

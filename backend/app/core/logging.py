@@ -68,6 +68,6 @@ def configure_logging(settings: Settings) -> None:
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    """Return a structured logger bound to a component name."""
+    """Return a lazy structured logger with a component name."""
 
-    return structlog.get_logger(name).bind(component=name)
+    return structlog.get_logger(name, component=name)

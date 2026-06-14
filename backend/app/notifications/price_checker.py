@@ -81,11 +81,24 @@ async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
 
     prices = await _fetch_prices(coin_ids, list(vs), registry)
     if not prices:
+        logger.warning(
+            "price_check_no_prices",
+            provider=(registry or get_market_data_registry()).active_name.value,
+            requested_count=len(coin_ids),
+        )
         return
+    logger.info(
+        "price_check_prices_loaded",
+        provider=(registry or get_market_data_registry()).active_name.value,
+        requested_count=len(coin_ids),
+        returned_count=len(prices),
+        missing_ids=[coin_id for coin_id in coin_ids if coin_id not in prices],
+    )
 
     svc = get_notification_service()
     tokens = svc.store.tokens_for_user(DEFAULT_SINGLE_USER_ID)
     if not tokens:
+        logger.warning("price_check_no_devices", requested_count=len(coin_ids))
         return
 
     state = store.get_state()

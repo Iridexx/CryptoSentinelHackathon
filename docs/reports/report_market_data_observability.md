@@ -12,6 +12,9 @@
 - Deduplicate le chiamate provider identiche già in corso per evitare code sul rate limiter.
 - La ricerca CMC riutilizza il catalogo paginato da 5.000 già usato per la risoluzione dei preferiti.
 - Le risposte Android obsolete non possono più sovrascrivere selettore, lista o ricerca correnti.
+- I preferiti sono caricati sempre come insieme completo e non dipendono più dalla dimensione `50/100/200/400/600` del mercato.
+- La risoluzione CMC usa catalogo, slug, nome e simbolo univoco prima di interrogare singoli simboli; un simbolo invalido non annulla più l'intero gruppo prezzi/alert.
+- I logger dei moduli sono inizializzati in modo lazy, così provider e checker notifiche usano la configurazione strutturata applicata all'avvio.
 
 ## 2. COME È STATO FATTO
 
@@ -25,7 +28,7 @@
 
 ## 3. COSA È STATO VERIFICATO
 
-- Suite backend: `29 passed, 1 skipped`.
+- Suite backend: `31 passed, 1 skipped`.
 - Test anti-leak: i riepiloghi log contengono conteggi ma non valori di parametri non autorizzati.
 - `ruff check backend/app backend/tests`: passato.
 - `npx tsc -b`: passato.
@@ -33,6 +36,11 @@
 - I log reali hanno mostrato richieste alert funzionanti ma nessuna richiesta market-data: la causa era `VITE_API_READ_TOKEN` mancante nell'APK, quindi il client si fermava prima della rete.
 - Dopo la configurazione del token, i log hanno evidenziato richieste concorrenti accumulate per `40-163` secondi: cache stampede, ricerca con pagine separate da 1.000 e risposte native non annullabili.
 - Test concorrente: dieci richieste provider identiche producono una sola chiamata HTTP.
+- I log hanno mostrato `400 Bad Request` sui batch CMC contenenti `FIGR_HELOC`; questo errore bloccava sia il popolamento preferiti sia il price checker degli alert.
+- Dopo la correzione, le richieste quote usano ID numerici e rispondono `200`; il checker registra conteggio prezzi ricevuti e ID eventualmente mancanti.
+- Il checker notifiche registra esplicitamente prezzi richiesti, prezzi restituiti, ID mancanti e assenza di dispositivi registrati.
+- Verifica runtime del 14 giugno 2026: CMC ha risolto `27/27` asset e restituito `27/27` prezzi senza ID mancanti.
+- Nella stessa verifica il checker ha generato un alert preferito reale per `audiera` con movimento `-2,06%`.
 
 ## 4. SCOSTAMENTI DAL PIANO
 
@@ -41,7 +49,7 @@
 
 ## 5. QUESTIONI APERTE
 
-- Verificare sul dispositivo la nuova APK prodotta con `VITE_API_READ_TOKEN` configurato.
+- Installare e verificare sul dispositivo la nuova APK contenente il caricamento preferiti indipendente dal selettore mercato.
 
 ## 6. STATO DELIVERABLE
 

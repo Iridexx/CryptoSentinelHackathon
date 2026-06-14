@@ -23,25 +23,25 @@ function unresolvedFavorite(id: string): Coin {
 
 export function useFavoriteCoinsData(
   favorites: Set<string>,
-  mainCoins: Coin[],
   intervalMs: number,
   currency: string
 ): Coin[] {
-  const [extraCoins, setExtraCoins] = useState<Coin[]>([]);
+  const [favoriteData, setFavoriteData] = useState<Map<string, Coin>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestVersionRef = useRef(0);
 
-  const mainIds = new Set(mainCoins.map(c => c.id));
-  const missingIds = [...favorites].filter(id => !mainIds.has(id));
-  const missingKey = [...missingIds].sort().join(',');
+  const favoriteIds = [...favorites];
+  const favoritesKey = [...favoriteIds].sort().join(',');
 
   useEffect(() => {
-    if (missingIds.length === 0) {
-      setExtraCoins([]);
+    if (favoriteIds.length === 0) {
+      setFavoriteData(new Map());
       return;
     }
 
     const doFetch = async () => {
+      const requestVersion = ++requestVersionRef.current;
       if (retryRef.current !== null) {
         clearTimeout(retryRef.current);
         retryRef.current = null;
@@ -50,14 +50,22 @@ export function useFavoriteCoinsData(
       abortRef.current = new AbortController();
       try {
         const data = await fetchMarkets(
-          missingIds.length,
+          favoriteIds.length,
           1,
           currency,
           abortRef.current.signal,
-          missingIds,
+          favoriteIds,
         );
-        setExtraCoins(data);
+        if (requestVersion !== requestVersionRef.current) return;
+        setFavoriteData((previous) => {
+          const next = new Map(
+            [...previous].filter(([id]) => favorites.has(id)),
+          );
+          for (const coin of data) next.set(coin.id, coin);
+          return next;
+        });
       } catch (err) {
+        if (requestVersion !== requestVersionRef.current) return;
         if ((err as Error).name !== 'AbortError') {
           retryRef.current = setTimeout(doFetch, 5_000);
         }
@@ -67,17 +75,14 @@ export function useFavoriteCoinsData(
     doFetch();
     const timer = setInterval(doFetch, intervalMs);
     return () => {
+      requestVersionRef.current += 1;
       clearInterval(timer);
       if (retryRef.current !== null) clearTimeout(retryRef.current);
       retryRef.current = null;
       abortRef.current?.abort();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [missingKey, currency, intervalMs]);
+  }, [favoritesKey, currency, intervalMs]);
 
-  const mainFavorites = mainCoins.filter(c => favorites.has(c.id));
-  const resolved = new Map(
-    [...mainFavorites, ...extraCoins].map(coin => [coin.id, coin]),
-  );
-  return [...favorites].map(id => resolved.get(id) ?? unresolvedFavorite(id));
+  return favoriteIds.map(id => favoriteData.get(id) ?? unresolvedFavorite(id));
 }

@@ -476,6 +476,8 @@ async def test_cmc_preserves_legacy_favorite_ids_for_slug_aliases() -> None:
 @pytest.mark.asyncio
 async def test_cmc_matches_historical_id_from_quote_name_and_symbol() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/map"):
+            return httpx.Response(200, json={"data": []})
         assert request.url.path == "/v3/cryptocurrency/quotes/latest"
         assert request.url.params["symbol"] == "OLD"
         return httpx.Response(
@@ -618,6 +620,51 @@ async def test_cmc_resolves_identity_hint_by_symbol_when_map_does_not_contain_as
             provider_id="12345",
             symbol="NIGHT",
             name="Midnight",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_invalid_identity_hint_does_not_block_valid_assets() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/map"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": 1,
+                            "name": "Bitcoin",
+                            "symbol": "BTC",
+                            "slug": "bitcoin",
+                        }
+                    ]
+                },
+            )
+        assert request.url.params["symbol"] == "FIGR_HELOC"
+        return httpx.Response(400, json={"status": {"error_message": "Invalid symbol"}})
+
+    hints = [
+        AssetIdentity(app_id="bitcoin", provider_id="bitcoin", symbol="BTC", name="Bitcoin"),
+        AssetIdentity(
+            app_id="figure-heloc",
+            provider_id="figure-heloc",
+            symbol="FIGR_HELOC",
+            name="Figure Heloc",
+        ),
+    ]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        identities = await CMCProvider(settings(), client).resolve_asset_identities(
+            [hint.app_id for hint in hints],
+            hints,
+        )
+
+    assert identities == [
+        AssetIdentity(
+            app_id="bitcoin",
+            provider_id="1",
+            symbol="BTC",
+            name="Bitcoin",
         )
     ]
 

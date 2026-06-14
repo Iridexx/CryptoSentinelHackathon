@@ -338,7 +338,7 @@ export default function App() {
     return arr;
   }, [rawDisplayCoins, sortBy, sortDesc]);
 
-  const favoriteCoins = useFavoriteCoinsData(favorites, coins, refreshInterval, currency);
+  const favoriteCoins = useFavoriteCoinsData(favorites, refreshInterval, currency);
   const syncedFavoriteCoins = useMemo(() => {
     const resolvedFavorites = new Map(
       favoriteCoins.map(c => [c.id, { id: c.id, name: c.name, symbol: c.symbol }]),
