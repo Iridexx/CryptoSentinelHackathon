@@ -624,6 +624,60 @@ async def test_cmc_fetches_resolved_numeric_provider_id_without_map_lookup() -> 
 
 
 @pytest.mark.asyncio
+async def test_cmc_search_uses_ids_from_map_without_second_resolution() -> None:
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path.endswith("/map"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": 1027,
+                            "name": "Ethereum",
+                            "symbol": "ETH",
+                            "slug": "ethereum",
+                        }
+                    ]
+                },
+            )
+        assert request.url.path == "/v3/cryptocurrency/quotes/latest"
+        assert request.url.params["id"] == "1027"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 1027,
+                    "name": "Ethereum",
+                    "symbol": "ETH",
+                    "slug": "ethereum",
+                    "quote": [
+                        {
+                            "symbol": "USD",
+                            "price": 2500.0,
+                            "percent_change_24h": 2.5,
+                        }
+                    ],
+                }
+            ],
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await CMCProvider(settings(), client).search("ether", "usd", 25)
+
+    assert requested_paths == [
+        "/v1/cryptocurrency/map",
+        "/v3/cryptocurrency/quotes/latest",
+    ]
+    assert len(items) == 1
+    assert items[0].id == "ethereum"
+    assert items[0].symbol == "ETH"
+    assert items[0].price == 2500.0
+
+
+@pytest.mark.asyncio
 async def test_cmc_historical_ohlcv_is_split_into_30_day_windows() -> None:
     requested_windows: list[tuple[datetime, datetime]] = []
 

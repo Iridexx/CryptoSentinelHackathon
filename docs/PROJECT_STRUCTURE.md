@@ -70,7 +70,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- base.py - interfaccia MarketDataProvider, identità asset e modelli normalizzati.
 |   |   |   |   |-- aliases.py - mapping ID storico app/CoinGecko verso slug CMC.
 |   |   |   |   |-- registry.py - selettore globale e riconciliazione ID storici resiliente: conserva i risultati CMC se il catalogo identità è indisponibile.
-|   |   |   |   |-- cmc.py - adapter CMC REST primario con map resiliente, matching nome/simbolo e accesso diretto tramite ID numerico.
+|   |   |   |   |-- cmc.py - adapter CMC REST primario con map resiliente, ricerca diretta per ID e matching nome/simbolo.
 |   |   |   |   |-- coingecko.py - adapter CoinGecko secondario e catalogo identità degli ID storici con cache giornaliera.
 |   |   |   |   |-- http.py - client condiviso con cache, rate limiting e contatore crediti.
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.
@@ -135,6 +135,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
 |   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti mancanti con retry rapido e righe temporanee per tutti gli ID salvati.
+|   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.
 |   |-- index.css - CSS globale/Tailwind.
 |   |-- main.tsx - entrypoint React.
 |   |-- types.ts - tipi frontend.

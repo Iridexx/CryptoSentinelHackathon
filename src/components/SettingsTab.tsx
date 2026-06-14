@@ -708,23 +708,15 @@ const SettingsTab: FC<Props> = ({
             <span className="text-sm text-gray-400">Sviluppatore</span>
             <span className="text-sm text-white font-medium">Iridexx</span>
           </div>
-          <a
-            href="https://www.coingecko.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-3 flex items-center gap-3 hover:bg-dark-700 active:bg-dark-600 transition-colors group"
-          >
-            <span className="text-xl w-7 text-center flex-shrink-0">🦎</span>
+          <div className="px-4 py-3 flex items-center gap-3">
+            <span className="text-xs font-bold w-7 text-center flex-shrink-0">API</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-medium">CoinGecko</p>
+              <p className="text-sm text-white font-medium">Dati di mercato</p>
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                Dati di mercato forniti gratuitamente — grazie per il fantastico servizio!
+                Backend multi-provider con CoinMarketCap predefinito
               </p>
             </div>
-            <svg className="w-3.5 h-3.5 text-gray-600 group-hover:text-gray-400 transition-colors flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </a>
+          </div>
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Dati personali</span>
             <span className="text-sm text-accent-green font-medium">Nessuno raccolto</span>

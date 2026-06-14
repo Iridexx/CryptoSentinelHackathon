@@ -8,7 +8,7 @@
 
 ### Monitoraggio prezzi
 - Lista aggiornabile delle top criptovalute per capitalizzazione (fino a 600)
-- Prezzi in tempo reale tramite API CoinGecko (polling configurabile da 5s a 5min)
+- Prezzi in tempo reale tramite backend multi-provider, con CMC predefinito e CoinGecko selezionabile
 - Supporto multi-valuta: USD, EUR e BTC
 - Ricerca rapida per nome o simbolo
 - Pull-to-refresh manuale
@@ -56,7 +56,7 @@
 | Backend | Python + FastAPI |
 | Background | Task asincrono backend |
 | Notifiche | Firebase Cloud Messaging + Capacitor Local Notifications |
-| Dati | CoinGecko API (free tier) |
+| Dati | Backend multi-provider CMC/CoinGecko |
 
 ---
 
@@ -110,7 +110,7 @@ src/
 │   ├── SplashOverlay  # Schermata di avvio animata
 │   └── ...
 ├── hooks/             # Custom hooks
-│   ├── useCryptoData  # Fetch e polling prezzi da CoinGecko
+│   ├── useCryptoData  # Fetch e polling prezzi dal backend normalizzato
 │   ├── useCoinChart   # Fetch dati storici per il grafico
 │   ├── useAlerts      # Gestione alert di soglia
 │   ├── useRangeAlerts # Gestione alert di range
@@ -135,7 +135,7 @@ android/app/src/main/java/com/cryptosentinelai/app/
 
 ## Note sull'API
 
-L'app usa il **tier gratuito di CoinGecko**, che ha un limite di richieste per minuto. Se si usa un intervallo di aggiornamento basso (es. 5s) con molte coin monitorate, si può incappare nel rate limit. In quel caso l'app riprova silenziosamente senza mostrare errori, purché ci siano dati in cache.
+L'app usa il backend normalizzato con il provider globale selezionato. CMC è il default; cache e rate limiter backend proteggono crediti e limiti upstream.
 
 ---
 
@@ -156,4 +156,4 @@ CryptoSentinel è gratuito e senza pubblicità. Se lo trovi utile puoi offrire u
 
 ## Licenza
 
-Uso personale. Non affiliato con CoinGecko.
+Uso personale. Non affiliato con CoinMarketCap o CoinGecko.

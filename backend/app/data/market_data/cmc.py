@@ -413,16 +413,33 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         ][:limit]
         if not matches:
             return []
-        canonical_ids = [str(item.get("slug") or item["id"]) for item in matches]
-        resolved = await self._resolve_ids(canonical_ids)
-        provider_ids = [str(item["id"]) for item in resolved.values()]
+        app_id_by_provider_id = {
+            str(item["id"]): app_id_for_cmc_slug(str(item.get("slug") or item["id"]))
+            for item in matches
+        }
         payload = await self._request_json(
             "/v3/cryptocurrency/quotes/latest",
-            params={"id": ",".join(provider_ids), "convert": currency.upper(), "skip_invalid": "true"},
+            params={
+                "id": ",".join(app_id_by_provider_id),
+                "convert": currency.upper(),
+                "skip_invalid": "true",
+            },
             headers=self._headers,
-            estimated_credits=max(1, ceil(len(provider_ids) / 100)),
+            estimated_credits=max(1, ceil(len(app_id_by_provider_id) / 100)),
         )
-        return [self._asset(item, currency) for item in self._quote_items(payload)]
+        assets_by_provider_id = {
+            str(item["id"]): self._asset(
+                item,
+                currency,
+                app_id_by_provider_id.get(str(item["id"])),
+            )
+            for item in self._quote_items(payload)
+        }
+        return [
+            assets_by_provider_id[provider_id]
+            for provider_id in app_id_by_provider_id
+            if provider_id in assets_by_provider_id
+        ]
 
     async def get_market_list(
         self,
