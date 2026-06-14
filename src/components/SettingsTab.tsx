@@ -708,15 +708,34 @@ const SettingsTab: FC<Props> = ({
             <span className="text-sm text-gray-400">Sviluppatore</span>
             <span className="text-sm text-white font-medium">Iridexx</span>
           </div>
-          <div className="px-4 py-3 flex items-center gap-3">
-            <span className="text-xs font-bold w-7 text-center flex-shrink-0">API</span>
+          <a
+            href="https://www.coingecko.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-3 flex items-center gap-3 hover:bg-dark-700 active:bg-dark-600 transition-colors group"
+          >
+            <span className="text-xs font-bold w-7 text-center flex-shrink-0">CG</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-medium">Dati di mercato</p>
+              <p className="text-sm text-white font-medium">CoinGecko</p>
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                Backend multi-provider con CoinMarketCap predefinito
+                Grazie per il servizio di dati di mercato
               </p>
             </div>
-          </div>
+          </a>
+          <a
+            href="https://coinmarketcap.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-3 flex items-center gap-3 hover:bg-dark-700 active:bg-dark-600 transition-colors group"
+          >
+            <span className="text-xs font-bold w-7 text-center flex-shrink-0">CMC</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white font-medium">CoinMarketCap</p>
+              <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                Grazie per il servizio di dati di mercato
+              </p>
+            </div>
+          </a>
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-gray-400">Dati personali</span>
             <span className="text-sm text-accent-green font-medium">Nessuno raccolto</span>

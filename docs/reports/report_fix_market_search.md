@@ -5,7 +5,7 @@
 - Corretta la ricerca coin con provider CMC.
 - Rimossa la seconda risoluzione ridondante degli slug dopo il match nel catalogo CMC.
 - Conservato l'ordine dei risultati trovato nel catalogo.
-- Aggiornata la scheda informazioni frontend, che indicava ancora CoinGecko come fonte unica.
+- Aggiornata la scheda informazioni frontend con ringraziamenti distinti a CoinGecko e CoinMarketCap.
 - Aggiornato il README al backend multi-provider con CMC predefinito.
 
 ## 2. COME È STATO FATTO
