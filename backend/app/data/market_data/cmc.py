@@ -184,62 +184,22 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
     ) -> list[AssetIdentity]:
         if not asset_ids:
             return []
-        id_map = await self._id_map()
-        direct = await self._resolve_ids(asset_ids)
-        resolved = {
-            app_id: AssetIdentity(
-                app_id=app_id,
-                provider_id=str(item["id"]),
-                symbol=str(item.get("symbol", "")).upper(),
-                name=str(item.get("name", app_id)),
-            )
-            for app_id, item in direct.items()
-        }
         hints = {hint.app_id: hint for hint in identity_hints or []}
-        by_symbol: dict[str, list[dict[str, Any]]] = {}
-        for item in id_map:
-            by_symbol.setdefault(str(item.get("symbol", "")).upper(), []).append(item)
-
-        for app_id in asset_ids:
-            if app_id in resolved or app_id not in hints:
-                continue
-            hint = hints[app_id]
-            candidates = by_symbol.get(hint.symbol.upper(), [])
-            exact = next(
-                (
-                    item
-                    for item in candidates
-                    if _identity_key(str(item.get("name", ""))) == _identity_key(hint.name)
-                ),
-                None,
-            )
-            match = exact or (candidates[0] if len(candidates) == 1 else None)
-            if match is not None:
-                resolved[app_id] = AssetIdentity(
-                    app_id=app_id,
-                    provider_id=str(match["id"]),
-                    symbol=str(match.get("symbol", "")).upper(),
-                    name=str(match.get("name", hint.name)),
-                )
-
-        unresolved_hints = [
-            hints[app_id]
-            for app_id in asset_ids
-            if app_id not in resolved and app_id in hints and hints[app_id].symbol
-        ]
-        if unresolved_hints:
+        resolved: dict[str, AssetIdentity] = {}
+        usable_hints = [hints[app_id] for app_id in asset_ids if app_id in hints and hints[app_id].symbol]
+        if usable_hints:
             payload = await self._request_json(
                 "/v3/cryptocurrency/quotes/latest",
                 params={
-                    "symbol": ",".join(sorted({hint.symbol.upper() for hint in unresolved_hints})),
+                    "symbol": ",".join(sorted({hint.symbol.upper() for hint in usable_hints})),
                     "convert": "USD",
                     "skip_invalid": "true",
                 },
                 headers=self._headers,
-                estimated_credits=max(1, ceil(len(unresolved_hints) / 100)),
+                estimated_credits=max(1, ceil(len(usable_hints) / 100)),
             )
             quote_items = self._quote_items(payload)
-            for hint in unresolved_hints:
+            for hint in usable_hints:
                 candidates = [
                     item
                     for item in quote_items
@@ -261,6 +221,21 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
                         symbol=str(match.get("symbol", "")).upper(),
                         name=str(match.get("name", hint.name)),
                     )
+
+        unresolved = [asset_id for asset_id in asset_ids if asset_id not in resolved]
+        if unresolved:
+            direct = await self._resolve_ids(unresolved)
+            resolved.update(
+                {
+                    app_id: AssetIdentity(
+                        app_id=app_id,
+                        provider_id=str(item["id"]),
+                        symbol=str(item.get("symbol", "")).upper(),
+                        name=str(item.get("name", app_id)),
+                    )
+                    for app_id, item in direct.items()
+                }
+            )
         return [resolved[asset_id] for asset_id in asset_ids if asset_id in resolved]
 
     @staticmethod
@@ -404,13 +379,34 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
 
     async def search(self, query: str, currency: str, limit: int = 25) -> list[MarketAsset]:
         needle = query.strip().lower()
-        matches = [
-            item
-            for item in await self._id_map()
-            if needle in str(item.get("name", "")).lower()
-            or needle in str(item.get("symbol", "")).lower()
-            or needle in str(item.get("slug", "")).lower()
-        ][:limit]
+        matches: list[dict[str, Any]] = []
+        page_size = 1000
+        start = 1
+        while len(matches) < limit:
+            payload = await self._request_json(
+                "/v1/cryptocurrency/map",
+                params={
+                    "listing_status": "active",
+                    "start": start,
+                    "limit": page_size,
+                    "sort": "cmc_rank",
+                },
+                headers=self._headers,
+                estimated_credits=0,
+                cache_ttl_seconds=3600,
+            )
+            page = list(payload.get("data", []))
+            matches.extend(
+                item
+                for item in page
+                if needle in str(item.get("name", "")).lower()
+                or needle in str(item.get("symbol", "")).lower()
+                or needle in str(item.get("slug", "")).lower()
+            )
+            if matches or len(page) < page_size:
+                break
+            start += page_size
+        matches = matches[:limit]
         if not matches:
             return []
         app_id_by_provider_id = {
@@ -469,19 +465,27 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
             ]
 
         bounded_limit = min(limit, 5000)
-        payload = await self._request_json(
-            "/v1/cryptocurrency/listings/latest",
-            params={
-                "start": (page - 1) * bounded_limit + 1,
-                "limit": bounded_limit,
-                "convert": currency.upper(),
-                "sort": "market_cap",
-                "sort_dir": "desc",
-            },
-            headers=self._headers,
-            estimated_credits=max(1, ceil(bounded_limit / 200)),
-        )
-        return [self._asset(item, currency) for item in payload.get("data", [])]
+        start = (page - 1) * bounded_limit + 1
+        items: list[dict[str, Any]] = []
+        while len(items) < bounded_limit:
+            chunk_limit = min(200, bounded_limit - len(items))
+            payload = await self._request_json(
+                "/v1/cryptocurrency/listings/latest",
+                params={
+                    "start": start + len(items),
+                    "limit": chunk_limit,
+                    "convert": currency.upper(),
+                    "sort": "market_cap",
+                    "sort_dir": "desc",
+                },
+                headers=self._headers,
+                estimated_credits=1,
+            )
+            chunk = list(payload.get("data", []))
+            items.extend(chunk)
+            if len(chunk) < chunk_limit:
+                break
+        return [self._asset(item, currency) for item in items]
 
     def status(self) -> ProviderRuntimeStatus:
         return ProviderRuntimeStatus(

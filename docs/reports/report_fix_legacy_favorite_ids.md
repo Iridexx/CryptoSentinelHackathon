@@ -16,6 +16,7 @@
 - Resa resiliente la paginazione del catalogo CMC: un errore su una pagina successiva conserva gli asset già caricati.
 - Aggiunta risoluzione CMC per simbolo degli asset non presenti nelle pagine map disponibili.
 - Gli ID numerici CMC già risolti vengono inviati direttamente a `quotes/latest`, evitando una seconda scansione del catalogo.
+- Per i preferiti storici, il registry acquisisce prima nome/simbolo dall'adapter identità e CMC risolve direttamente tramite `quotes/latest`, senza dipendere dalla lista dashboard o dal selettore 50/100/200/400/600.
 - Aggiunti test su recupero mirato e lista mercato.
 
 ## 2. COME È STATO FATTO
@@ -35,7 +36,7 @@
 
 ## 3. COSA È STATO VERIFICATO
 
-- Suite backend: `26 passed, 1 skipped`.
+- Suite backend: `28 passed, 1 skipped`.
 - Test multi-ID: tre preferiti legacy con slug CMC divergenti vengono tutti restituiti.
 - Test lista mercato: BNB da CMC viene normalizzato con ID applicativo `binancecoin`.
 - Test catalogo: verificato recupero di una coin nella seconda pagina CMC (`start=5001`).

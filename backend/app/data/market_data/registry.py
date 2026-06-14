@@ -54,19 +54,14 @@ class MarketDataRegistry:
         return [provider.status() for provider in self._providers.values()]
 
     async def _active_identities(self, asset_ids: list[str]) -> list[AssetIdentity]:
-        resolved = await self.active.resolve_asset_identities(asset_ids)
         if self._active is not ProviderName.CMC:
-            return resolved
-        resolved_ids = {identity.app_id for identity in resolved}
-        unresolved = [asset_id for asset_id in asset_ids if asset_id not in resolved_ids]
-        if not unresolved:
-            return resolved
+            return await self.active.resolve_asset_identities(asset_ids)
         identity_source = self._providers[ProviderName.COINGECKO]
         try:
-            hints = await identity_source.resolve_asset_identities(unresolved)
+            hints = await identity_source.resolve_asset_identities(asset_ids)
         except ProviderError:
-            return resolved
-        return resolved + await self.active.resolve_asset_identities(unresolved, hints)
+            hints = []
+        return await self.active.resolve_asset_identities(asset_ids, hints)
 
     async def get_market_list(
         self,

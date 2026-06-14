@@ -363,6 +363,40 @@ async def test_cmc_cache_avoids_duplicate_credit_consumption() -> None:
     assert provider.credit_budget.remaining == remaining_after_first
 
 
+@pytest.mark.asyncio
+async def test_cmc_market_list_aggregates_600_items_in_200_item_chunks() -> None:
+    requested: list[tuple[int, int]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        start = int(request.url.params["start"])
+        limit = int(request.url.params["limit"])
+        requested.append((start, limit))
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": index,
+                        "name": f"Coin {index}",
+                        "symbol": f"C{index}",
+                        "slug": f"coin-{index}",
+                        "quote": {"USD": {"price": float(index)}},
+                    }
+                    for index in range(start, start + limit)
+                ],
+                "status": {"credit_count": 1},
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        items = await CMCProvider(settings(), client).get_market_list("usd", 600)
+
+    assert requested == [(1, 200), (201, 200), (401, 200)]
+    assert len(items) == 600
+    assert items[0].id == "coin-1"
+    assert items[-1].id == "coin-600"
+
+
 def test_cmc_credit_thresholds() -> None:
     budget = CreditBudget(monthly_limit=100, warning_threshold_pct=20, critical_threshold_pct=10)
     budget.consume(80)
@@ -440,21 +474,21 @@ async def test_cmc_preserves_legacy_favorite_ids_for_slug_aliases() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cmc_matches_historical_id_from_normalized_name_and_symbol() -> None:
+async def test_cmc_matches_historical_id_from_quote_name_and_symbol() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path.endswith("/map")
+        assert request.url.path == "/v3/cryptocurrency/quotes/latest"
+        assert request.url.params["symbol"] == "OLD"
         return httpx.Response(
             200,
-            json={
-                "data": [
-                    {
-                        "id": 999,
-                        "name": "Legacy Coin",
-                        "symbol": "OLD",
-                        "slug": "renamed-legacy-coin",
-                    }
-                ]
-            },
+            json=[
+                {
+                    "id": 999,
+                    "name": "Legacy Coin",
+                    "symbol": "OLD",
+                    "slug": "renamed-legacy-coin",
+                    "quote": [{"symbol": "USD", "price": 1.0}],
+                }
+            ],
         )
 
     hint = AssetIdentity(
