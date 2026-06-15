@@ -277,6 +277,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | ID applicativo stabile | L'app conserva gli ID storici usati prima dello Step 3 (`bitcoin`, `binancecoin`, ecc.); gli adapter mantengono separati slug e ID nativi dei provider. |
 | Compatibilità preferiti pre-Step 3 | Gli ID CoinGecko persistiti dalle release precedenti restano l'identità dell'app; l'adapter CMC traduce alias come `binancecoin/bnb`, `ripple/xrp` e `avalanche-2/avalanche` in entrambe le direzioni. |
 | Preferiti indipendenti dal mercato | L'app richiede sempre tutti gli ID preferiti e conserva gli ultimi dati validi; il selettore 50/100/200/400/600 riguarda soltanto la lista mercato. |
+| Ordinamento Preferiti indipendente | Mercati e Preferiti mantengono separatamente criterio, direzione e periodo visualizzato per Rank, 24h, 7g, Volume e Prezzo. |
 | Logger moduli inizializzati lazy | Provider market-data e checker notifiche acquisiscono la configurazione structlog definitiva applicata durante l'avvio backend. |
 | Catalogo CMC paginato | `/v1/cryptocurrency/map` viene letto in pagine da 5.000 elementi fino a esaurimento; i preferiti meno capitalizzati non spariscono perché fuori dalla prima pagina CMC. |
 | Cache prima del conteggio crediti | Una cache hit non incrementa richieste o crediti CMC; il budget osservato espone livelli ok/warning/critical/exhausted. |

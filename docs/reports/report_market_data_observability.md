@@ -13,6 +13,7 @@
 - La ricerca CMC riutilizza il catalogo paginato da 5.000 già usato per la risoluzione dei preferiti.
 - Le risposte Android obsolete non possono più sovrascrivere selettore, lista o ricerca correnti.
 - I preferiti sono caricati sempre come insieme completo e non dipendono più dalla dimensione `50/100/200/400/600` del mercato.
+- La tab Preferiti dispone dello stesso ordinamento Rank, 24h, 7g, Volume e Prezzo dei Mercati, con stato e direzione completamente indipendenti.
 - La risoluzione CMC usa catalogo, slug, nome e simbolo univoco prima di interrogare singoli simboli; un simbolo invalido non annulla più l'intero gruppo prezzi/alert.
 - I logger dei moduli sono inizializzati in modo lazy, così provider e checker notifiche usano la configurazione strutturata applicata all'avvio.
 
@@ -24,6 +25,7 @@
 - I nomi dei parametri provider sono filtrati da una whitelist; chiavi e testo completo delle eccezioni esterne non vengono serializzati.
 - Il registry registra quantità richieste/restituite e gli ID non risolti per preferiti e prezzi.
 - Ricerca e market list espongono conteggi distinti, permettendo di verificare selettore `50/100/200/400/600`.
+- Una funzione pura condivisa ordina entrambe le liste, mentre ciascuna tab conserva autonomamente criterio, verso e periodo delle card.
 - La build Android verifica la presenza delle variabili senza stamparne i valori.
 
 ## 3. COSA È STATO VERIFICATO
@@ -32,6 +34,8 @@
 - Test anti-leak: i riepiloghi log contengono conteggi ma non valori di parametri non autorizzati.
 - `ruff check backend/app backend/tests`: passato.
 - `npx tsc -b`: passato.
+- Verifica TypeScript dell'ordinamento indipendente Mercati/Preferiti: passata.
+- `npm run lint`: non verde per errori React Hooks preesistenti e non collegati a questa modifica; nessuna segnalazione riguarda il nuovo ordinamento.
 - Nessun token, header Authorization o chiave provider viene registrato.
 - I log reali hanno mostrato richieste alert funzionanti ma nessuna richiesta market-data: la causa era `VITE_API_READ_TOKEN` mancante nell'APK, quindi il client si fermava prima della rete.
 - Dopo la configurazione del token, i log hanno evidenziato richieste concorrenti accumulate per `40-163` secondi: cache stampede, ricerca con pagine separate da 1.000 e risposte native non annullabili.

@@ -44,6 +44,29 @@ const RANK_ANIM_KEY = 'cs_rank_anim_topn';
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
 
+function sortCoins(coins: Coin[], sortBy: SortBy, sortDesc: boolean): Coin[] {
+  const sorted = [...coins];
+  if (sortBy === 'rank') {
+    sorted.sort((a, b) => {
+      const ar = a.market_cap_rank ?? 9999;
+      const br = b.market_cap_rank ?? 9999;
+      return sortDesc ? ar - br : br - ar;
+    });
+  } else if (sortBy === '7d') {
+    sorted.sort((a, b) => {
+      const av = a.price_change_percentage_7d_in_currency ?? 0;
+      const bv = b.price_change_percentage_7d_in_currency ?? 0;
+      return sortDesc ? bv - av : av - bv;
+    });
+  } else {
+    const key = sortBy === 'change' ? 'price_change_percentage_24h'
+      : sortBy === 'volume' ? 'total_volume'
+      : 'current_price';
+    sorted.sort((a, b) => sortDesc ? b[key] - a[key] : a[key] - b[key]);
+  }
+  return sorted;
+}
+
 export default function App() {
   const [showSplash, setShowSplash] = useState(shouldShowSplash);
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -61,6 +84,9 @@ export default function App() {
   const [availableUpdate, setAvailableUpdate] = useState<UpdateResult | null>(null);
   const [sortBy, setSortBy] = useState<SortBy>('rank');
   const [sortDesc, setSortDesc] = useState(true);
+  const [favoriteSortBy, setFavoriteSortBy] = useState<SortBy>('rank');
+  const [favoriteSortDesc, setFavoriteSortDesc] = useState(true);
+  const [favoriteTimeFrame, setFavoriteTimeFrame] = useState<TimeFrame>('24h');
   const lastUpdateCheckRef = useRef<number>(0);
   const favSyncRef = useRef({ coinsJson: '[]', upPct: 0, downPct: 0, refPricesJson: '{}', currency: 'usd' });
 
@@ -311,34 +337,32 @@ export default function App() {
     });
   }, []);
 
+  const handleFavoriteSort = useCallback((key: SortBy) => {
+    if (key === '7d') setFavoriteTimeFrame('7d');
+    else if (key === 'change') setFavoriteTimeFrame('24h');
+    setFavoriteSortBy((prev) => {
+      if (prev === key) {
+        setFavoriteSortDesc((desc) => !desc);
+        return key;
+      }
+      setFavoriteSortDesc(true);
+      return key;
+    });
+  }, []);
+
   const isSearching = search.trim().length > 0;
   const rawDisplayCoins = isSearching ? searchResults : coins;
   const displayLoading = isSearching ? searching : loading;
 
   const displayCoins = useMemo(() => {
-    const arr = [...rawDisplayCoins];
-    if (sortBy === 'rank') {
-      arr.sort((a, b) => {
-        const ar = a.market_cap_rank ?? 9999;
-        const br = b.market_cap_rank ?? 9999;
-        return sortDesc ? ar - br : br - ar;
-      });
-    } else if (sortBy === '7d') {
-      arr.sort((a, b) => {
-        const av = a.price_change_percentage_7d_in_currency ?? 0;
-        const bv = b.price_change_percentage_7d_in_currency ?? 0;
-        return sortDesc ? bv - av : av - bv;
-      });
-    } else {
-      const key = sortBy === 'change' ? 'price_change_percentage_24h'
-        : sortBy === 'volume' ? 'total_volume'
-        : 'current_price';
-      arr.sort((a, b) => sortDesc ? b[key] - a[key] : a[key] - b[key]);
-    }
-    return arr;
+    return sortCoins(rawDisplayCoins, sortBy, sortDesc);
   }, [rawDisplayCoins, sortBy, sortDesc]);
 
   const favoriteCoins = useFavoriteCoinsData(favorites, refreshInterval, currency);
+  const sortedFavoriteCoins = useMemo(
+    () => sortCoins(favoriteCoins, favoriteSortBy, favoriteSortDesc),
+    [favoriteCoins, favoriteSortBy, favoriteSortDesc],
+  );
   const syncedFavoriteCoins = useMemo(() => {
     const resolvedFavorites = new Map(
       favoriteCoins.map(c => [c.id, { id: c.id, name: c.name, symbol: c.symbol }]),
@@ -638,21 +662,45 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {favoriteCoins.map((coin) => (
-                    <CoinCard
-                      key={coin.id}
-                      coin={coin}
-                      isFavorite={true}
-                      onToggleFavorite={toggleFavorite}
-                      onAddAlert={handleAddAlert}
-                      onChartTap={handleChartTap}
-                      currency={currency}
-                      alertPending={pendingFavAlerts.get(coin.id)}
-                      onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="flex gap-1.5 mb-3 overflow-x-auto pb-0.5 scrollbar-none">
+                    {([
+                      { key: 'rank' as SortBy, label: 'Rank' },
+                      { key: 'change' as SortBy, label: '24h %' },
+                      { key: '7d' as SortBy, label: '7g %' },
+                      { key: 'volume' as SortBy, label: 'Volume' },
+                      { key: 'price' as SortBy, label: 'Prezzo' },
+                    ]).map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => { hapticLight(); handleFavoriteSort(key); }}
+                        className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          favoriteSortBy === key ? 'bg-accent-blue/20 text-accent-blue border border-accent-blue/30' : 'bg-dark-700 text-gray-400 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        {label}
+                        {favoriteSortBy === key && <span className="text-xs">{favoriteSortDesc ? '↓' : '↑'}</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    {sortedFavoriteCoins.map((coin) => (
+                      <CoinCard
+                        key={coin.id}
+                        coin={coin}
+                        isFavorite={true}
+                        onToggleFavorite={toggleFavorite}
+                        onAddAlert={handleAddAlert}
+                        onChartTap={handleChartTap}
+                        currency={currency}
+                        showVolume={favoriteSortBy === 'volume'}
+                        timeFrame={favoriteTimeFrame}
+                        alertPending={pendingFavAlerts.get(coin.id)}
+                        onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
