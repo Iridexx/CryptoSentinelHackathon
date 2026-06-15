@@ -486,25 +486,26 @@
   <section id="roadmap" style="background:linear-gradient(180deg,rgba(13,26,51,.2),transparent);">
     <div class="wrap">
       <div class="sec-head">
-        <div class="eyebrow">Dove stiamo andando</div>
+        <div class="eyebrow">Da app che ti avvisa → app che agisce per te</div>
         <h2 class="sora">Roadmap</h2>
-        <p>Le prossime funzionalit&agrave; in programma per CryptoSentinel AI.</p>
+        <p>CryptoSentinel AI evolve in un <strong style="color:var(--ink)">agente di trading autonomo su BNB Smart Chain</strong>. Gli alert di prezzo gi&agrave; esistenti diventano il trigger dell&rsquo;agente.</p>
       </div>
       <div class="roadmap-grid">
         <div class="rm-card">
           <div class="rm-head">
             <div class="rm-icon">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
             </div>
             <div>
-              <div class="rm-label">Prossimamente</div>
-              <h3>Multi-exchange</h3>
+              <div class="rm-label">Step 3 &mdash; Prossimo</div>
+              <h3>Dati Multi-Provider</h3>
             </div>
           </div>
           <ul>
-            <li>Dati da Binance, Kraken, Coinbase</li>
-            <li>Confronto prezzi tra exchange</li>
-            <li>Alert su spread cross-exchange</li>
+            <li>CoinMarketCap (piano Startup) come provider primario</li>
+            <li>CoinGecko come provider secondario selezionabile</li>
+            <li>Astrazione <code style="font-size:12px;background:rgba(125,160,215,.14);padding:1px 5px;border-radius:4px;">MarketDataProvider</code> &mdash; formato interno normalizzato</li>
+            <li>Rate limiting + cache crediti CMC</li>
           </ul>
         </div>
         <div class="rm-card">
@@ -513,30 +514,15 @@
               <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
             </div>
             <div>
-              <div class="rm-label">In valutazione</div>
-              <h3>Portfolio tracker</h3>
+              <div class="rm-label">Step 4 &mdash; Esecuzione</div>
+              <h3>Layer di Trading</h3>
             </div>
           </div>
           <ul>
-            <li>Registra acquisti e vendite</li>
-            <li>P&amp;L in tempo reale per posizione</li>
-            <li>Grafico evoluzione portafoglio</li>
-          </ul>
-        </div>
-        <div class="rm-card">
-          <div class="rm-head">
-            <div class="rm-icon green">
-              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-            </div>
-            <div>
-              <div class="rm-label">In valutazione</div>
-              <h3>Widget Android</h3>
-            </div>
-          </div>
-          <ul>
-            <li>Widget home screen con prezzi preferiti</li>
-            <li>Aggiornamento ogni 15 minuti</li>
-            <li>Tap diretto alla coin selezionata</li>
+            <li>Spot &rarr; Trust Wallet Agent Kit (TWAK), signing autonomo</li>
+            <li>Perpetual &rarr; BNB AI Agent SDK / EIP-712</li>
+            <li>Pagamenti dati &rarr; x402 su BSC</li>
+            <li>Gas management + multi-RPC BSC fallback</li>
           </ul>
         </div>
         <div class="rm-card">
@@ -545,54 +531,72 @@
               <svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 1 1 0 14A7 7 0 0 1 12 2z"/><path d="M9 12l2 2 4-4"/><path d="M12 16v6M8 22h8"/></svg>
             </div>
             <div>
-              <div class="rm-label">Idea futura</div>
-              <h3>Suggerimenti AI</h3>
+              <div class="rm-label">Step 6 &mdash; Il cuore</div>
+              <h3>Agente AI Autonomo</h3>
             </div>
           </div>
           <ul>
-            <li>Alert automatici basati su volatilità storica</li>
-            <li>Soglie suggerite per ogni coin</li>
-            <li>Riconoscimento pattern ricorrenti</li>
+            <li>Claude come meta-controller (poteri limitati, decisionale)</li>
+            <li>Spot: momentum + VWAP + volume relativo + ATR</li>
+            <li>Perp: Volume Profile mean reversion (POC, VAH, VAL)</li>
+            <li>Risk management: stop ATR, daily loss limit, drawdown cap</li>
+          </ul>
+        </div>
+        <div class="rm-card">
+          <div class="rm-head">
+            <div class="rm-icon green">
+              <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            </div>
+            <div>
+              <div class="rm-label">Step 8 &mdash; Osservabilit&agrave;</div>
+              <h3>Dashboard Web Unificata</h3>
+            </div>
+          </div>
+          <ul>
+            <li>Monitoring completo + 3 viste agente (Spot / Perp / Globale)</li>
+            <li>System Health (servizi, carburante, drawdown)</li>
+            <li>Demo/Replay trade-by-trade con prove on-chain</li>
+            <li>Export spiegazione strategia per i giudici</li>
           </ul>
         </div>
       </div>
 
-      <!-- Additional ideas -->
-      <div style="text-align:center;max-width:500px;margin:52px auto 28px;">
-        <div class="eyebrow">Proposte</div>
-        <h2 class="sora" style="font-family:'Sora',sans-serif;font-weight:700;font-size:clamp(24px,3vw,34px);letter-spacing:-1px;margin:12px 0 0;">Altre idee</h2>
-        <p style="margin-top:14px;color:var(--muted);font-size:16px;">Funzionalit&agrave; che potrebbero arricchire il progetto in futuro.</p>
+      <!-- V2 features -->
+      <div style="text-align:center;max-width:560px;margin:52px auto 28px;">
+        <div class="eyebrow">V2 &mdash; Dopo l&rsquo;hackathon</div>
+        <h2 class="sora" style="font-family:'Sora',sans-serif;font-weight:700;font-size:clamp(24px,3vw,34px);letter-spacing:-1px;margin:12px 0 0;">Funzionalit&agrave; future</h2>
+        <p style="margin-top:14px;color:var(--muted);font-size:16px;">Miglioramenti pianificati dopo la finestra di gara (22-28 giugno 2026).</p>
       </div>
       <div class="ideas-grid">
         <div class="idea-card">
           <div class="idea-emoji">📡</div>
-          <h4>Alert via Telegram</h4>
-          <p>Bot Telegram per ricevere notifiche anche su desktop o smartwatch, senza l&rsquo;app aperta sul telefono.</p>
+          <h4>Delta reale (orderflow)</h4>
+          <p>Integrazione Binance <code style="font-size:12px">/fapi aggTrades</code> futures per delta reale invece del prezzo come proxy. Segnale più preciso per le strategie perp.</p>
         </div>
         <div class="idea-card">
-          <div class="idea-emoji">🔗</div>
-          <h4>Dati on-chain</h4>
-          <p>Integrare metriche on-chain (whale movements, exchange flows) per alert più consapevoli del mercato.</p>
+          <div class="idea-emoji">🔄</div>
+          <h4>Fallback automatico provider</h4>
+          <p>Se CMC cade, alert e monitoring continuano automaticamente su CoinGecko. La strategia di trading va in modalità degradata per sicurezza.</p>
+        </div>
+        <div class="idea-card">
+          <div class="idea-emoji">🌐</div>
+          <h4>Web Push a dashboard chiusa</h4>
+          <p>Notifiche browser anche quando la dashboard &egrave; chiusa, via service worker + VAPID/FCM web. Attualmente solo con app mobile aperta (Livello A).</p>
         </div>
         <div class="idea-card">
           <div class="idea-emoji">📊</div>
-          <h4>Grafici candlestick</h4>
-          <p>Visualizzazione OHLCV con timeframe configurabili (1m, 5m, 1h, 1d) direttamente nell&rsquo;app.</p>
+          <h4>Relative strength ranking</h4>
+          <p>Ranking di sovraperformance relativa tra coin: l&rsquo;agente seleziona automaticamente i &ldquo;cavalli migliori&rdquo; nel momentum spot.</p>
         </div>
         <div class="idea-card">
-          <div class="idea-emoji">🤝</div>
-          <h4>Correlazione prezzi</h4>
-          <p>Mostrare la correlazione tra coin preferite per capire quando diversificare davvero il portafoglio.</p>
+          <div class="idea-emoji">🏦</div>
+          <h4>Profili Volume multipli</h4>
+          <p>HVN/LVN, filtro regime multi-timeframe su VWAP, entrate scaglionate con backtest per le strategie perpetual.</p>
         </div>
         <div class="idea-card">
-          <div class="idea-emoji">🌍</div>
-          <h4>Sentiment da social</h4>
-          <p>Analisi del sentiment da X/Reddit per segnalare anomalie di buzz attorno a una coin.</p>
-        </div>
-        <div class="idea-card">
-          <div class="idea-emoji">🧾</div>
-          <h4>Report fiscale</h4>
-          <p>Export delle operazioni in formato compatibile con la dichiarazione fiscale italiana (RW, quadro RT).</p>
+          <div class="idea-emoji">👥</div>
+          <h4>Multi-user</h4>
+          <p>Il DB &egrave; gi&agrave; predisposto con <code style="font-size:12px">user_id</code>. Aggiungere autenticazione per-utente e chiave API Anthropic isolata per ciascuno.</p>
         </div>
       </div>
     </div>
