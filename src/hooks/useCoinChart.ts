@@ -9,7 +9,6 @@ export function useCoinChart(
   coinId: string,
   currency: string,
   days: number,
-  mode: 'line' | 'candle',
 ) {
   const [lineData, setLineData] = useState<LinePoint[]>([]);
   const [candleData, setCandleData] = useState<CandlePoint[]>([]);

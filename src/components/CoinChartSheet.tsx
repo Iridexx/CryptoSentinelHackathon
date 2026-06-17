@@ -51,7 +51,7 @@ const CoinChartSheet: FC<Props> = ({
   const touchStartY = useRef(0);
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
 
-  const { lineData, candleData, loading, error } = useCoinChart(coin.id, currency, DAYS[tf], mode);
+  const { lineData, candleData, loading, error } = useCoinChart(coin.id, currency, DAYS[tf]);
 
   const [livePrice, setLivePrice] = useState<number>(coin.current_price);
   const [livePct24h, setLivePct24h] = useState<number>(coin.price_change_percentage_24h ?? 0);
