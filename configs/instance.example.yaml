@@ -111,6 +111,19 @@ twak:
     # PancakeSwap V2 Router, official BSC Testnet deployment.
     - "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
 
+execution:
+  # Global static default for the SPOT execution provider. Runtime changes in
+  # developer settings last until restart unless persisted in RuntimeState.
+  # twak = Trust Wallet Agent Kit (mandatory for the hackathon competition);
+  # pancakeswap = direct DEX execution via web3.py (real use, no 403, no TWAK fee).
+  provider: twak
+  # Official PancakeSwap V2 Router deployments (verified on BscScan).
+  pancakeswap_router_address_mainnet: "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+  pancakeswap_router_address_testnet: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
+  # Wrapped BNB (WBNB) per network, used to build swap paths.
+  pancakeswap_wbnb_address_mainnet: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+  pancakeswap_wbnb_address_testnet: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"
+
 perp_execution:
   bnb_ai_agent_sdk_enabled: false
   provider: bnb_sdk

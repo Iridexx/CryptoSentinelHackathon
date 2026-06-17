@@ -8,6 +8,7 @@ from web3 import Web3
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.execution.perp_bnb_sdk import BnbAgentSdkBridge
+from backend.app.execution.registry import ExecutionProviderRegistry
 from backend.app.execution.rpc import MultiRpcClient
 from backend.app.execution.spot_twak import TwakClient
 from backend.app.execution.x402 import X402Client
@@ -28,6 +29,7 @@ class ExecutionService:
             settings.tatum_rpc_api_key,
         )
         self.twak = TwakClient(settings)
+        self.spot_registry = ExecutionProviderRegistry(settings)
         self.perp = BnbAgentSdkBridge(settings)
         self.x402 = X402Client(
             settings,
@@ -47,11 +49,8 @@ class ExecutionService:
             "gas_reserve_floor_bnb": self.settings.bnb_gas_reserve_min,
             "transaction_attempt_limit": self.settings.bsc_max_transaction_attempts,
             "spot": {
-                "provider": "twak",
-                "configured": self.twak.configured,
-                "autonomous_mode": self.settings.twak_autonomous_mode,
-                "approval_policy": self.settings.twak_approval_policy,
-                "allowed_spender_count": len(self.settings.twak_allowed_spenders),
+                "active_provider": self.spot_registry.active_name.value,
+                "providers": [status.model_dump() for status in self.spot_registry.statuses()],
             },
             "perp": self.perp.status,
             "x402": {

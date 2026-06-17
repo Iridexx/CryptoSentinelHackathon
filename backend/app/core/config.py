@@ -121,6 +121,13 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "approval_policy": "twak_approval_policy",
         "allowed_spenders": "twak_allowed_spenders",
     },
+    "execution": {
+        "provider": "execution_provider",
+        "pancakeswap_router_address_mainnet": "pancakeswap_router_address_mainnet",
+        "pancakeswap_router_address_testnet": "pancakeswap_router_address_testnet",
+        "pancakeswap_wbnb_address_mainnet": "pancakeswap_wbnb_address_mainnet",
+        "pancakeswap_wbnb_address_testnet": "pancakeswap_wbnb_address_testnet",
+    },
     "perp_execution": {
         "bnb_ai_agent_sdk_enabled": "bnb_ai_agent_sdk_enabled",
         "provider": "perp_execution_provider",
@@ -262,7 +269,7 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development", alias="APP_ENV")
     app_name: str = Field(default="CryptoSentinel Agent Backend", alias="APP_NAME")
-    app_version: str = Field(default="0.1.0-step5", alias="APP_VERSION")
+    app_version: str = Field(default="0.1.0-step4ext", alias="APP_VERSION")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
     api_base_url: str = Field(default="http://127.0.0.1:8000", alias="API_BASE_URL")
@@ -358,6 +365,26 @@ class Settings(BaseSettings):
     twak_autonomous_mode: bool = Field(default=False, alias="TWAK_AUTONOMOUS_MODE")
     twak_approval_policy: Literal["exact"] = Field(default="exact", alias="TWAK_APPROVAL_POLICY")
     twak_allowed_spenders: list[str] = Field(default_factory=list, alias="TWAK_ALLOWED_SPENDERS")
+
+    execution_provider: Literal["twak", "pancakeswap"] = Field(
+        default="twak", alias="EXECUTION_PROVIDER"
+    )
+    pancakeswap_router_address_mainnet: str = Field(
+        default="0x10ED43C718714eb63d5aA57B78B54704E256024E",
+        alias="PANCAKESWAP_ROUTER_ADDRESS_MAINNET",
+    )
+    pancakeswap_router_address_testnet: str = Field(
+        default="0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
+        alias="PANCAKESWAP_ROUTER_ADDRESS_TESTNET",
+    )
+    pancakeswap_wbnb_address_mainnet: str = Field(
+        default="0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+        alias="PANCAKESWAP_WBNB_ADDRESS_MAINNET",
+    )
+    pancakeswap_wbnb_address_testnet: str = Field(
+        default="0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
+        alias="PANCAKESWAP_WBNB_ADDRESS_TESTNET",
+    )
 
     bnb_ai_agent_sdk_enabled: bool = Field(default=False, alias="BNB_AI_AGENT_SDK_ENABLED")
     perp_execution_provider: str = Field(default="bnb_sdk", alias="PERP_EXECUTION_PROVIDER")

@@ -46,7 +46,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
-|   |   |       |-- execution.py - readiness esecuzione e verifica registrazione competizione on-chain.
+|   |   |       |-- execution.py - readiness esecuzione, selettore provider spot (GET read / PUT admin) e verifica registrazione competizione on-chain.
 |   |   |       |-- views.py - GET /api/v1/views/spot|perp|global: viste dashboard con posizioni, PnL, win rate.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
@@ -78,13 +78,17 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
 |   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state.
-|   |   |-- execution/ - layer esecuzione Step 4.
+|   |   |-- execution/ - layer esecuzione Step 4 (esteso: spot astratto multi-provider).
+|   |   |   |-- base.py - interfaccia astratta ExecutionProvider + modelli normalizzati (ExecutionQuote, ExecutionProviderStatus); get_position/close_position default fail-closed per spot atomico.
+|   |   |   |-- registry.py - ExecutionProviderRegistry: selettore globale spot twak/pancakeswap, default da Settings, override persistito in RuntimeState, cambio admin-only.
+|   |   |   |-- providers/twak_provider.py - TWAKProvider: avvolge TwakClient nell'interfaccia (refactor di adattamento, nessuna riscrittura HMAC/Amber/CLI).
+|   |   |   |-- providers/pancakeswap_provider.py - PancakeSwapProvider: esecuzione DEX diretta via web3.py (getAmountsOut, approval esatta, swapExactTokensForTokens/swapExactETHForTokens, conferma on-chain); riusa i guardrail comuni; submission mainnet gated.
 |   |   |   |-- rpc.py - JSON-RPC BSC con failover tra endpoint.
-|   |   |   |-- gas.py / approvals.py - riserva gas hard e approvals esatte/whitelist.
+|   |   |   |-- gas.py / approvals.py - riserva gas hard e approvals esatte/whitelist (riusati da entrambi i provider).
 |   |   |   |-- coordinator.py / reconciliation.py - retry limitato e verifica on-chain.
-|   |   |   |-- service.py - stato execution e verifica contratto competizione.
+|   |   |   |-- service.py - stato execution (provider spot attivo + statuses dal registry) e verifica contratto competizione.
 |   |   |   |-- spot_twak/client.py - bridge TWAK per spot, x402 e registrazione.
-|   |   |   |-- perp_bnb_sdk/client.py - bridge BNB SDK ed EIP-712 per perpetual.
+|   |   |   |-- perp_bnb_sdk/client.py - bridge BNB SDK ed EIP-712 per perpetual (percorso separato, non astratto).
 |   |   |   `-- x402/client.py - pagamenti BSC con budget e fallback provider.
 |   |   |-- i18n/locales/ - traduzioni backend en.json e it.json, incluse chiavi market data Step 3.
 |   |   |-- notifications/ - sistema notifiche server-side.
@@ -127,12 +131,14 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti.
 |   |   |   |-- notifications.py - device token, notification request/response e status.
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
+|   |   |   |-- execution.py - request/response selezione provider esecuzione spot.
 |   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint per viste dashboard.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
 |   |-- scripts/ - script di avvio backend.
 |   |   |-- encrypt_wallet.py - creazione interattiva keystore Web3 cifrato senza input CLI.
 |   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
+|   |   |-- pancakeswap_smoke_test.py - smoke test PancakeSwap diretto (quote-only di default; --execute swap reale, mainnet solo con --allow-mainnet).
 |   |   |-- run_backend.ps1 - avvio Windows PowerShell (dev/prod, legge host:port da Settings).
 |   |   `-- run_backend.sh  - avvio Linux/bash per VPS (dev/prod, stesso comportamento).
 |   `-- tests/ - test backend.
@@ -140,6 +146,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_auth_scopes.py - separazione scope device, alerts e admin.
 |       |-- unit/test_market_data_rate_limit.py - accodamento richieste oltre soglia.
 |       |-- unit/test_execution_layer.py - gate gas, approval, RPC, EIP-712, TWAK, retry e x402.
+|       |-- unit/test_execution_providers.py - interfaccia ExecutionProvider, selettore twak/pancakeswap, quote getAmountsOut, costruzione swap tx, guardrail (slippage/gas/gate mainnet), normalizzazione TWAK.
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
 |       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.

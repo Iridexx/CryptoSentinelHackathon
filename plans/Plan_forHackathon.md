@@ -55,6 +55,13 @@ Questi vincoli sono assoluti. Il codice deve garantirli sempre, come regole hard
 5. **Solo i 149 token eligible** (lista in appendice). Trade fuori lista non contano.
 6. **Spiegazione strategia** da fornire su DoraHacks.
 
+### Chiarimenti organizzatori (dal Telegram BNB Hack — aggiornato 16 giugno 2026)
+
+- **Esecuzione obbligatoria on-chain via TWAK.** Confermato dagli organizzatori: i trade della gara devono essere eseguiti on-chain tramite Trust Wallet Agent Kit. NON è ammessa esecuzione su exchange centralizzati. Conseguenza: un eventuale percorso DEX diretto (es. PancakeSwap via web3.py) può servire per TEST locali, ma i trade ufficiali della gara DEVONO passare per TWAK.
+- **Fee TWAK ridotte durante la gara:** da 0.7% a 0.077% per la settimana di trading (22-28 giugno). Riduce l'impatto delle fee sulle strategie spot (prima servivano movimenti del ~3% per coprire le fee).
+- **403 Forbidden su API swap TWAK — problema noto e diffuso.** Molti partecipanti con piano Free di `portal.trustwallet.com` ricevono 403 su tutti gli endpoint autenticati `tws.trustwallet.com` (swap, providers, prezzi via API), mentre le operazioni locali (wallet address) e `twak price` funzionano. Il codice di firma HMAC del progetto è verificato corretto contro il sorgente ufficiale. Risoluzione in carico a Trust Wallet/organizzatori. **Blocco esterno, non di codice.**
+- **Spot vs Perp nel PnL ranking:** DA CONFERMARE. Domanda posta agli organizzatori, in attesa di risposta. Determina la priorità tra strategia spot e perpetual nello Step 6.
+
 ---
 
 ## D. ARCHITETTURA COMPLETA
@@ -117,8 +124,8 @@ Questi vincoli sono assoluti. Il codice deve garantirli sempre, come regole hard
 | Dashboard web | Vite |
 | Backend | Python, FastAPI |
 | AI | Claude API (meta-controller) |
-| Dati mercato | CoinMarketCap (piano Startup: OHLCV storico) + CMC MCP — primario; CoinGecko come provider secondario selezionabile (astrazione multi-provider) |
-| Esecuzione spot | Trust Wallet Agent Kit (TWAK) |
+| Dati mercato | CoinMarketCap (piano Startup: OHLCV storico) + CMC MCP |
+| Esecuzione spot | Trust Wallet Agent Kit (TWAK) per hackathon + PancakeSwap diretto (web3.py) per uso reale — dietro interfaccia `ExecutionProvider` astratta |
 | Esecuzione perp | BNB AI Agent SDK / EIP-712 |
 | Pagamenti dati | x402 (su BSC via BNB SDK; servizi terzi es. AgentData) |
 | Notifiche | Firebase Cloud Messaging (FCM) |
@@ -236,6 +243,7 @@ MODALITÀ OPERATIVA
 ├── Network: Testnet / Mainnet
 ├── Esecuzione: Dry-Run / Live
 ├── Provider dati: CMC / CoinGecko (selettore globale, impostazioni sviluppatore)
+├── Provider esecuzione: TWAK / PancakeSwap (selettore globale, impostazioni sviluppatore)
 └── Test Scaling %: 10-100% (solo in Live)
 
 RISCHIO
@@ -290,7 +298,7 @@ PERPETUAL
 - Backup automatico DB + export configurazione, runbook ripristino rapido
 
 ### Modalità degradata ("when in doubt, don't trade")
-- Fonte dati giù → niente nuove posizioni, posizioni aperte protette dagli stop meccanici. (V2: fallback automatico al provider secondario per alert/monitoring; la strategia resta in degradata se il fallback è di qualità inferiore)
+- Fonte dati giù → niente nuove posizioni, posizioni aperte protette dagli stop meccanici
 - Claude giù → niente nuove posizioni, stop meccanici attivi, fallback inference x402 opzionale
 - RPC BSC giù → RPC alternativi (multi endpoint), attesa condizioni migliori
 - Carburante basso (gas/USDC/crediti) → modalità risparmio + alert
@@ -393,43 +401,41 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Dipendenza transitoria: il checker usa CoinGecko; viene sostituito dall'adapter CMC nello Step 3.
 - **Deliverable:** notifiche funzionanti con app chiusa (telefono via FCM)
 
-### STEP 3 — Astrazione Dati Multi-Provider (CMC + CoinGecko)
-
-> **Cambio di approccio rispetto alla "migrazione" originale:** CoinGecko NON viene buttato. Si introduce un'astrazione `MarketDataProvider` con due implementazioni intercambiabili, così è possibile scegliere la fonte dati (utile quando scade il piano CMC Startup, o per innestare in futuro provider più economici). Il pattern adapter è la vera ragione architetturale: rende l'aggiunta di un terzo provider un inserimento, non una riscrittura.
-
-- **Interfaccia astratta `MarketDataProvider`**: metodi comuni (prezzi, OHLCV, ricerca, market list) con un formato dati interno normalizzato. Tutto il resto del codice (agente, checker notifiche, frontend) dipende dall'interfaccia, mai dal provider concreto.
-- **`CMCProvider`** (primario, default): CMC API Startup (OHLCV storico) + CMC MCP
-- **`CoinGeckoProvider`** (secondario): riadattamento del codice CoinGecko esistente dentro la stessa interfaccia (non riscrittura da zero)
-- **Selettore manuale globale** nelle impostazioni sviluppatore: sceglie quale provider è attivo. Statico (un provider per tutto).
-- Rate limiting + caching crediti (per CMC)
-- Normalizzazione dati: i due provider hanno formati/simboli/granularità diversi → mappati a un formato interno comune
-- **Confine di qualità esplicito:** CoinGecko è pienamente valido per monitoring e alert. Per il Volume Profile (perp, OHLCV 5m) la granularità CoinGecko potrebbe essere insufficiente → documentato come limite noto del provider secondario.
-- Sostituzione del checker notifiche Step 2 (che usa CoinGecko diretto) con l'astrazione provider
+### STEP 3 — Migrazione CoinGecko → CMC
+- Frontend: sostituzione fonte dati
+- CMC API Startup (OHLCV storico) + CMC MCP
+- Rate limiting + caching crediti
 - Traduzione testi IT → EN (i18n)
 - **Test automatici obbligatori (gate per completamento):**
   - Chiamata reale CMC API → risposta con dati validi (richiede chiave CMC configurata)
-  - Chiamata CoinGecko via interfaccia → dati validi nel formato interno normalizzato (smoke test del provider secondario)
-  - Selettore provider: cambio CMC↔CoinGecko → il sistema usa effettivamente il provider selezionato
-  - Normalizzazione: stessa coin da CMC e da CoinGecko → stesso formato interno (campi coerenti)
   - Rate limiter: verifica che richieste oltre soglia vengano bloccate/accodate e non inoltrate
   - Cache crediti: verifica che il contatore scenda correttamente e che i warning soglia scattino
   - Endpoint dati backend: risposta con struttura attesa (symbol, price, volume, OHLCV)
-  - Frontend: verifica che le viste mostrino dati dal provider selezionato (con CMC default, nessuna chiamata diretta a api.coingecko.com fuori dall'astrazione)
-- **Deliverable:** app su astrazione multi-provider (CMC default + CoinGecko selezionabile), backend con accesso dati+MCP, suite test integrazione verde
+  - Frontend: verifica che le viste mostrino dati CMC e non CoinGecko (nessuna chiamata a api.coingecko.com nei log di rete)
+- **Deliverable:** app che gira su dati CMC, backend con accesso dati+MCP, suite test integrazione verde
 
-> **Rinviato a V2:** (1) fallback automatico — se il provider primario cade, alert e monitoring continuano sul secondario, ma la strategia di trading va in modalità degradata (non opera su dati potenzialmente degradati); (2) selettore per-funzione (provider diverso per strategia vs monitoring); (3) predisposizione per un terzo provider (es. servizio x402/AgentData a costo inferiore) — l'astrazione lo rende un semplice inserimento.
+### STEP 4 — Layer di Esecuzione (esteso: execution astratto multi-provider)
 
-### STEP 4 — Layer di Esecuzione
-- Spot → TWAK (signing + autonomous mode); verificare gestione approvals
+> **Filosofia (aggiornata 16 giugno):** l'obiettivo non è solo l'hackathon ma uno **strumento reale e funzionante** anche fuori dalla gara. L'esecuzione è quindi astratta come il market data (Step 3): un'interfaccia `ExecutionProvider` con implementazioni intercambiabili. Per l'hackathon si usa TWAK (obbligatorio lì); fuori, esecuzione DEX diretta che non dipende da Trust Wallet (nessun 403, nessuna fee TWAK). Il codice TWAK già scritto NON si butta: diventa una delle implementazioni dietro l'interfaccia.
+
+**Parte già completata (Step 4 originale):**
+- Spot → TWAK (signing + autonomous mode); approvals verificate
 - Perp → BNB AI Agent SDK / EIP-712 (execution sdoppiato)
-- BNB SDK approfondito (identità ERC-8004 + moduli custody/memory/payment — usare in modo sostanziale)
-- x402 su BSC via SDK + servizio terzo (es. AgentData) con architettura fallback
-- Token approvals sicure (whitelist)
-- Gas management (riserva dinamica % + floor)
-- Multi RPC endpoint BSC (fallback)
-- Gestione trade falliti/parziali + conferma on-chain
-- Logica registrazione competizione on-chain
-- **Deliverable:** capacità di firmare/eseguire trade su testnet (spot e perp)
+- BNB SDK (identità ERC-8004 + ERC-8183 + x402)
+- x402 su BSC via SDK + servizio terzo (AgentData) con fallback
+- Token approvals sicure (whitelist), gas management (riserva 15% + floor), multi RPC fallback
+- Gestione trade falliti/parziali + conferma on-chain, logica registrazione competizione
+- ⚠️ Blocco esterno: 403 su API swap TWAK (piano Free) — non di codice
+
+**Estensione Step 4 (astrazione execution):**
+- **Interfaccia astratta `ExecutionProvider`** con metodi comuni: quote, execute_swap, get_position, close_position, status. Tutto il resto (agente, risk engine) dipende dall'interfaccia, mai dal provider concreto.
+- **`TWAKProvider`** — wrapping del codice TWAK esistente nell'interfaccia (refactor, non riscrittura). Provider per l'hackathon.
+- **`PancakeSwapProvider`** — esecuzione DEX diretta via web3.py sul PancakeSwap Router. Nessuna dipendenza da Trust Wallet, nessun 403, nessuna fee TWAK. Usa il wallet keystore Web3 già esistente. Provider per uso reale fuori dall'hackathon e per TEST locali dell'agente subito (senza aspettare lo sblocco TWAK).
+- **Selettore execution provider** globale (config + impostazioni sviluppatore): `twak` / `pancakeswap`. Stesso pattern del selettore dati.
+- I guardrail (gas, approvals whitelist, slippage, cap rischio) restano nel layer comune, validi per entrambi i provider.
+- **Deliverable esteso:** esecuzione funzionante via PancakeSwap diretto (testabile subito su BSC) + TWAK pronto per l'hackathon, dietro interfaccia comune con selettore.
+
+> **V2:** ulteriori execution provider (altri DEX/aggregatori), fallback automatico tra provider execution.
 
 ### STEP 5 — Persistenza Dati
 - DB con separazione esplicita Spot / Perp / Globale
@@ -442,6 +448,7 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Claude come meta-controller (poteri limitati)
 - **Strategia Spot V1** (momentum + struttura + VWAP + EMA di supporto + ATR + relative volume)
 - **Strategia Perp V1** (Volume Profile mean reversion + gerarchia segnali, trend via VWAP)
+- **Feed Binance klines per Volume Profile 5m** (debito Step 3): `/fapi/v1/klines` (futures) o `/api/v3/klines` (spot), con volume. Feed specializzato nel signal engine, NON nel `MarketDataProvider` generico.
 - Signal engine modulare (predisposto delta V2, relative strength V2)
 - Risk management completo + guardrail
 - Reattività due velocità (loop veloce/lento)
@@ -449,7 +456,8 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Kill switch (soft + hard)
 - Regole hardcoded (heartbeat 1 trade/giorno, mai sotto $1)
 - Modalità operative (dry-run / live / test scaling %, network)
-- **Deliverable:** agente completo funzionante in dry-run
+- **L'agente usa l'interfaccia `ExecutionProvider` astratta (Step 4 esteso):** non sa né gli importa se sotto c'è TWAK o PancakeSwap. Questo permette di testare l'agente in esecuzione reale via PancakeSwap subito, senza dipendere dallo sblocco del 403 TWAK.
+- **Deliverable:** agente completo funzionante in dry-run, testabile in esecuzione reale via PancakeSwap
 
 ### STEP 7 — Estensione App Mobile (SOLO ADDITIVO)
 
@@ -506,6 +514,11 @@ Aggiunte all'app mobile (essenziali, mobile-first):
 - Backup automatico DB + export config
 - Monitoraggio attivo settimana gara
 - Runbook ripristino rapido
+- **TWAK in ambiente headless (dal Telegram BNB Hack):** sul VPS non c'è il keychain OS usato in locale. Pattern di deploy headless:
+  - `TWAK_WALLET_PASSWORD` come variabile d'ambiente (nel `.env`, mai committato)
+  - Creazione/uso wallet con flag `--no-keychain`
+  - Volume/cartella persistente montata su `~/.twak` (contiene `wallet.json` e `credentials.json`) — deve sopravvivere ai restart del container/servizio
+  - Il file `~/.twak/wallet.json` cifrato va preservato nei backup, mai nel repo
 - **Deliverable:** sistema in produzione, operativo 24/7
 
 ---
@@ -527,12 +540,16 @@ L'utente passa il report per revisione. Solo dopo approvazione si procede.
 
 ## N. QUESTIONI APERTE + VERIFICHE TECNICHE DELEGATE
 
-### Da chiarire con organizzatori (Telegram/DoraHacks) — non bloccanti
+### Da chiarire con organizzatori (Telegram/DoraHacks)
+- ⏳ **403 swap TWAK** — BLOCCANTE per la gara. Problema diffuso (più partecipanti), in carico a Trust Wallet. L'esecuzione on-chain via TWAK è obbligatoria, quindi questo va risolto. Insistere sul Telegram.
+- ⏳ **Spot vs Perp nel ranking** — determina la priorità strategica dello Step 6. In attesa di risposta.
 - Valore esatto del **drawdown cap** della gara (default prudenziale -15% intanto)
 - Dettagli scoring (raw vs risk-adjusted)
 - Cosa conta come "trade valido" per il minimo giornaliero (size minima?)
 - **Perp DEX** consigliato e via preferita perp (BNB SDK vs EIP-712)
 - Data/ora esatta apertura trading window (per timing registrazione)
+- ✅ **Esecuzione on-chain via TWAK** — CONFERMATO obbligatorio (16 giugno)
+- ✅ **Fee TWAK** — ridotte a 0.077% durante la gara (16 giugno)
 
 ### Verifiche tecniche delegate all'AI interna (in fase di sviluppo)
 - Come TWAK gestisce le **approvals** in autonomous mode (mirate/illimitate/policy propria)
