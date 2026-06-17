@@ -35,7 +35,14 @@ const CoinChartSheet: FC<Props> = ({
   onClose, onToggleAlert, onToggleRangeAlert, onAddAlert,
 }) => {
   const [tf, setTf] = useState<TF>('7g');
-  const [mode, setMode] = useState<'line' | 'candle'>('line');
+  const [mode, setMode] = useState<'line' | 'candle'>(
+    () => (localStorage.getItem('chart_mode') as 'line' | 'candle' | null) ?? 'line'
+  );
+
+  const handleModeChange = (m: 'line' | 'candle') => {
+    localStorage.setItem('chart_mode', m);
+    setMode(m);
+  };
   const [showAlerts, setShowAlerts] = useState(true);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -258,7 +265,7 @@ const CoinChartSheet: FC<Props> = ({
             </div>
             <div className="flex items-center bg-dark-700 rounded-xl p-1 gap-0.5">
               <button
-                onClick={() => setMode('line')}
+                onClick={() => handleModeChange('line')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${mode === 'line' ? 'bg-dark-600 text-white' : 'text-gray-500'}`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -267,7 +274,7 @@ const CoinChartSheet: FC<Props> = ({
                 Linea
               </button>
               <button
-                onClick={() => setMode('candle')}
+                onClick={() => handleModeChange('candle')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${mode === 'candle' ? 'bg-dark-600 text-white' : 'text-gray-500'}`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
