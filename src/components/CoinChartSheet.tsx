@@ -1,10 +1,40 @@
 import { type FC, useEffect, useRef, useState, useMemo } from 'react';
 import { createChart, ColorType, LineStyle, CrosshairMode, LineSeries, CandlestickSeries } from 'lightweight-charts';
+import type { ISeriesApi, SeriesType, UTCTimestamp } from 'lightweight-charts';
 import type { Coin, PriceAlert, RangeAlert } from '../types';
 import type { Currency } from '../hooks/useCurrency';
-import { useCoinChart } from '../hooks/useCoinChart';
+import { useCoinChart, type LinePoint, type CandlePoint } from '../hooks/useCoinChart';
 import { openExternalUrl } from '../utils/notifications';
 import { fetchMarkets } from '../services/marketData';
+
+// The backend OHLCV is historical closed candles, so the last bar lags the live
+// price. This builds the "current/forming" bar from the live price so the chart
+// ends at the displayed price (update the last bar, or append a new period).
+function buildLiveBar(
+  line: LinePoint[],
+  candle: CandlePoint[],
+  mode: 'line' | 'candle',
+  price: number,
+  fallbackStep: number,
+): LinePoint | CandlePoint | null {
+  const arr = mode === 'line' ? line : candle;
+  if (arr.length === 0 || !isFinite(price) || price <= 0) return null;
+  const last = arr[arr.length - 1];
+  const lastTime = last.time as number;
+  const step = arr.length >= 2 ? lastTime - (arr[arr.length - 2].time as number) : fallbackStep;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const startNew = step > 0 && nowSec - lastTime >= step;
+  const time = (startNew ? lastTime + step : lastTime) as UTCTimestamp;
+  if (mode === 'line') {
+    return { time, value: price };
+  }
+  const c = last as CandlePoint;
+  if (startNew) {
+    const open = c.close;
+    return { time, open, high: Math.max(open, price), low: Math.min(open, price), close: price };
+  }
+  return { time, open: c.open, high: Math.max(c.high, price), low: Math.min(c.low, price), close: price };
+}
 
 interface Props {
   coin: Coin;
@@ -47,6 +77,7 @@ const CoinChartSheet: FC<Props> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
+  const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
@@ -124,9 +155,14 @@ const CoinChartSheet: FC<Props> = ({
       });
       chartRef.current = chart;
 
+      const fallbackStep = DAYS[tf] <= 30 ? 3600 : 86400;
+
       if (mode === 'line') {
         const series = chart.addSeries(LineSeries, { color: '#3b82f6', lineWidth: 2, lastValueVisible: true, priceLineVisible: false });
         series.setData(lineData);
+        seriesRef.current = series;
+        const live = buildLiveBar(lineData, candleData, 'line', livePrice, fallbackStep);
+        if (live) series.update(live as never);
         if (showAlerts) {
           coinAlerts.filter(a => a.active ?? true).forEach(a => {
             series.createPriceLine({
@@ -153,6 +189,9 @@ const CoinChartSheet: FC<Props> = ({
           wickDownColor: '#ef4444',
         });
         series.setData(candleData);
+        seriesRef.current = series;
+        const live = buildLiveBar(lineData, candleData, 'candle', livePrice, fallbackStep);
+        if (live) series.update(live as never);
         if (showAlerts) {
           coinAlerts.filter(a => a.active ?? true).forEach(a => {
             series.createPriceLine({
@@ -189,9 +228,30 @@ const CoinChartSheet: FC<Props> = ({
       cancelAnimationFrame(raf);
       chart?.remove();
       chartRef.current = null;
+      seriesRef.current = null;
       setCrosshairPrice(null);
     };
+    // livePrice intentionally excluded: the dedicated effect below applies live
+    // updates via series.update() so the chart is not rebuilt every refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineData, candleData, mode, showAlerts, coinAlerts, coinRangeAlerts, loading, error, tf]);
+
+  // Keep the last bar aligned with the live price as it refreshes (every 30s),
+  // updating only the forming bar so the chart is never rebuilt (no flicker).
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || loading || error) return;
+    const data = mode === 'line' ? lineData : candleData;
+    if (data.length === 0) return;
+    const live = buildLiveBar(lineData, candleData, mode, livePrice, DAYS[tf] <= 30 ? 3600 : 86400);
+    if (!live) return;
+    try {
+      series.update(live as never);
+    } catch {
+      // lightweight-charts rejects out-of-order times; ignore until next rebuild.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePrice]);
 
   return (
     <div
