@@ -13,8 +13,18 @@ const AppSettings = registerPlugin<AppSettingsPlugin>('AppSettings');
 const BACKEND_API_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined;
 const API_DEVICE_TOKEN = import.meta.env.VITE_API_DEVICE_TOKEN as string | undefined;
 const API_ALERTS_TOKEN = import.meta.env.VITE_API_ALERTS_TOKEN as string | undefined;
+
+const PENDING_TOKEN_KEY = 'cs_push_token_pending';
+const LAST_VERIFIED_KEY = 'cs_push_last_verified';
+const REG_LOG_KEY = 'cs_push_reg_log';
+const DAILY_MS = 24 * 60 * 60 * 1000;
+const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
+
 const PENDING_FAV_ALERTS_KEY = 'cs_pending_fcm_fav_alerts';
+
 let pushRegistrationStarted = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let dailyTimer: ReturnType<typeof setInterval> | null = null;
 
 export interface FavAlertData {
   coinId: string;
@@ -32,6 +42,28 @@ interface FavPushEvent {
 }
 
 const favPushSubscribers = new Set<(event: FavPushEvent) => void>();
+
+// ── Registration log ──────────────────────────────────────────────────────────
+
+function logReg(msg: string): void {
+  try {
+    const logs: string[] = JSON.parse(localStorage.getItem(REG_LOG_KEY) ?? '[]');
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    logs.push(`${ts} ${msg}`);
+    if (logs.length > 60) logs.splice(0, logs.length - 60);
+    localStorage.setItem(REG_LOG_KEY, JSON.stringify(logs));
+  } catch { /* storage not available */ }
+}
+
+export function getRegistrationLogs(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(REG_LOG_KEY) ?? '[]') as string[];
+  } catch {
+    return [];
+  }
+}
+
+// ── Fav push alert helpers ────────────────────────────────────────────────────
 
 function loadPendingFavAlerts(): Record<string, FavAlertData> {
   try {
@@ -119,34 +151,85 @@ async function dismissFavoritePushAlertOnBackend(coinId: string): Promise<void> 
   }
 }
 
-export async function initNotifications(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  await LocalNotifications.createChannel({
-    id: 'price_alerts',
-    name: 'Allarmi Prezzi',
-    description: 'Notifiche per gli allarmi di prezzo crypto',
-    importance: 5,
-    vibration: true,
-    sound: 'default',
-    visibility: 1,
-  });
-  await registerRemotePushToken();
+// ── Push token registration ───────────────────────────────────────────────────
+
+async function sendPushTokenToBackend(token: string): Promise<boolean> {
+  const baseUrl = BACKEND_API_BASE_URL?.replace(/\/+$/, '');
+  if (!baseUrl || !API_DEVICE_TOKEN) {
+    logReg('⚠️ env non configurato, skip registrazione');
+    return false;
+  }
+  try {
+    const r = await CapacitorHttp.request({
+      method: 'POST',
+      url: `${baseUrl}/api/v1/notifications/devices`,
+      headers: {
+        Authorization: `Bearer ${API_DEVICE_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        token,
+        platform: 'android',
+        app_version: __APP_VERSION__,
+        locale: navigator.language,
+      },
+      connectTimeout: 8000,
+      readTimeout: 8000,
+    });
+    if (r.status >= 200 && r.status < 300) {
+      localStorage.removeItem(PENDING_TOKEN_KEY);
+      localStorage.setItem(LAST_VERIFIED_KEY, String(Date.now()));
+      logReg(`✓ token registrato (status ${r.status})`);
+      return true;
+    }
+    logReg(`✗ backend ha risposto ${r.status}, token salvato per retry`);
+    localStorage.setItem(PENDING_TOKEN_KEY, token);
+    return false;
+  } catch (e) {
+    const msg = (e as Error).message ?? 'errore sconosciuto';
+    logReg(`✗ errore rete — ${msg} — token salvato per retry`);
+    localStorage.setItem(PENDING_TOKEN_KEY, token);
+    return false;
+  }
+}
+
+function scheduleRetry(token: string, attempt = 0): void {
+  if (retryTimer) clearTimeout(retryTimer);
+  const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+  logReg(`⏳ prossimo retry in ${delay / 1000}s (tentativo ${attempt + 1})`);
+  retryTimer = setTimeout(async () => {
+    logReg(`🔄 retry #${attempt + 1}`);
+    const ok = await sendPushTokenToBackend(token);
+    if (!ok) scheduleRetry(token, attempt + 1);
+  }, delay);
 }
 
 async function registerRemotePushToken(): Promise<void> {
   if (pushRegistrationStarted || !BACKEND_API_BASE_URL || !API_DEVICE_TOKEN) return;
   pushRegistrationStarted = true;
+  logReg('🚀 bootstrap push avviato');
 
   try {
+    // Retry any token that failed in a previous session
+    const pendingToken = localStorage.getItem(PENDING_TOKEN_KEY);
+    if (pendingToken) {
+      logReg('🔄 token pending trovato, retry immediato');
+      const ok = await sendPushTokenToBackend(pendingToken);
+      if (!ok) scheduleRetry(pendingToken, 0);
+    }
+
     await PushNotifications.addListener('registration', async (token) => {
-      await sendPushTokenToBackend(token.value);
+      logReg('📨 FCM token ricevuto');
+      // Cancel any in-flight retry — the new token supersedes it
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      const ok = await sendPushTokenToBackend(token.value);
+      if (!ok) scheduleRetry(token.value, 0);
     });
 
-    await PushNotifications.addListener('registrationError', () => {
-      // Keep local notifications working even if FCM registration is unavailable.
+    await PushNotifications.addListener('registrationError', (err) => {
+      logReg(`✗ FCM registrationError — ${JSON.stringify(err)}`);
     });
 
-    // FCM in foreground: show as local notification (Android doesn't auto-display these)
     await PushNotifications.addListener('pushNotificationReceived', async (notification) => {
       emitFavPush(notification.data, false);
       await LocalNotifications.schedule({
@@ -167,34 +250,44 @@ async function registerRemotePushToken(): Promise<void> {
     });
 
     const permission = await PushNotifications.requestPermissions();
-    if (permission.receive !== 'granted') return;
+    if (permission.receive !== 'granted') {
+      logReg('⚠️ permesso notifiche non concesso');
+      return;
+    }
+
     await PushNotifications.register();
-  } catch {
-    // Keep local notifications working even if remote push bootstrap fails.
+    logReg('📡 PushNotifications.register() chiamato');
+
+    // Daily re-registration while the app stays open in background
+    if (dailyTimer) clearInterval(dailyTimer);
+    dailyTimer = setInterval(async () => {
+      logReg('📅 verifica giornaliera — forzo re-registrazione');
+      try {
+        await PushNotifications.register();
+      } catch (e) {
+        logReg(`✗ errore verifica giornaliera — ${(e as Error).message ?? 'sconosciuto'}`);
+      }
+    }, DAILY_MS);
+
+  } catch (e) {
+    logReg(`✗ eccezione bootstrap — ${(e as Error).message ?? 'sconosciuto'}`);
   }
 }
 
-async function sendPushTokenToBackend(token: string): Promise<void> {
-  try {
-    const baseUrl = BACKEND_API_BASE_URL?.replace(/\/+$/, '');
-    if (!baseUrl || !API_DEVICE_TOKEN) return;
-    await CapacitorHttp.request({
-      method: 'POST',
-      url: `${baseUrl}/api/v1/notifications/devices`,
-      headers: {
-        Authorization: `Bearer ${API_DEVICE_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      data: {
-        token,
-        platform: 'android',
-        app_version: __APP_VERSION__,
-        locale: navigator.language,
-      },
-    });
-  } catch {
-    // Registration is retried on next app start; do not block local alerts.
-  }
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export async function initNotifications(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  await LocalNotifications.createChannel({
+    id: 'price_alerts',
+    name: 'Allarmi Prezzi',
+    description: 'Notifiche per gli allarmi di prezzo crypto',
+    importance: 5,
+    vibration: true,
+    sound: 'default',
+    visibility: 1,
+  });
+  await registerRemotePushToken();
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {

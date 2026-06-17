@@ -1,7 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
 import QRCode from 'qrcode';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { openNotificationSettings } from '../utils/notifications';
+import { openNotificationSettings, getRegistrationLogs } from '../utils/notifications';
 import { openBatterySettings } from '../utils/energySaving';
 import { checkForUpdates, downloadAndInstall, openDownloadsFolder, getDevBuildInfo, mergeToMain, APK_PAGES_URL, type UpdateResult, type DevBuildInfo } from '../utils/update';
 import type { Currency } from '../hooks/useCurrency';
@@ -227,6 +227,7 @@ const SettingsTab: FC<Props> = ({
     backendReachable: boolean;
     backendLatencyMs: number | null;
     deviceCount: number | null;
+    registrationLog: string[];
     checkedAt: string;
     error?: string;
   }
@@ -332,6 +333,7 @@ const SettingsTab: FC<Props> = ({
       backendReachable,
       backendLatencyMs,
       deviceCount,
+      registrationLog: getRegistrationLogs().slice(-10).reverse(),
       checkedAt: new Date().toLocaleTimeString('it-IT'),
       error,
     });
@@ -946,6 +948,14 @@ const SettingsTab: FC<Props> = ({
                     ) : <span className="text-xs text-gray-600">—</span>}
                   </div>
                 </div>
+                {diagResult && diagResult.registrationLog.length > 0 && (
+                  <div className="bg-dark-900 rounded-lg px-3 py-2 space-y-0.5 max-h-32 overflow-y-auto">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Push log</p>
+                    {diagResult.registrationLog.map((line, i) => (
+                      <p key={i} className="text-xs text-gray-500 font-mono leading-relaxed">{line}</p>
+                    ))}
+                  </div>
+                )}
                 {diagResult && (
                   <p className="text-xs text-gray-600 text-right">Aggiornato alle {diagResult.checkedAt}</p>
                 )}
