@@ -5,6 +5,10 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep
+from backend.app.execution.perp_registry import (
+    PerpExecutionRegistry,
+    get_perp_execution_registry,
+)
 from backend.app.execution.registry import (
     ExecutionProviderRegistry,
     get_execution_provider_registry,
@@ -13,11 +17,14 @@ from backend.app.execution.service import ExecutionService, get_execution_servic
 from backend.app.schemas.execution import (
     ExecutionProviderSelectionRequest,
     ExecutionProviderSelectionResponse,
+    PerpProviderSelectionRequest,
+    PerpProviderSelectionResponse,
 )
 
 router = APIRouter(prefix="/api/v1/execution", tags=["execution"])
 ExecutionServiceDep = Annotated[ExecutionService, Depends(get_execution_service)]
 RegistryDep = Annotated[ExecutionProviderRegistry, Depends(get_execution_provider_registry)]
+PerpRegistryDep = Annotated[PerpExecutionRegistry, Depends(get_perp_execution_registry)]
 
 
 @router.get("/status")
@@ -53,6 +60,34 @@ async def select_execution_provider(
 
     registry.select(request.provider)
     return ExecutionProviderSelectionResponse(
+        active=registry.active_name,
+        providers=registry.statuses(),
+    )
+
+
+@router.get("/perp-provider", response_model=PerpProviderSelectionResponse)
+async def perp_provider_status(
+    registry: PerpRegistryDep,
+    _: ReadAccessDep,
+) -> PerpProviderSelectionResponse:
+    """Return the global perp execution provider selection and diagnostics."""
+
+    return PerpProviderSelectionResponse(
+        active=registry.active_name,
+        providers=registry.statuses(),
+    )
+
+
+@router.put("/perp-provider", response_model=PerpProviderSelectionResponse)
+async def select_perp_provider(
+    request: PerpProviderSelectionRequest,
+    registry: PerpRegistryDep,
+    _: AdminAccessDep,
+) -> PerpProviderSelectionResponse:
+    """Select one global perp execution provider until restart. No fallback."""
+
+    registry.select(request.provider)
+    return PerpProviderSelectionResponse(
         active=registry.active_name,
         providers=registry.statuses(),
     )

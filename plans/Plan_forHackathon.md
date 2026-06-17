@@ -126,7 +126,7 @@ Questi vincoli sono assoluti. Il codice deve garantirli sempre, come regole hard
 | AI | Claude API (meta-controller) |
 | Dati mercato | CoinMarketCap (piano Startup: OHLCV storico) + CMC MCP |
 | Esecuzione spot | Trust Wallet Agent Kit (TWAK) per hackathon + PancakeSwap diretto (web3.py) per uso reale — dietro interfaccia `ExecutionProvider` astratta |
-| Esecuzione perp | BNB AI Agent SDK / EIP-712 |
+| Esecuzione perp | BNB AI Agent SDK / EIP-712 (+ futuri DEX perp) — dietro interfaccia `PerpExecutionProvider` astratta |
 | Pagamenti dati | x402 (su BSC via BNB SDK; servizi terzi es. AgentData) |
 | Notifiche | Firebase Cloud Messaging (FCM) |
 | Database | SQLite (iniziale) o PostgreSQL (VPS) |
@@ -416,7 +416,7 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 
 ### STEP 4 — Layer di Esecuzione (esteso: execution astratto multi-provider)
 
-> **Filosofia (aggiornata 16 giugno):** l'obiettivo non è solo l'hackathon ma uno **strumento reale e funzionante** anche fuori dalla gara. L'esecuzione è quindi astratta come il market data (Step 3): un'interfaccia `ExecutionProvider` con implementazioni intercambiabili. Per l'hackathon si usa TWAK (obbligatorio lì); fuori, esecuzione DEX diretta che non dipende da Trust Wallet (nessun 403, nessuna fee TWAK). Il codice TWAK già scritto NON si butta: diventa una delle implementazioni dietro l'interfaccia.
+> **Filosofia (aggiornata 16 giugno):** l'obiettivo non è solo l'hackathon ma uno **strumento reale e funzionante** anche fuori dalla gara. L'esecuzione è quindi astratta come il market data (Step 3): interfacce con implementazioni intercambiabili. L'astrazione vale per **entrambi i mercati**, con due percorsi separati: lo **spot** dietro `ExecutionProvider` (TWAK + PancakeSwap), il **perp** dietro `PerpExecutionProvider` (BNB AI Agent SDK + futuri DEX perp). Per l'hackathon lo spot usa TWAK (obbligatorio lì); fuori, esecuzione DEX diretta che non dipende da Trust Wallet (nessun 403, nessuna fee TWAK). Il codice TWAK e BNB SDK già scritto NON si butta: diventa la prima implementazione dietro le rispettive interfacce.
 
 **Parte già completata (Step 4 originale):**
 - Spot → TWAK (signing + autonomous mode); approvals verificate
@@ -427,7 +427,7 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - Gestione trade falliti/parziali + conferma on-chain, logica registrazione competizione
 - ⚠️ Blocco esterno: 403 su API swap TWAK (piano Free) — non di codice
 
-**Estensione Step 4 (astrazione execution):**
+**Estensione Step 4 (astrazione execution SPOT):**
 - **Interfaccia astratta `ExecutionProvider`** con metodi comuni: quote, execute_swap, get_position, close_position, status. Tutto il resto (agente, risk engine) dipende dall'interfaccia, mai dal provider concreto.
 - **`TWAKProvider`** — wrapping del codice TWAK esistente nell'interfaccia (refactor, non riscrittura). Provider per l'hackathon.
 - **`PancakeSwapProvider`** — esecuzione DEX diretta via web3.py sul PancakeSwap Router. Nessuna dipendenza da Trust Wallet, nessun 403, nessuna fee TWAK. Usa il wallet keystore Web3 già esistente. Provider per uso reale fuori dall'hackathon e per TEST locali dell'agente subito (senza aspettare lo sblocco TWAK).
@@ -435,7 +435,14 @@ Mobile = essenziale. Web = completa con grafici, log, export.
 - I guardrail (gas, approvals whitelist, slippage, cap rischio) restano nel layer comune, validi per entrambi i provider.
 - **Deliverable esteso:** esecuzione funzionante via PancakeSwap diretto (testabile subito su BSC) + TWAK pronto per l'hackathon, dietro interfaccia comune con selettore.
 
-> **V2:** ulteriori execution provider (altri DEX/aggregatori), fallback automatico tra provider execution.
+**Estensione Step 4 (astrazione execution PERP — stesso pattern):**
+- **Interfaccia astratta `PerpExecutionProvider`** di alto livello: open_position, close_position, get_position, status (ciò che l'agente userà a prescindere dal DEX perp). I dettagli di firma (EIP-712) restano interni al provider.
+- **`BnbSdkPerpProvider`** — wrapping del boundary BNB AI Agent SDK / EIP-712 esistente (refactor, non riscrittura): status + path firma/submit. open/close/get position sono predisposti (fail-closed) finché non è configurata una venue perp / arriva l'agente (Step 6).
+- **Selettore perp provider** globale e persistito (admin-only): `perp_execution_provider`. Stesso pattern dello spot, registry separato.
+- **Predisposizione multi-DEX:** aggiungere un 2°/3°/4° DEX di perpetual = nuova classe `XxxPerpProvider(PerpExecutionProvider)` + voce nell'enum/registry, senza toccare agente/service.
+
+> **Nota:** spot e perp restano percorsi separati con interfacce/registry distinti (mercati diversi, API diverse).
+> **V2:** ulteriori execution provider sia spot (altri DEX/aggregatori) sia perp (altri DEX perpetual), eventuale fallback automatico tra provider.
 
 ### STEP 5 — Persistenza Dati
 - DB con separazione esplicita Spot / Perp / Globale

@@ -387,7 +387,9 @@ class Settings(BaseSettings):
     )
 
     bnb_ai_agent_sdk_enabled: bool = Field(default=False, alias="BNB_AI_AGENT_SDK_ENABLED")
-    perp_execution_provider: str = Field(default="bnb_sdk", alias="PERP_EXECUTION_PROVIDER")
+    perp_execution_provider: Literal["bnb_sdk"] = Field(
+        default="bnb_sdk", alias="PERP_EXECUTION_PROVIDER"
+    )
     perp_order_submit_url: str | None = Field(default=None, alias="PERP_ORDER_SUBMIT_URL")
     perp_allowed_verifying_contracts: list[str] = Field(
         default_factory=list,

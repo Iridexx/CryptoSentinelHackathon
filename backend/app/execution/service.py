@@ -7,7 +7,7 @@ from typing import Any
 from web3 import Web3
 
 from backend.app.core.config import Settings, get_settings
-from backend.app.execution.perp_bnb_sdk import BnbAgentSdkBridge
+from backend.app.execution.perp_registry import PerpExecutionRegistry
 from backend.app.execution.registry import ExecutionProviderRegistry
 from backend.app.execution.rpc import MultiRpcClient
 from backend.app.execution.spot_twak import TwakClient
@@ -30,7 +30,7 @@ class ExecutionService:
         )
         self.twak = TwakClient(settings)
         self.spot_registry = ExecutionProviderRegistry(settings)
-        self.perp = BnbAgentSdkBridge(settings)
+        self.perp_registry = PerpExecutionRegistry(settings)
         self.x402 = X402Client(
             settings,
             self.twak,
@@ -52,7 +52,10 @@ class ExecutionService:
                 "active_provider": self.spot_registry.active_name.value,
                 "providers": [status.model_dump() for status in self.spot_registry.statuses()],
             },
-            "perp": self.perp.status,
+            "perp": {
+                "active_provider": self.perp_registry.active_name.value,
+                "providers": [status.model_dump() for status in self.perp_registry.statuses()],
+            },
             "x402": {
                 "enabled": self.settings.x402_enabled,
                 "network": self.settings.x402_network,
