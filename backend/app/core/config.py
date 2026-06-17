@@ -457,6 +457,13 @@ class Settings(BaseSettings):
 
         return env_settings, dotenv_settings, init_settings, file_secret_settings
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def default_database_url(cls, value: str | None) -> str:
+        if not value or not str(value).strip():
+            return "sqlite+aiosqlite:///./backend/local.db"
+        return str(value).strip()
+
     @field_validator("twak_cli_path", mode="before")
     @classmethod
     def default_twak_cli_path(cls, value: str | None) -> str:
