@@ -20,7 +20,7 @@ export function useCoinChart(
     if (!coinId) return;
     let ctrl: AbortController;
 
-    // Debounce 450ms: evita richieste multiple su cambio rapido di timeframe/modalità
+    // Short debounce only to absorb rapid timeframe clicks — not a loading delay.
     const debounce = setTimeout(() => {
       ctrl = new AbortController();
       setLoading(true);
@@ -45,21 +45,22 @@ export function useCoinChart(
               close: bar.close,
             });
           }
-          if (mode === 'line') setLineData(line);
-          else setCandleData(candles);
+          // Always set both so switching mode is instant with no re-fetch.
+          setLineData(line);
+          setCandleData(candles);
         } catch (e) {
           if ((e as Error).name !== 'AbortError') setError(true);
         } finally {
           if (!ctrl.signal.aborted) setLoading(false);
         }
       })();
-    }, 450);
+    }, 80);
 
     return () => {
       clearTimeout(debounce);
       ctrl?.abort();
     };
-  }, [coinId, currency, days, mode]);
+  }, [coinId, currency, days]); // mode excluded: switching view never re-fetches
 
   return { lineData, candleData, loading, error };
 }
