@@ -28,6 +28,7 @@ class FavCoin(BaseModel):
 
 
 class AlertSyncRequest(BaseModel):
+    device_id: str | None = None
     price_alerts: list[PriceAlertItem] = Field(default_factory=list)
     range_alerts: list[RangeAlertItem] = Field(default_factory=list)
     fav_coins: list[FavCoin] = Field(default_factory=list)

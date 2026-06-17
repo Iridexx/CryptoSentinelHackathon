@@ -1,6 +1,7 @@
 import { Capacitor, CapacitorHttp, registerPlugin } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { getDeviceId } from './deviceId';
 
 interface AppSettingsPlugin {
   openNotifications(): Promise<void>;
@@ -122,7 +123,7 @@ export async function refreshPendingFavoritePushAlerts(): Promise<void> {
   try {
     const response = await CapacitorHttp.request({
       method: 'GET',
-      url: `${baseUrl}/api/v1/alerts/pending-favorites`,
+      url: `${baseUrl}/api/v1/alerts/pending-favorites?device_id=${encodeURIComponent(getDeviceId())}`,
       headers: { Authorization: `Bearer ${API_ALERTS_TOKEN}` },
       connectTimeout: 6000,
       readTimeout: 6000,
@@ -141,7 +142,7 @@ async function dismissFavoritePushAlertOnBackend(coinId: string): Promise<void> 
   try {
     await CapacitorHttp.request({
       method: 'DELETE',
-      url: `${baseUrl}/api/v1/alerts/pending-favorites/${encodeURIComponent(coinId)}`,
+      url: `${baseUrl}/api/v1/alerts/pending-favorites/${encodeURIComponent(coinId)}?device_id=${encodeURIComponent(getDeviceId())}`,
       headers: { Authorization: `Bearer ${API_ALERTS_TOKEN}` },
       connectTimeout: 6000,
       readTimeout: 6000,
@@ -170,6 +171,7 @@ async function sendPushTokenToBackend(token: string): Promise<boolean> {
       data: {
         token,
         platform: 'android',
+        device_id: getDeviceId(),
         app_version: __APP_VERSION__,
         locale: navigator.language,
       },

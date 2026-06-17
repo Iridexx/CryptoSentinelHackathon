@@ -14,8 +14,12 @@ async def sync_alerts(
     request: AlertSyncRequest,
     _: AlertsAccessDep,
 ) -> AlertSyncResponse:
-    """Store the latest alert thresholds from the mobile app."""
-    get_alert_store().save_config(request)
+    """Store the latest alert thresholds from one device.
+
+    The per-device store keeps each phone's alerts separate; tokens without a
+    device_id fall back to the legacy global store.
+    """
+    get_alert_store(request.device_id).save_config(request)
     return AlertSyncResponse(
         status="synced",
         price_alert_count=len(request.price_alerts),
@@ -25,15 +29,22 @@ async def sync_alerts(
 
 
 @router.get("/pending-favorites")
-async def pending_favorite_alerts(_: AlertsAccessDep) -> PendingFavAlertsResponse:
-    """Return favorite alerts awaiting explicit acknowledgement in the app."""
+async def pending_favorite_alerts(
+    _: AlertsAccessDep,
+    device_id: str | None = None,
+) -> PendingFavAlertsResponse:
+    """Return favorite alerts awaiting explicit acknowledgement on this device."""
 
-    return PendingFavAlertsResponse(items=get_alert_store().pending_fav_alerts())
+    return PendingFavAlertsResponse(items=get_alert_store(device_id).pending_fav_alerts())
 
 
 @router.delete("/pending-favorites/{coin_id}")
-async def dismiss_pending_favorite_alert(coin_id: str, _: AlertsAccessDep) -> dict[str, str]:
+async def dismiss_pending_favorite_alert(
+    coin_id: str,
+    _: AlertsAccessDep,
+    device_id: str | None = None,
+) -> dict[str, str]:
     """Acknowledge one favorite alert and remove its persisted badge state."""
 
-    removed = get_alert_store().dismiss_pending_fav_alert(coin_id)
+    removed = get_alert_store(device_id).dismiss_pending_fav_alert(coin_id)
     return {"status": "dismissed" if removed else "not_found"}

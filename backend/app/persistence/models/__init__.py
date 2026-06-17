@@ -3,6 +3,7 @@
 from .alerts import AlertConfig
 from .base import Base
 from .decisions import AgentDecision
+from .device_alert_configs import DeviceAlertConfig
 from .device_tokens import DeviceToken
 from .pnl import PnlSnapshot, PortfolioState
 from .positions import PerpPosition, SpotPosition
@@ -14,6 +15,7 @@ __all__ = [
     "Base",
     "AlertConfig",
     "AgentDecision",
+    "DeviceAlertConfig",
     "DeviceToken",
     "PnlSnapshot",
     "PortfolioState",

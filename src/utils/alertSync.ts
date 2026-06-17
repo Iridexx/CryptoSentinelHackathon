@@ -1,5 +1,6 @@
 import { CapacitorHttp } from '@capacitor/core';
 import type { PriceAlert, RangeAlert } from '../types';
+import { getDeviceId } from './deviceId';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
 const ALERTS_TOKEN = import.meta.env.VITE_API_ALERTS_TOKEN as string | undefined;
@@ -27,6 +28,7 @@ export async function syncAlertsToBackend(
         'Content-Type': 'application/json',
       },
       data: {
+        device_id: getDeviceId(),
         price_alerts: priceAlerts
           .filter((a) => !a.triggered && a.active !== false)
           .map((a) => ({

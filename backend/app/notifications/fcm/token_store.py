@@ -135,6 +135,21 @@ class DeviceTokenStore:
                 if allowed is None or row.token_id in allowed
             ]
 
+    def tokens_with_device(
+        self, user_id: UUID = DEFAULT_SINGLE_USER_ID
+    ) -> list[tuple[str, str | None]]:
+        """Return ``(raw_token, device_id)`` pairs for a user.
+
+        Used by the price checker to deliver each device only its own alerts.
+        The raw token stays inside the backend and is never exposed via API.
+        """
+
+        with get_sync_session() as session:
+            rows = session.execute(
+                select(DeviceToken).where(DeviceToken.user_id == str(user_id))
+            ).scalars().all()
+            return [(row.token, row.device_id) for row in rows]
+
     def count(self) -> int:
         """Return registered token count."""
 

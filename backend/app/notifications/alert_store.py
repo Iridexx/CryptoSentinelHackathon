@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
 from backend.app.persistence.models.alerts import AlertConfig
+from backend.app.persistence.models.device_alert_configs import DeviceAlertConfig
 from backend.app.persistence.sync_database import get_sync_session
 from backend.app.schemas.alerts import AlertSyncRequest, PendingFavAlert
 
@@ -35,8 +36,10 @@ class CheckerState:
 class AlertStore:
     """Database-backed store for the latest alert config and checker state."""
 
-    def __init__(self, user_id: str | None = None) -> None:
+    def __init__(self, user_id: str | None = None, device_id: str | None = None) -> None:
         self.user_id = str(user_id) if user_id is not None else str(DEFAULT_SINGLE_USER_ID)
+        # Empty string is treated as "no device" (legacy global config).
+        self.device_id = device_id or None
         self._lock = Lock()
         self._config: AlertSyncRequest | None = None
         self._state = CheckerState()
@@ -137,6 +140,27 @@ class AlertStore:
         state_json = json.dumps(self._state_to_dict())
         now = datetime.now(UTC)
         with get_sync_session() as session:
+            if self.device_id is not None:
+                row = session.execute(
+                    select(DeviceAlertConfig)
+                    .where(DeviceAlertConfig.user_id == self.user_id)
+                    .where(DeviceAlertConfig.device_id == self.device_id)
+                ).scalar_one_or_none()
+                if row is None:
+                    row = DeviceAlertConfig(
+                        user_id=self.user_id,
+                        device_id=self.device_id,
+                        config_json=config_json,
+                        state_json=state_json,
+                        updated_at=now,
+                    )
+                    session.add(row)
+                else:
+                    row.config_json = config_json
+                    row.state_json = state_json
+                    row.updated_at = now
+                session.commit()
+                return
             row = session.execute(
                 select(AlertConfig).where(AlertConfig.user_id == self.user_id)
             ).scalar_one_or_none()
@@ -157,9 +181,16 @@ class AlertStore:
     def _load(self) -> None:
         try:
             with get_sync_session() as session:
-                row = session.execute(
-                    select(AlertConfig).where(AlertConfig.user_id == self.user_id)
-                ).scalar_one_or_none()
+                if self.device_id is not None:
+                    row = session.execute(
+                        select(DeviceAlertConfig)
+                        .where(DeviceAlertConfig.user_id == self.user_id)
+                        .where(DeviceAlertConfig.device_id == self.device_id)
+                    ).scalar_one_or_none()
+                else:
+                    row = session.execute(
+                        select(AlertConfig).where(AlertConfig.user_id == self.user_id)
+                    ).scalar_one_or_none()
             if row is None:
                 return
             if row.config_json:
@@ -180,11 +211,22 @@ class AlertStore:
             pass
 
 
-_instance: AlertStore | None = None
+_instances: dict[str | None, AlertStore] = {}
+_instances_lock = Lock()
 
 
-def get_alert_store() -> AlertStore:
-    global _instance
-    if _instance is None:
-        _instance = AlertStore()
-    return _instance
+def get_alert_store(device_id: str | None = None) -> AlertStore:
+    """Return the alert store for a device.
+
+    ``device_id=None`` returns the legacy global store (backward compatibility
+    for tokens registered before per-device separation). Each distinct device
+    gets its own cached store with independent config and checker state.
+    """
+
+    key = device_id or None
+    with _instances_lock:
+        store = _instances.get(key)
+        if store is None:
+            store = AlertStore(device_id=key)
+            _instances[key] = store
+        return store

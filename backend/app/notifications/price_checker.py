@@ -9,9 +9,9 @@ from backend.app.core.logging import get_logger
 from backend.app.data.market_data.base import ProviderError
 from backend.app.data.market_data.registry import MarketDataRegistry, get_market_data_registry
 from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
-from backend.app.notifications.alert_store import get_alert_store
-from backend.app.notifications.service import get_notification_service
-from backend.app.schemas.alerts import PendingFavAlert
+from backend.app.notifications.alert_store import AlertStore, get_alert_store
+from backend.app.notifications.service import NotificationService, get_notification_service
+from backend.app.schemas.alerts import AlertSyncRequest, PendingFavAlert
 
 logger = get_logger("notifications.price_checker")
 
@@ -52,18 +52,13 @@ async def _fetch_prices(
         return {}
 
 
-async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
-    """Single price-check tick."""
-    store = get_alert_store()
-    config = store.get_config()
-    if config is None:
-        return
+def _config_coins_and_currencies(config: AlertSyncRequest) -> tuple[list[str], set[str]]:
+    """Collect the coin ids and vs-currencies referenced by one config."""
 
     coin_ids: list[str] = []
     vs: set[str] = {"usd"}
     if config.fav_currency and config.fav_currency.lower() != "usd":
         vs.add(config.fav_currency.lower())
-
     for a in config.price_alerts:
         if a.coin_id not in coin_ids:
             coin_ids.append(a.coin_id)
@@ -75,32 +70,80 @@ async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
         for c in config.fav_coins:
             if c.id not in coin_ids:
                 coin_ids.append(c.id)
+    return coin_ids, vs
 
-    if not coin_ids:
+
+async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
+    """Single price-check tick.
+
+    Each registered device is evaluated against its OWN alert config and is
+    notified only on its own token. Tokens without a device_id (registered by
+    pre-separation app versions) fall back to the legacy global config.
+    """
+
+    svc = get_notification_service()
+    pairs = svc.store.tokens_with_device(DEFAULT_SINGLE_USER_ID)
+    if not pairs:
+        logger.warning("price_check_no_devices", requested_count=0)
         return
 
-    prices = await _fetch_prices(coin_ids, list(vs), registry)
+    # Group tokens by device (None bucket = legacy tokens without a device_id).
+    device_tokens: dict[str | None, list[str]] = {}
+    for token, device_id in pairs:
+        device_tokens.setdefault(device_id or None, []).append(token)
+
+    # Load each device's config/store; collect the union of coins to fetch once.
+    units: list[tuple[AlertStore, AlertSyncRequest, list[str]]] = []
+    union_coins: list[str] = []
+    union_vs: set[str] = {"usd"}
+    for device_id, tokens in device_tokens.items():
+        store = get_alert_store(device_id)
+        config = store.get_config()
+        if config is None:
+            continue
+        coin_ids, vs = _config_coins_and_currencies(config)
+        if not coin_ids:
+            continue
+        units.append((store, config, tokens))
+        union_vs |= vs
+        for coin_id in coin_ids:
+            if coin_id not in union_coins:
+                union_coins.append(coin_id)
+
+    if not units or not union_coins:
+        return
+
+    prices = await _fetch_prices(union_coins, list(union_vs), registry)
     if not prices:
         logger.warning(
             "price_check_no_prices",
             provider=(registry or get_market_data_registry()).active_name.value,
-            requested_count=len(coin_ids),
+            requested_count=len(union_coins),
         )
         return
     logger.info(
         "price_check_prices_loaded",
         provider=(registry or get_market_data_registry()).active_name.value,
-        requested_count=len(coin_ids),
+        device_count=len(units),
+        requested_count=len(union_coins),
         returned_count=len(prices),
-        missing_ids=[coin_id for coin_id in coin_ids if coin_id not in prices],
+        missing_ids=[coin_id for coin_id in union_coins if coin_id not in prices],
     )
 
-    svc = get_notification_service()
-    tokens = svc.store.tokens_for_user(DEFAULT_SINGLE_USER_ID)
-    if not tokens:
-        logger.warning("price_check_no_devices", requested_count=len(coin_ids))
-        return
+    for store, config, tokens in units:
+        _evaluate_and_send(svc, store, config, tokens, prices)
 
+
+def _evaluate_and_send(
+    svc: NotificationService,
+    store: AlertStore,
+    config: AlertSyncRequest,
+    tokens: list[str],
+    prices: dict[str, dict[str, float]],
+) -> None:
+    """Evaluate one device's alerts against fetched prices and notify its tokens."""
+
+    has_fav = (config.fav_up_pct > 0 or config.fav_down_pct > 0) and bool(config.fav_coins)
     state = store.get_state()
     now_ms = time.time() * 1000
     state_changed = False

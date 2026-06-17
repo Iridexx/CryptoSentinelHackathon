@@ -93,11 +93,12 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- i18n/locales/ - traduzioni backend en.json e it.json, incluse chiavi market data Step 3.
 |   |   |-- notifications/ - sistema notifiche server-side.
 |   |   |   |-- alert_store.py - persistenza DB configurazione, stato checker e badge preferiti pendenti (DB-backed da Step 5; interfaccia pubblica invariata).
-|   |   |   |-- price_checker.py - controllo prezzi ogni 60 secondi tramite MarketDataProvider e invio alert FCM.
+|   |   |   |-- price_checker.py - controllo prezzi ogni 60s; raggruppa i token per device_id e invia a ogni device solo i suoi alert (fallback globale per token legacy senza device_id).
+|   |   |   |-- alert_store.py - store per-device (DeviceAlertConfig per device_id; AlertConfig legacy come fallback). get_alert_store(device_id) con cache per device.
 |   |   |   |-- service.py - orchestration registry + FCM client.
 |   |   |   `-- fcm/ - integrazione Firebase Cloud Messaging.
 |   |   |       |-- client.py - wrapper Firebase Admin SDK, delivery e skipped se non configurato.
-|   |   |       `-- token_store.py - registro token FCM DB-backed da Step 5 (tabella DeviceToken; interfaccia pubblica invariata).
+|   |   |       `-- token_store.py - registro token FCM DB-backed (DeviceToken); tokens_with_device() per invio mirato per device.
 |   |   |-- observability/ - namespace metriche, health, replay/export futuri.
 |   |   |-- persistence/ - layer persistenza dati Step 5.
 |   |   |   |-- __init__.py - esporta init_db, close_db, get_session, get_session_factory, check_db.
@@ -110,7 +111,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
-|   |   |   |   |-- alerts.py - AlertConfig (una riga per utente, config_json + state_json).
+|   |   |   |   |-- alerts.py - AlertConfig (legacy, una riga per utente, config_json + state_json).
+|   |   |   |   |-- device_alert_configs.py - DeviceAlertConfig (una riga per (user_id, device_id): alert separati per device).
 |   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc e block_timestamp_utc separati.
 |   |   |   |   |-- positions.py - SpotPosition e PerpPosition (leverage, liquidation_price, funding_rate).
 |   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
