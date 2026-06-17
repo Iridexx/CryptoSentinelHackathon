@@ -1,21 +1,29 @@
-﻿"""Persistent FCM device token registry."""
+"""DB-backed FCM device token registry.
+
+Source of truth is the ``device_tokens`` table.  The legacy JSON file is
+migrated into the DB at startup and is no longer read in normal operation.
+The public interface is unchanged so callers (NotificationService, price
+checker) are unaffected.
+"""
 
 from __future__ import annotations
 
 import hashlib
-import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from threading import Lock
 from uuid import UUID
 
+from sqlalchemy import delete, select
+
 from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
+from backend.app.persistence.models.device_tokens import DeviceToken
+from backend.app.persistence.sync_database import get_sync_session
 
 
 @dataclass
 class DeviceTokenRecord:
-    """Stored FCM device token record."""
+    """Stored FCM device token record (returned to callers)."""
 
     token_id: str
     token: str
@@ -28,14 +36,30 @@ class DeviceTokenRecord:
     updated_at: str
 
 
-class DeviceTokenStore:
-    """File-backed token registry used until database persistence is introduced."""
+def _to_record(row: DeviceToken) -> DeviceTokenRecord:
+    return DeviceTokenRecord(
+        token_id=row.token_id,
+        token=row.token,
+        user_id=row.user_id,
+        platform=row.platform,
+        device_id=row.device_id,
+        app_version=row.app_version,
+        locale=row.locale,
+        created_at=row.created_at.isoformat() if row.created_at else "",
+        updated_at=row.updated_at.isoformat() if row.updated_at else "",
+    )
 
-    def __init__(self, path: str) -> None:
-        self.path = Path(path)
+
+class DeviceTokenStore:
+    """Database-backed token registry.
+
+    The ``path`` argument is accepted for backward compatibility but is no
+    longer used as a data source; the DB is authoritative.
+    """
+
+    def __init__(self, path: str | None = None) -> None:
+        self.path = path
         self._lock = Lock()
-        self._records: dict[str, DeviceTokenRecord] = {}
-        self._load()
 
     @staticmethod
     def token_id_for(token: str) -> str:
@@ -54,67 +78,65 @@ class DeviceTokenStore:
     ) -> DeviceTokenRecord:
         """Add or update a device token."""
 
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(UTC)
         token_id = self.token_id_for(token)
-        with self._lock:
-            existing = self._records.get(token_id)
-            record = DeviceTokenRecord(
-                token_id=token_id,
-                token=token,
-                user_id=str(user_id),
-                platform=platform,
-                device_id=device_id,
-                app_version=app_version,
-                locale=locale,
-                created_at=existing.created_at if existing else now,
-                updated_at=now,
-            )
-            self._records[token_id] = record
-            self._save_locked()
-            return record
+        with self._lock, get_sync_session() as session:
+            row = session.execute(
+                select(DeviceToken).where(DeviceToken.token_id == token_id)
+            ).scalar_one_or_none()
+            if row is None:
+                row = DeviceToken(
+                    token_id=token_id,
+                    token=token,
+                    user_id=str(user_id),
+                    platform=platform,
+                    device_id=device_id,
+                    app_version=app_version,
+                    locale=locale,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+            else:
+                row.token = token
+                row.user_id = str(user_id)
+                row.platform = platform
+                row.device_id = device_id
+                row.app_version = app_version
+                row.locale = locale
+                row.updated_at = now
+            session.commit()
+            session.refresh(row)
+            return _to_record(row)
 
     def remove(self, token: str, user_id: UUID = DEFAULT_SINGLE_USER_ID) -> str:
         """Remove a device token and return its token id."""
 
         token_id = self.token_id_for(token)
-        with self._lock:
-            record = self._records.get(token_id)
-            if record and record.user_id == str(user_id):
-                del self._records[token_id]
-                self._save_locked()
+        with self._lock, get_sync_session() as session:
+            session.execute(
+                delete(DeviceToken)
+                .where(DeviceToken.token_id == token_id)
+                .where(DeviceToken.user_id == str(user_id))
+            )
+            session.commit()
             return token_id
 
     def tokens_for_user(self, user_id: UUID, token_ids: list[str] | None = None) -> list[str]:
         """Return raw FCM tokens for a user, optionally filtered by token id."""
 
         allowed = set(token_ids) if token_ids else None
-        with self._lock:
+        with get_sync_session() as session:
+            stmt = select(DeviceToken).where(DeviceToken.user_id == str(user_id))
+            rows = session.execute(stmt).scalars().all()
             return [
-                record.token
-                for record in self._records.values()
-                if record.user_id == str(user_id) and (allowed is None or record.token_id in allowed)
+                row.token
+                for row in rows
+                if allowed is None or row.token_id in allowed
             ]
 
     def count(self) -> int:
         """Return registered token count."""
 
-        with self._lock:
-            return len(self._records)
-
-    def _load(self) -> None:
-        if not self.path.exists():
-            return
-        try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
-            self._records = {
-                item["token_id"]: DeviceTokenRecord(**item)
-                for item in payload.get("tokens", [])
-                if "token_id" in item and "token" in item
-            }
-        except (OSError, json.JSONDecodeError, TypeError):
-            self._records = {}
-
-    def _save_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"tokens": [asdict(record) for record in self._records.values()]}
-        self.path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        with get_sync_session() as session:
+            return len(session.execute(select(DeviceToken.id)).scalars().all())

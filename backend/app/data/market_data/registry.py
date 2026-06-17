@@ -19,8 +19,11 @@ from backend.app.data.market_data.base import (
 )
 from backend.app.data.market_data.cmc import CMCProvider
 from backend.app.data.market_data.coingecko import CoinGeckoProvider
+from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 
 logger = get_logger("market_data.registry")
+
+_PROVIDER_STATE_KEY = "market_data_provider"
 
 
 class MarketDataRegistry:
@@ -36,7 +39,21 @@ class MarketDataRegistry:
             ProviderName.CMC: CMCProvider(settings),
             ProviderName.COINGECKO: CoinGeckoProvider(settings),
         }
-        self._active = ProviderName(settings.market_data_provider)
+        self._user_id = str(settings.default_user_id)
+        self._active = self._load_active(settings)
+
+    def _load_active(self, settings: Settings) -> ProviderName:
+        """Boot default from Settings, overridden by a persisted selection."""
+
+        persisted = get_runtime_value(self._user_id, _PROVIDER_STATE_KEY)
+        if persisted:
+            try:
+                candidate = ProviderName(persisted)
+                if candidate in self._providers:
+                    return candidate
+            except ValueError:
+                pass
+        return ProviderName(settings.market_data_provider)
 
     @property
     def active_name(self) -> ProviderName:
@@ -52,6 +69,7 @@ class MarketDataRegistry:
         if provider not in self._providers:
             raise ValueError(f"Unsupported market data provider: {provider}")
         self._active = provider
+        set_runtime_value(self._user_id, _PROVIDER_STATE_KEY, provider.value)
         return self.active.status()
 
     def statuses(self) -> list[ProviderRuntimeStatus]:

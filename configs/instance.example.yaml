@@ -5,7 +5,7 @@
 app:
   env: development
   name: CryptoSentinel Agent Backend
-  version: 0.1.0-step3
+  version: 0.1.0-step5
   default_user_id: "00000000-0000-0000-0000-000000000001"
 
 api:
@@ -27,6 +27,10 @@ database:
   echo: false
   pool_size: 5
   max_overflow: 10
+  backup_enabled: true
+  backup_dir: backend/storage/backups
+  backup_interval_hours: 6
+  backup_retention_days: 7
 
 logging:
   level: INFO
@@ -47,11 +51,27 @@ agent:
 bsc:
   network: testnet
   chain_id: 97
-  rpc_urls: []
+  # Keep at least two independently operated endpoints.
+  rpc_urls:
+    - https://bsc-testnet-rpc.publicnode.com
+    - https://data-seed-prebsc-1-s1.bnbchain.org:8545
+    - https://data-seed-prebsc-2-s1.bnbchain.org:8545
+    # Authenticated (requires TATUM_RPC_API_KEY in .env):
+    # - https://bsc-testnet.gateway.tatum.io
   explorer_base_url: https://testnet.bscscan.com
+  rpc_timeout_seconds: 8
+  receipt_timeout_seconds: 90
+  receipt_poll_seconds: 3
+  max_transaction_attempts: 2
+  required_confirmations: 1
 
 competition:
-  contract_address: ""
+  contract_address: "0x212c61b9b72c95d95bf29cf032f5e5635629aed5"
+  chain_id: 56
+  rpc_urls:
+    - https://bsc-dataseed.bnbchain.org
+    - https://bsc-dataseed1.defibit.io
+  explorer_base_url: https://bscscan.com
 
 wallet:
   address: ""
@@ -82,21 +102,29 @@ anthropic:
   daily_cost_limit_usd: 10.0
 
 twak:
-  base_url: ""
+  cli_path: twak
+  api_base_url: https://tws.trustwallet.com
+  chain: bsctestnet
   autonomous_mode: false
   approval_policy: exact
+  allowed_spenders:
+    # PancakeSwap V2 Router, official BSC Testnet deployment.
+    - "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
 
 perp_execution:
   bnb_ai_agent_sdk_enabled: false
   provider: bnb_sdk
-  eip712_domain: ""
+  order_submit_url: ""
+  allowed_verifying_contracts: []
 
 x402:
   enabled: false
-  network: base
+  network: bsc
   usdc_wallet_address: ""
   daily_spend_limit_usd: 5.0
+  max_payment_per_call_usd: 0.25
   agentdata_base_url: ""
+  fallback_base_urls: []
 
 fcm:
   enabled: false

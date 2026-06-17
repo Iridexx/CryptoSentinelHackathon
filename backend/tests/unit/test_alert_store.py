@@ -1,6 +1,13 @@
 from pathlib import Path
 
+import pytest
+
 from backend.app.notifications.alert_store import AlertStore, CheckerState
+from backend.app.persistence.sync_database import (
+    create_all_sync,
+    init_sync_db,
+    reset_sync_db,
+)
 from backend.app.schemas.alerts import (
     AlertSyncRequest,
     FavCoin,
@@ -8,6 +15,16 @@ from backend.app.schemas.alerts import (
     PriceAlertItem,
     RangeAlertItem,
 )
+
+
+@pytest.fixture
+def db(tmp_path: Path):
+    """Initialise a fresh sync SQLite DB for each test."""
+    reset_sync_db()
+    init_sync_db(f"sqlite:///{tmp_path / 'test.db'}")
+    create_all_sync()
+    yield
+    reset_sync_db()
 
 
 def _config() -> AlertSyncRequest:
@@ -33,8 +50,8 @@ def _config() -> AlertSyncRequest:
     )
 
 
-def test_identical_sync_preserves_checker_state(tmp_path: Path) -> None:
-    store = AlertStore(tmp_path / "alerts.json")
+def test_identical_sync_preserves_checker_state(db) -> None:
+    store = AlertStore()
     config = _config()
     store.save_config(config)
     store.update_state(
@@ -55,8 +72,8 @@ def test_identical_sync_preserves_checker_state(tmp_path: Path) -> None:
     assert state.fav_ref_prices == {"bnb": 625}
 
 
-def test_removed_alerts_prune_checker_state(tmp_path: Path) -> None:
-    store = AlertStore(tmp_path / "alerts.json")
+def test_removed_alerts_prune_checker_state(db) -> None:
+    store = AlertStore()
     store.save_config(_config())
     store.update_state(
         CheckerState(
@@ -72,8 +89,8 @@ def test_removed_alerts_prune_checker_state(tmp_path: Path) -> None:
     assert store.get_state() == CheckerState()
 
 
-def test_pending_favorite_alert_survives_sync_until_acknowledged(tmp_path: Path) -> None:
-    store = AlertStore(tmp_path / "alerts.json")
+def test_pending_favorite_alert_survives_sync_until_acknowledged(db) -> None:
+    store = AlertStore()
     config = _config()
     store.save_config(config)
     state = store.get_state()
@@ -98,8 +115,8 @@ def test_pending_favorite_alert_survives_sync_until_acknowledged(tmp_path: Path)
     assert store.dismiss_pending_fav_alert("bnb") is False
 
 
-def test_removed_favorite_prunes_pending_badge(tmp_path: Path) -> None:
-    store = AlertStore(tmp_path / "alerts.json")
+def test_removed_favorite_prunes_pending_badge(db) -> None:
+    store = AlertStore()
     store.save_config(_config())
     state = store.get_state()
     state.pending_fav_alerts["bnb"] = PendingFavAlert(

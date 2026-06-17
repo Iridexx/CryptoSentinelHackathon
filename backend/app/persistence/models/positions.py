@@ -1,0 +1,61 @@
+"""ORM models for open spot and perpetual positions."""
+
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .base import Base
+
+
+class SpotPosition(Base):
+    """Active spot holding with live stop/TP levels."""
+
+    __tablename__ = "spot_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    position_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    asset: Mapped[str] = mapped_column(String(32), nullable=False)
+    size: Mapped[Decimal] = mapped_column(Numeric(30, 18), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    current_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    pnl_unrealized: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False, default=Decimal("0"))
+    stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open / closed
+    open_trade_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PerpPosition(Base):
+    """Active perpetual position with leverage, liquidation price and TP schema."""
+
+    __tablename__ = "perp_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    position_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    asset: Mapped[str] = mapped_column(String(32), nullable=False)
+    side: Mapped[str] = mapped_column(String(8), nullable=False)  # long / short
+    size: Mapped[Decimal] = mapped_column(Numeric(30, 18), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    current_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    pnl_unrealized: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False, default=Decimal("0"))
+    stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # bordo value area (50%)
+    take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # POC (25%)
+    trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # 25% residuo
+    liquidation_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    funding_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
+    tp1_reached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open / closed
+    venue: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    open_trade_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

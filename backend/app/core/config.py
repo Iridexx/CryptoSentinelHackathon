@@ -18,6 +18,8 @@ HARD_MIN_PORTFOLIO_VALUE_USD = 1.0
 HARD_MIN_TRADES_PER_DAY = 1
 HARD_ELIGIBLE_TOKEN_COUNT = 149
 HARD_MAX_DRAWDOWN_CAP_PCT = -15.0
+HARD_COMPETITION_CONTRACT = "0x212c61b9b72c95d95bf29cf032f5e5635629aed5"
+HARD_COMPETITION_CHAIN_ID = 56
 
 FUNCTIONAL_CONFIG_FILES = (
     "risk.yaml",
@@ -47,6 +49,10 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "echo": "database_echo",
         "pool_size": "database_pool_size",
         "max_overflow": "database_max_overflow",
+        "backup_enabled": "db_backup_enabled",
+        "backup_dir": "db_backup_dir",
+        "backup_interval_hours": "db_backup_interval_hours",
+        "backup_retention_days": "db_backup_retention_days",
     },
     "logging": {
         "level": "log_level",
@@ -69,9 +75,17 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "chain_id": "bsc_chain_id",
         "rpc_urls": "bsc_rpc_urls",
         "explorer_base_url": "bsc_explorer_base_url",
+        "rpc_timeout_seconds": "bsc_rpc_timeout_seconds",
+        "receipt_timeout_seconds": "bsc_receipt_timeout_seconds",
+        "receipt_poll_seconds": "bsc_receipt_poll_seconds",
+        "max_transaction_attempts": "bsc_max_transaction_attempts",
+        "required_confirmations": "bsc_required_confirmations",
     },
     "competition": {
         "contract_address": "competition_contract_address",
+        "chain_id": "competition_chain_id",
+        "rpc_urls": "competition_rpc_urls",
+        "explorer_base_url": "competition_explorer_base_url",
     },
     "wallet": {
         "address": "wallet_address",
@@ -100,21 +114,27 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "daily_cost_limit_usd": "anthropic_daily_cost_limit_usd",
     },
     "twak": {
-        "base_url": "twak_base_url",
+        "cli_path": "twak_cli_path",
+        "api_base_url": "twak_api_base_url",
+        "chain": "twak_chain",
         "autonomous_mode": "twak_autonomous_mode",
         "approval_policy": "twak_approval_policy",
+        "allowed_spenders": "twak_allowed_spenders",
     },
     "perp_execution": {
         "bnb_ai_agent_sdk_enabled": "bnb_ai_agent_sdk_enabled",
         "provider": "perp_execution_provider",
-        "eip712_domain": "perp_eip712_domain",
+        "order_submit_url": "perp_order_submit_url",
+        "allowed_verifying_contracts": "perp_allowed_verifying_contracts",
     },
     "x402": {
         "enabled": "x402_enabled",
         "network": "x402_network",
         "usdc_wallet_address": "x402_usdc_wallet_address",
         "daily_spend_limit_usd": "x402_daily_spend_limit_usd",
+        "max_payment_per_call_usd": "x402_max_payment_per_call_usd",
         "agentdata_base_url": "agentdata_base_url",
+        "fallback_base_urls": "x402_fallback_base_urls",
     },
     "fcm": {
         "enabled": "fcm_enabled",
@@ -242,7 +262,7 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development", alias="APP_ENV")
     app_name: str = Field(default="CryptoSentinel Agent Backend", alias="APP_NAME")
-    app_version: str = Field(default="0.1.0-step3", alias="APP_VERSION")
+    app_version: str = Field(default="0.1.0-step5", alias="APP_VERSION")
     api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
     api_base_url: str = Field(default="http://127.0.0.1:8000", alias="API_BASE_URL")
@@ -263,6 +283,10 @@ class Settings(BaseSettings):
     database_echo: bool = Field(default=False, alias="DATABASE_ECHO")
     database_pool_size: int = Field(default=5, alias="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(default=10, alias="DATABASE_MAX_OVERFLOW")
+    db_backup_enabled: bool = Field(default=True, alias="DB_BACKUP_ENABLED")
+    db_backup_dir: str = Field(default="backend/storage/backups", alias="DB_BACKUP_DIR")
+    db_backup_interval_hours: int = Field(default=6, alias="DB_BACKUP_INTERVAL_HOURS")
+    db_backup_retention_days: int = Field(default=7, alias="DB_BACKUP_RETENTION_DAYS")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_format: Literal["json", "console"] = Field(default="json", alias="LOG_FORMAT")
@@ -272,6 +296,7 @@ class Settings(BaseSettings):
     decision_log_retention_days: int = Field(default=30, alias="DECISION_LOG_RETENTION_DAYS")
 
     cmc_api_key: str | None = Field(default=None, alias="CMC_API_KEY")
+    tatum_rpc_api_key: str | None = Field(default=None, alias="TATUM_RPC_API_KEY")
     cmc_base_url: str = Field(default="https://pro-api.coinmarketcap.com", alias="CMC_BASE_URL")
     cmc_mcp_enabled: bool = Field(default=False, alias="CMC_MCP_ENABLED")
     cmc_mcp_server_url: str | None = Field(default=None, alias="CMC_MCP_SERVER_URL")
@@ -300,7 +325,21 @@ class Settings(BaseSettings):
     bsc_chain_id: int = Field(default=97, alias="BSC_CHAIN_ID")
     bsc_rpc_urls: list[str] = Field(default_factory=list, alias="BSC_RPC_URLS")
     bsc_explorer_base_url: str | None = Field(default=None, alias="BSC_EXPLORER_BASE_URL")
-    competition_contract_address: str | None = Field(default=None, alias="COMPETITION_CONTRACT_ADDRESS")
+    bsc_rpc_timeout_seconds: float = Field(default=8.0, alias="BSC_RPC_TIMEOUT_SECONDS")
+    bsc_receipt_timeout_seconds: float = Field(default=90.0, alias="BSC_RECEIPT_TIMEOUT_SECONDS")
+    bsc_receipt_poll_seconds: float = Field(default=3.0, alias="BSC_RECEIPT_POLL_SECONDS")
+    bsc_max_transaction_attempts: int = Field(default=2, alias="BSC_MAX_TRANSACTION_ATTEMPTS")
+    bsc_required_confirmations: int = Field(default=1, alias="BSC_REQUIRED_CONFIRMATIONS")
+    competition_contract_address: str = Field(
+        default=HARD_COMPETITION_CONTRACT,
+        alias="COMPETITION_CONTRACT_ADDRESS",
+    )
+    competition_chain_id: int = Field(default=56, alias="COMPETITION_CHAIN_ID")
+    competition_rpc_urls: list[str] = Field(default_factory=list, alias="COMPETITION_RPC_URLS")
+    competition_explorer_base_url: str = Field(
+        default="https://bscscan.com",
+        alias="COMPETITION_EXPLORER_BASE_URL",
+    )
 
     wallet_address: str | None = Field(default=None, alias="WALLET_ADDRESS")
     wallet_encrypted_private_key_path: str | None = Field(default=None, alias="WALLET_ENCRYPTED_PRIVATE_KEY_PATH")
@@ -310,19 +349,31 @@ class Settings(BaseSettings):
 
     twak_access_id: str | None = Field(default=None, alias="TWAK_ACCESS_ID")
     twak_hmac_secret: str | None = Field(default=None, alias="TWAK_HMAC_SECRET")
-    twak_base_url: str | None = Field(default=None, alias="TWAK_BASE_URL")
+    twak_cli_path: str = Field(default="twak", alias="TWAK_CLI_PATH")
+    twak_api_base_url: str = Field(
+        default="https://tws.trustwallet.com",
+        alias="TWAK_API_BASE_URL",
+    )
+    twak_chain: str = Field(default="bsctestnet", alias="TWAK_CHAIN")
     twak_autonomous_mode: bool = Field(default=False, alias="TWAK_AUTONOMOUS_MODE")
-    twak_approval_policy: str = Field(default="exact", alias="TWAK_APPROVAL_POLICY")
+    twak_approval_policy: Literal["exact"] = Field(default="exact", alias="TWAK_APPROVAL_POLICY")
+    twak_allowed_spenders: list[str] = Field(default_factory=list, alias="TWAK_ALLOWED_SPENDERS")
 
     bnb_ai_agent_sdk_enabled: bool = Field(default=False, alias="BNB_AI_AGENT_SDK_ENABLED")
     perp_execution_provider: str = Field(default="bnb_sdk", alias="PERP_EXECUTION_PROVIDER")
-    perp_eip712_domain: str | None = Field(default=None, alias="PERP_EIP712_DOMAIN")
+    perp_order_submit_url: str | None = Field(default=None, alias="PERP_ORDER_SUBMIT_URL")
+    perp_allowed_verifying_contracts: list[str] = Field(
+        default_factory=list,
+        alias="PERP_ALLOWED_VERIFYING_CONTRACTS",
+    )
 
     x402_enabled: bool = Field(default=False, alias="X402_ENABLED")
-    x402_network: str = Field(default="base", alias="X402_NETWORK")
+    x402_network: str = Field(default="bsc", alias="X402_NETWORK")
     x402_usdc_wallet_address: str | None = Field(default=None, alias="X402_USDC_WALLET_ADDRESS")
     x402_daily_spend_limit_usd: float = Field(default=5.0, alias="X402_DAILY_SPEND_LIMIT_USD")
+    x402_max_payment_per_call_usd: float = Field(default=0.25, alias="X402_MAX_PAYMENT_PER_CALL_USD")
     agentdata_base_url: str | None = Field(default=None, alias="AGENTDATA_BASE_URL")
+    x402_fallback_base_urls: list[str] = Field(default_factory=list, alias="X402_FALLBACK_BASE_URLS")
 
     fcm_enabled: bool = Field(default=False, alias="FCM_ENABLED")
     fcm_project_id: str | None = Field(default=None, alias="FCM_PROJECT_ID")
@@ -386,7 +437,7 @@ class Settings(BaseSettings):
     eligible_tokens: list[str] = Field(default_factory=list, alias="ELIGIBLE_TOKENS")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         hide_input_in_errors=True,
@@ -406,7 +457,29 @@ class Settings(BaseSettings):
 
         return env_settings, dotenv_settings, init_settings, file_secret_settings
 
-    @field_validator("cors_origins", "bsc_rpc_urls", mode="before")
+    @field_validator("twak_cli_path", mode="before")
+    @classmethod
+    def default_twak_cli_path(cls, value: str | None) -> str:
+        if not value or not str(value).strip():
+            return "twak"
+        return str(value).strip()
+
+    @field_validator("twak_api_base_url", mode="before")
+    @classmethod
+    def default_twak_api_base_url(cls, value: str | None) -> str:
+        if not value or not str(value).strip():
+            return "https://tws.trustwallet.com"
+        return str(value).strip()
+
+    @field_validator(
+        "cors_origins",
+        "bsc_rpc_urls",
+        "competition_rpc_urls",
+        "twak_allowed_spenders",
+        "perp_allowed_verifying_contracts",
+        "x402_fallback_base_urls",
+        mode="before",
+    )
     @classmethod
     def split_string_list(cls, value: str | list[str] | None) -> list[str]:
         """Parse comma-separated list values from environment variables."""
@@ -440,6 +513,22 @@ class Settings(BaseSettings):
             raise ValueError("risk_max_drawdown_pct must be negative and no looser than -15%")
         if len(self.eligible_tokens) != HARD_ELIGIBLE_TOKEN_COUNT:
             raise ValueError("eligible_tokens must contain exactly the 149 competition-eligible entries")
+        if self.bnb_gas_reserve_pct < 15:
+            raise ValueError("bnb_gas_reserve_pct cannot be lower than the hard 15% reserve")
+        if self.bnb_gas_reserve_min is None or self.bnb_gas_reserve_min <= 0:
+            raise ValueError("bnb_gas_reserve_min must be a positive non-tradable floor")
+        if self.bsc_max_transaction_attempts < 1 or self.bsc_max_transaction_attempts > 3:
+            raise ValueError("bsc_max_transaction_attempts must be between 1 and 3")
+        if self.bsc_required_confirmations < 1:
+            raise ValueError("bsc_required_confirmations must be at least 1")
+        if self.execution_mode == "live" and self.bsc_network != "testnet":
+            raise ValueError("Step 4 live execution is restricted to BSC testnet")
+        if self.competition_contract_address.lower() != HARD_COMPETITION_CONTRACT:
+            raise ValueError("competition_contract_address must match the official competition contract")
+        if self.competition_chain_id != HARD_COMPETITION_CHAIN_ID:
+            raise ValueError("competition_chain_id must remain BSC mainnet chain 56")
+        if self.x402_enabled and self.x402_network.lower() != "bsc":
+            raise ValueError("x402 may only be enabled on BSC")
         return self
 
     @property
@@ -453,6 +542,12 @@ class Settings(BaseSettings):
         """Return whether the public API URL is configured as HTTPS."""
 
         return self.api_base_url.lower().startswith("https://")
+
+    @property
+    def twak_rest_configured(self) -> bool:
+        """Return whether Trust Wallet REST credentials are present."""
+
+        return bool(self.twak_access_id and self.twak_hmac_secret)
 
 
 @lru_cache

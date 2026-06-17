@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-13
+Ultimo aggiornamento: 2026-06-16
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -40,12 +40,14 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- api/ - router FastAPI e dipendenze API.
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
-|   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data.
+|   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data/execution/views.
 |   |   |       |-- alerts.py - sincronizzazione configurazione alert e pending badge preferiti con acknowledgement.
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
-|   |   |       |-- health.py - liveness/readiness/heartbeat con stato notifiche e DB not_checked fino Step 5.
-|   |   |       |-- notifications.py - registrazione token device, status FCM e invio admin push.
+|   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
+|   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
+|   |   |       |-- execution.py - readiness esecuzione e verifica registrazione competizione on-chain.
+|   |   |       |-- views.py - GET /api/v1/views/spot|perp|global: viste dashboard con posizioni, PnL, win rate.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
@@ -64,7 +66,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   `-- security/ - sicurezza API/custody.
 |   |   |       |-- auth.py - autenticazione token read/device/admin fail-closed.
 |   |   |       |-- headers.py - security headers e HSTS condizionale.
-|   |   |       `-- wallet_custody.py - regola chiavi private solo cifrate e mai in chiaro.
+|   |   |       `-- wallet_custody.py - provider keystore Web3 cifrato con policy typed-data fail-closed.
 |   |   |-- data/ - integrazioni dati mercato.
 |   |   |   |-- market_data/ - astrazione multi-provider Step 3.
 |   |   |   |   |-- base.py - interfaccia MarketDataProvider, identità asset e modelli normalizzati.
@@ -76,34 +78,74 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
 |   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state.
-|   |   |-- execution/ - adapter esecuzione futuri: spot_twak, perp_bnb_sdk, wallet, x402.
+|   |   |-- execution/ - layer esecuzione Step 4.
+|   |   |   |-- rpc.py - JSON-RPC BSC con failover tra endpoint.
+|   |   |   |-- gas.py / approvals.py - riserva gas hard e approvals esatte/whitelist.
+|   |   |   |-- coordinator.py / reconciliation.py - retry limitato e verifica on-chain.
+|   |   |   |-- service.py - stato execution e verifica contratto competizione.
+|   |   |   |-- spot_twak/client.py - bridge TWAK per spot, x402 e registrazione.
+|   |   |   |-- perp_bnb_sdk/client.py - bridge BNB SDK ed EIP-712 per perpetual.
+|   |   |   `-- x402/client.py - pagamenti BSC con budget e fallback provider.
 |   |   |-- i18n/locales/ - traduzioni backend en.json e it.json, incluse chiavi market data Step 3.
 |   |   |-- notifications/ - sistema notifiche server-side.
-|   |   |   |-- alert_store.py - persistenza JSON configurazione, stato checker e badge preferiti pendenti fino allo Step 5.
+|   |   |   |-- alert_store.py - persistenza DB configurazione, stato checker e badge preferiti pendenti (DB-backed da Step 5; interfaccia pubblica invariata).
 |   |   |   |-- price_checker.py - controllo prezzi ogni 60 secondi tramite MarketDataProvider e invio alert FCM.
 |   |   |   |-- service.py - orchestration registry + FCM client.
 |   |   |   `-- fcm/ - integrazione Firebase Cloud Messaging.
 |   |   |       |-- client.py - wrapper Firebase Admin SDK, delivery e skipped se non configurato.
-|   |   |       `-- token_store.py - registro token FCM persistente su JSON fino allo Step 5.
+|   |   |       `-- token_store.py - registro token FCM DB-backed da Step 5 (tabella DeviceToken; interfaccia pubblica invariata).
 |   |   |-- observability/ - namespace metriche, health, replay/export futuri.
-|   |   |-- persistence/ - migrazioni, modelli DB e repository futuri.
+|   |   |-- persistence/ - layer persistenza dati Step 5.
+|   |   |   |-- __init__.py - esporta init_db, close_db, get_session, get_session_factory, check_db.
+|   |   |   |-- database.py - engine async aiosqlite, async_sessionmaker, create_all, check_db con SELECT 1 e latency.
+|   |   |   |-- sync_database.py - engine sync sqlite3 per store legacy sincroni; stesso file SQLite.
+|   |   |   |-- backup.py - copia SQLite con timestamp UTC, pruning retention, restituisce None se DB assente.
+|   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot (FCM tokens, alert config/state).
+|   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view per dashboard.
+|   |   |   |-- models/ - ORM SQLAlchemy 2.0.
+|   |   |   |   |-- base.py - DeclarativeBase comune.
+|   |   |   |   |-- device_tokens.py - DeviceToken.
+|   |   |   |   |-- alerts.py - AlertConfig (una riga per utente, config_json + state_json).
+|   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc e block_timestamp_utc separati.
+|   |   |   |   |-- positions.py - SpotPosition e PerpPosition (leverage, liquidation_price, funding_rate).
+|   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
+|   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert).
+|   |   |   |   |-- x402.py - X402DailyBudget (unique user_id + budget_date).
+|   |   |   |   |-- runtime_state.py - RuntimeState (unique user_id + key).
+|   |   |   |   `-- __init__.py - esporta tutti i modelli, registra tabelle con Base.
+|   |   |   `-- repositories/ - repository ORM per ogni aggregato.
+|   |   |       |-- __init__.py - esporta tutti i repository.
+|   |   |       |-- device_tokens.py - DeviceTokenRepository (upsert, remove, tokens_for_user, count).
+|   |   |       |-- alerts.py - AlertConfigRepository (save, load → tuple[config|None, state]).
+|   |   |       |-- trades.py - SpotTradeRepository e PerpTradeRepository (save, get, list, win_rate).
+|   |   |       |-- positions.py - SpotPositionRepository e PerpPositionRepository (save, open_for_user, history).
+|   |   |       |-- decisions.py - AgentDecisionRepository (save, get, recent_for_user con filtro market).
+|   |   |       |-- pnl.py - PnlRepository (save_snapshot, recent_for_user, upsert_portfolio, get_portfolio).
+|   |   |       `-- x402_budget.py - X402BudgetRepository (load_today, save).
 |   |   |-- schemas/ - schemi API.
 |   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti.
 |   |   |   |-- notifications.py - device token, notification request/response e status.
-|   |   |   `-- market_data.py - response API normalizzate e selezione provider.
+|   |   |   |-- market_data.py - response API normalizzate e selezione provider.
+|   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint per viste dashboard.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
 |   |-- scripts/ - script di avvio backend.
+|   |   |-- encrypt_wallet.py - creazione interattiva keystore Web3 cifrato senza input CLI.
+|   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
 |   |   |-- run_backend.ps1 - avvio Windows PowerShell (dev/prod, legge host:port da Settings).
 |   |   `-- run_backend.sh  - avvio Linux/bash per VPS (dev/prod, stesso comportamento).
 |   `-- tests/ - test backend.
-|       |-- unit/test_alert_store.py - regressione stato alert tra sincronizzazioni.
+|       |-- unit/test_alert_store.py - regressione stato alert tra sincronizzazioni (DB-backed da Step 5).
 |       |-- unit/test_auth_scopes.py - separazione scope device, alerts e admin.
 |       |-- unit/test_market_data_rate_limit.py - accodamento richieste oltre soglia.
-|       `-- integration/ - gate Step 3: provider, normalizzazione, cache crediti, API, smoke reali.
+|       |-- unit/test_execution_layer.py - gate gas, approval, RPC, EIP-712, TWAK, retry e x402.
+|       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
+|       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
+|       `-- integration/ - gate Step 3 e API execution Step 4.
 |-- configs/ - configurazione versionata e template installazione.
 |   |-- README.md - categorie config, precedenza e guardrail hard.
-|   |-- instance.example.yaml - template installazione non segreta; copiare in instance.yaml locale gitignored.
+|   |-- instance.example.yaml - template installazione non segreta; include sezione backup DB da Step 5; copiare in instance.yaml locale gitignored.
 |   |-- risk.yaml - default funzionali risk management e guardrail prudenziali.
 |   |-- strategy_spot.yaml - default strategia Spot.
 |   |-- strategy_perp.yaml - default strategia Perpetual.
@@ -120,6 +162,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step2.md - report Step 2.
 |       |-- report_step2_final.md - chiusura finale Step 2 dopo test reali e revisione commit.
 |       |-- report_step3.md - report implementazione astrazione multi-provider e test-gate.
+|       |-- report_step4.md - report layer esecuzione Step 4.
+|       |-- report_step5.md - report persistenza dati Step 5.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -248,6 +292,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Task CI FCM Android config | Completato | Workflow aggiorna `android/app/google-services.json` da GitHub Secret base64 prima della build APK. |
 | Task CI APK artifact robustness | Completato | Artifact APK caricato prima delle release GitHub; release non bloccanti per non impedire download APK/Pages. |
 | Step 3 - Astrazione Dati Multi-Provider | Parziale | Adapter CMC/CoinGecko, selettore globale, checker/frontend astratti e gate completati; smoke CMC e CoinGecko reali superati. Restano i18n frontend legacy e limite Volume Profile 5m. |
+| Step 4 - Layer di Esecuzione | Parziale | TWAK spot, BNB SDK/EIP-712 perp, RPC fallback, gas/approval guardrail, x402 e verifica competizione implementati e testati; mancano transazioni reali testnet e venue perp ufficiale configurata. |
+| Step 5 - Persistenza Dati | Completato | Schema Spot/Perp/Globale su SQLite/aiosqlite; migrazione JSON→DB (FCM, alert, x402, provider selector); readiness DB reale SELECT 1; viste dashboard; backup periodico configurabile; 16 test tutti passed. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -286,8 +332,23 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | OHLCV CMC segmentato | Startup include un mese di storico. Le richieste OHLCV usano `time_start`/`time_end`, finestre massime di 30 giorni e deduplicazione dei punti di confine; dati più vecchi della profondità del piano possono comunque essere rifiutati. |
 | OHLCV non sintetizzato | I 5 minuti CMC sono quote storiche, non OHLCV completo; il backend non inventa volume o candele. |
 | CoinGecko valido per monitoring | CoinGecko resta pienamente utilizzabile per prezzi, liste, ricerca, alert e grafici; il volume delle sue candele OHLC non è fornito e il Volume Profile 5m richiede una fonte adeguata. |
+| Feed Volume Profile Step 6 | Binance klines spot/futures sarà un feed specializzato del signal engine e non passerà dal `MarketDataProvider` generico. |
+| i18n legacy prima dello Step 8 | I testi frontend hardcoded saranno convertiti a EN default/IT conservato senza riscrivere la logica dei componenti. |
+| Dual engine SQLAlchemy (Step 5) | Engine async aiosqlite per nuovo codice; engine sync sqlite3 per store legacy sincroni (`AlertStore`, `DeviceTokenStore`). Stesso file SQLite; serializzazione a livello file. Sicuro per single-user hackathon. |
+| create_all senza Alembic (Step 5) | Schema creato automaticamente al boot; nessuno script di migrazione per deadline hackathon. Alembic resta in requirements per Step 10 (VPS). |
+| user_id da Settings, mai hardcoded (Step 5) | Ogni repository riceve `user_id` come parametro. `settings.default_user_id` è l'unica fonte. Predisposizione multi-user senza refactor. |
+| Timestamp UTC + block timestamp distinti (Step 5) | `timestamp_utc` = momento backend; `block_timestamp_utc` = orario blocco on-chain. Campi separati, semantica distinta. |
+| Selettore provider persistito in RuntimeState (Step 5) | Un cambio admin sopravvive al riavvio; Settings è il default al boot. Nessun file JSON intermedio. |
+| X402 budget compatibilità backward (Step 5) | `X402Client` accetta `session_factory` opzionale; test legacy usano SimpleNamespace senza DB → budget in-memory → test invariati. |
 | Dashboard futura su porta 5176 | `configs/instance.example.yaml` include `dashboard.port: 5176` e CORS per localhost/127.0.0.1:5176. |
 | Questioni Telegram non bloccanti | Si procede con default prudenziali del piano e si aggiornano quando arrivano risposte. |
+| Spot e Perp separati | TWAK gestisce spot; BNB Agent SDK/EIP-712 gestisce perp. Non condividono adapter o flusso di firma. |
+| Execution testnet-only | Ogni firma/trade Step 4 è vincolato a BSC testnet; la mainnet è usata soltanto per la registrazione competizione. |
+| Riserva gas hard | Il 15% del saldo BNB e un floor positivo restano non tradabili; il trade viene saltato se il gas non è inferiore al profitto atteso. |
+| Retry dopo hash vietato | Ottenuto un transaction hash, non si reinvia: si riconcilia on-chain e lo stato incerto resta `unknown`. |
+| Approvals esatte | Gli spender devono essere in whitelist e l'importo coincide con la necessità immediata; Permit2 auto-approval x402 non viene abilitato. |
+| BNB SDK sostanziale | Il bridge espone policy firma, identità ERC-8004 e commerce ERC-8183; il pacchetto pubblico non espone un modulo memory dedicato. |
+| RPC Tatum opzionale | `TATUM_RPC_API_KEY` viene inviato come `x-api-key` esclusivamente agli host Tatum; gli endpoint pubblici restano senza credenziali. |
 | `AGENTS.md` come fonte regole | Centralizza le istruzioni ricorrenti per evitare di ripeterle a ogni sessione. |
 
 ## 6. NOTE PER IL REVISORE
@@ -301,9 +362,10 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | GitHub Actions APK/Pages | Verificare che il job `build` produca `CryptoSentinel-debug.apk` e che `deploy-pages` aggiorni `gh-pages` solo su push a `main`. |
 | GitHub Releases | Gli step release sono non bloccanti; se falliscono, controllare il job ma scaricare comunque l'APK dagli artifact CI. |
 | Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
-| Step 5 | Trasformare readiness DB da `not_checked` a check reale di connettività e migrare token FCM JSON su DB. |
+| Step 5 | Completato: readiness DB con SELECT 1 + latency; migrazione JSON→DB (FCM, alert, x402, provider selector); schema ORM completo; 16 test passed. |
 | Step 3 CMC reale | Verificato dall'utente con chiave esportata nel processo: `1 passed, 9 deselected in 3.71s`, senza leggere `.env`. |
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
-| Step boundary | Step 3 è l'ultimo step toccato; Step 4 non è stato avviato. |
+| Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
+| Step boundary | Step 5 completato; Step 6 non avviato — in attesa di approvazione. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |

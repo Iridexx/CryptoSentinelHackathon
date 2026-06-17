@@ -3,11 +3,14 @@
 from typing import Annotated
 
 from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.security.auth import AuthScope, require_scope
+from backend.app.persistence.database import get_session
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 def require_read_access(request: Request, settings: SettingsDep) -> AuthScope:

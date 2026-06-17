@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.api.dependencies import ReadAccessDep, SettingsDep
 from backend.app.notifications.service import get_notification_service
+from backend.app.persistence.database import check_db
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -29,13 +30,20 @@ async def ready(settings: SettingsDep, _: ReadAccessDep) -> dict[str, Any]:
     """Authenticated readiness endpoint for internal clients."""
 
     notification_status = get_notification_service().status()
+    db_health = await check_db()
+    db_ok = db_health.get("connected") is True
     return {
-        "status": "ready" if settings.auth_configured else "degraded",
+        "status": "ready" if (settings.auth_configured and db_ok) else "degraded",
         "service": settings.app_name,
         "version": settings.app_version,
         "environment": settings.app_env,
         "auth_configured": settings.auth_configured,
-        "database": {"configured": bool(settings.database_url), "connected": "not_checked"},
+        "database": {
+            "configured": bool(settings.database_url),
+            "connected": db_ok,
+            "latency_ms": db_health.get("latency_ms"),
+            "error": db_health.get("error"),
+        },
         "external_services": {
             "cmc": "not_checked",
             "claude": "not_checked",

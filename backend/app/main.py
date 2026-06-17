@@ -18,6 +18,10 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.core.security.headers import add_security_headers
 from backend.app.notifications.price_checker import price_checker_loop
+from backend.app.persistence.backup import backup_db
+from backend.app.persistence.database import close_db, get_session_factory, init_db
+from backend.app.persistence.migration import migrate_json_to_db
+from backend.app.persistence.sync_database import init_sync_db, reset_sync_db
 
 settings = get_settings()
 configure_logging(settings)
@@ -32,13 +36,41 @@ async def _heartbeat_loop(settings: Settings) -> None:
         await asyncio.sleep(settings.heartbeat_interval_seconds)
 
 
+async def _backup_loop(settings: Settings) -> None:
+    """Periodically snapshot the SQLite DB to the configured backup directory."""
+
+    interval = max(1, settings.db_backup_interval_hours) * 3600
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            backup_db(
+                settings.database_url,
+                settings.db_backup_dir,
+                retention_days=settings.db_backup_retention_days,
+            )
+        except Exception:
+            logger.exception("db_backup_periodic_failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop backend runtime tasks."""
 
     heartbeat.beat("startup")
+
+    await init_db(settings.database_url, echo=settings.database_echo)
+    init_sync_db(settings.database_url, echo=settings.database_echo)
+    async with get_session_factory()() as session:
+        await migrate_json_to_db(
+            session,
+            fcm_tokens_path=settings.fcm_token_store_path,
+        )
+
     heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
     price_checker_task = asyncio.create_task(price_checker_loop())
+    background_tasks = [heartbeat_task, price_checker_task]
+    if settings.db_backup_enabled:
+        background_tasks.append(asyncio.create_task(_backup_loop(settings)))
     logger.info(
         "backend_started",
         environment=settings.app_env,
@@ -49,13 +81,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        heartbeat_task.cancel()
-        price_checker_task.cancel()
-        for t in (heartbeat_task, price_checker_task):
+        for t in background_tasks:
+            t.cancel()
+        for t in background_tasks:
             try:
                 await t
             except asyncio.CancelledError:
                 pass
+        if settings.db_backup_enabled:
+            try:
+                backup_db(
+                    settings.database_url,
+                    settings.db_backup_dir,
+                    retention_days=settings.db_backup_retention_days,
+                )
+            except Exception:
+                logger.exception("db_backup_on_shutdown_failed")
+        await close_db()
+        reset_sync_db()
         logger.info("backend_stopped")
 
 

@@ -1,15 +1,24 @@
-"""Persistent store for user alert configurations and price-checker state."""
+"""DB-backed store for user alert configurations and price-checker state.
+
+Source of truth is the ``alert_configs`` table (one row per user, holding the
+serialized config and checker state).  The legacy JSON file is migrated into
+the DB at startup and is no longer read in normal operation.  The public
+interface is unchanged so the alerts route and price checker are unaffected.
+"""
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
+from datetime import UTC, datetime
 from threading import Lock
 
-from backend.app.schemas.alerts import AlertSyncRequest, PendingFavAlert
+from sqlalchemy import select
 
-_STORE_PATH = Path("backend/storage/alerts.json")
+from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
+from backend.app.persistence.models.alerts import AlertConfig
+from backend.app.persistence.sync_database import get_sync_session
+from backend.app.schemas.alerts import AlertSyncRequest, PendingFavAlert
 
 
 @dataclass
@@ -24,10 +33,10 @@ class CheckerState:
 
 
 class AlertStore:
-    """File-backed store for the latest alert config received from the app."""
+    """Database-backed store for the latest alert config and checker state."""
 
-    def __init__(self, path: Path = _STORE_PATH) -> None:
-        self.path = path
+    def __init__(self, user_id: str | None = None) -> None:
+        self.user_id = str(user_id) if user_id is not None else str(DEFAULT_SINGLE_USER_ID)
         self._lock = Lock()
         self._config: AlertSyncRequest | None = None
         self._state = CheckerState()
@@ -111,31 +120,52 @@ class AlertStore:
                 self._persist_locked()
             return removed
 
-    def _persist_locked(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "config": self._config.model_dump() if self._config else None,
-            "state": {
-                "triggered_keys": list(self._state.triggered_keys),
-                "range_last_notified": self._state.range_last_notified,
-                "range_is_inside": {k: v for k, v in self._state.range_is_inside.items()},
-                "fav_ref_prices": self._state.fav_ref_prices,
-                "pending_fav_alerts": {
-                    coin_id: alert.model_dump()
-                    for coin_id, alert in self._state.pending_fav_alerts.items()
-                },
+    def _state_to_dict(self) -> dict:
+        return {
+            "triggered_keys": list(self._state.triggered_keys),
+            "range_last_notified": self._state.range_last_notified,
+            "range_is_inside": dict(self._state.range_is_inside),
+            "fav_ref_prices": self._state.fav_ref_prices,
+            "pending_fav_alerts": {
+                coin_id: alert.model_dump()
+                for coin_id, alert in self._state.pending_fav_alerts.items()
             },
         }
-        self.path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def _persist_locked(self) -> None:
+        config_json = json.dumps(self._config.model_dump()) if self._config else None
+        state_json = json.dumps(self._state_to_dict())
+        now = datetime.now(UTC)
+        with get_sync_session() as session:
+            row = session.execute(
+                select(AlertConfig).where(AlertConfig.user_id == self.user_id)
+            ).scalar_one_or_none()
+            if row is None:
+                row = AlertConfig(
+                    user_id=self.user_id,
+                    config_json=config_json,
+                    state_json=state_json,
+                    updated_at=now,
+                )
+                session.add(row)
+            else:
+                row.config_json = config_json
+                row.state_json = state_json
+                row.updated_at = now
+            session.commit()
 
     def _load(self) -> None:
-        if not self.path.exists():
-            return
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            if cfg := data.get("config"):
-                self._config = AlertSyncRequest.model_validate(cfg)
-            if st := data.get("state"):
+            with get_sync_session() as session:
+                row = session.execute(
+                    select(AlertConfig).where(AlertConfig.user_id == self.user_id)
+                ).scalar_one_or_none()
+            if row is None:
+                return
+            if row.config_json:
+                self._config = AlertSyncRequest.model_validate(json.loads(row.config_json))
+            if row.state_json:
+                st = json.loads(row.state_json)
                 self._state = CheckerState(
                     triggered_keys=set(st.get("triggered_keys", [])),
                     range_last_notified=st.get("range_last_notified", {}),
