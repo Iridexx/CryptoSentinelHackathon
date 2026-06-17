@@ -2,7 +2,7 @@
 
 FastAPI backend for the BNB Hack Track 1 autonomous trading agent.
 
-The backend includes the Step 3 provider-neutral market data layer on top of the Step 2 notification path: CoinMarketCap and CoinGecko adapters, one global manual selector, normalized responses, CMC rate limiting and credit-aware caching, CMC MCP metadata, and a notification checker that uses the selected provider. Trading, database persistence, and agent decisions are implemented in later steps.
+The backend includes the Step 3 provider-neutral market data layer and the Step 4 execution boundaries. Spot execution uses the official Trust Wallet Agent Kit CLI; perpetual execution uses a separate BNB Agent SDK/EIP-712 bridge. Both remain testnet-only, fail closed on unsafe configuration, and are not connected to the future autonomous decision loop yet.
 
 ## Market data diagnostics
 
@@ -48,6 +48,12 @@ require it before any network call is attempted.
 - Firebase Admin SDK delivery client that returns `skipped` when FCM is not configured instead of pretending success.
 - Single `Settings` loader that merges `.env` secrets with `configs/*.yaml`.
 - Startup guardrails for competition qualification: portfolio floor, daily trade minimum, drawdown cap, and 149 eligible tokens.
+- BSC JSON-RPC failover with bounded transaction submission and on-chain receipt reconciliation.
+- Non-disablable 15% BNB gas reserve, positive reserve floor, and gas-versus-profit rejection.
+- Exact ERC-20 approval policy restricted to allowlisted official DEX contracts.
+- Separate TWAK spot and BNB Agent SDK/EIP-712 perpetual execution paths.
+- BSC-only x402 endpoint fallback with per-call and daily spending caps.
+- Admin-only on-chain competition registration status check.
 
 ## Run Locally
 
@@ -152,10 +158,203 @@ Application code must read configuration only through `backend.app.core.config.S
 | GET | `/api/v1/market-data/prices` | Read/Admin token | Normalized current prices for assets and currencies. |
 | GET | `/api/v1/market-data/search` | Read/Admin token | Search through the selected provider. |
 | GET | `/api/v1/market-data/ohlcv` | Read/Admin token | Normalized OHLCV history where supported. |
+| GET | `/api/v1/execution/status` | Read/Admin token | Non-sensitive execution readiness and guardrails. |
+| GET | `/api/v1/execution/competition/status` | Admin token | Verify the wallet against the official competition contract. |
 
 The default provider is configured under `market_data.provider`. Developer settings may change it at runtime with an admin token held only in component state. No automatic fallback is implemented.
 
 CMC Startup includes one month of historical data. OHLCV requests always send explicit `time_start` and `time_end` values and are split into windows of at most 30 days; boundary points are deduplicated after normalization. Requests older than the plan's one-month historical depth may still be rejected by CMC even when correctly segmented. The documented 5-minute historical capability is quotes-only, so unsupported 5-minute OHLCV is rejected instead of being synthesized.
+
+## Step 4 Execution Setup
+
+Install the backend requirements and the official TWAK CLI:
+
+```powershell
+npm install -g @trustwallet/cli@0.19.1
+twak --version
+```
+
+On Windows, restart PowerShell after installation if `twak` is still not
+recognized. The expected npm launcher is normally
+`%APPDATA%\npm\twak.cmd`. CryptoSentinel resolves this `.cmd` launcher
+automatically; alternatively set `twak.cli_path` in local
+`configs/instance.yaml` to its absolute path.
+
+### Encrypt the BNB SDK wallet
+
+Run the encryption script from the project root:
+
+```powershell
+.\backend\.venv\Scripts\python.exe .\backend\scripts\encrypt_wallet.py
+```
+
+The script asks for the private key and passphrase through hidden interactive
+input. It accepts no CLI arguments, refuses to overwrite an existing keystore,
+and writes only the encrypted Web3 keystore to
+`secrets/wallet-keystore.json`. Its output contains only confirmation and the
+derived public address.
+
+Add these entries to the local `.env`:
+
+```dotenv
+WALLET_ENCRYPTED_PRIVATE_KEY_PATH=secrets/wallet-keystore.json
+WALLET_KEY_PASSPHRASE_ENV=CRYPTOSENTINEL_WALLET_PASSPHRASE
+CRYPTOSENTINEL_WALLET_PASSPHRASE=replace-with-the-keystore-passphrase
+TATUM_RPC_API_KEY=
+```
+
+`WALLET_KEY_PASSPHRASE_ENV` contains the name of the variable holding the
+passphrase, not the passphrase itself. Never commit `.env` or the keystore.
+
+The encrypted keystore is used by the BNB SDK/EIP-712 path. TWAK manages a
+separate self-custody wallet for spot execution and does not import this
+keystore. Create the TWAK wallet interactively without placing its password in
+the shell history:
+
+```powershell
+twak wallet create --no-keychain
+twak wallet address --chain bsctestnet
+```
+
+Fund the address returned by the second command with test BNB from the official
+[BNB Chain Testnet Faucet](https://www.bnbchain.org/en/testnet-faucet). Testnet
+BNB has no monetary value. Keep enough BNB above the configured 15% reserve and
+the `0.005` BNB floor.
+
+### Configure BSC
+
+Copy the Step 4 sections from `configs/instance.example.yaml` into the local
+`configs/instance.yaml`. Replace legacy values with:
+
+```yaml
+bsc:
+  network: testnet
+  chain_id: 97
+  rpc_urls:
+    - https://bsc-testnet-rpc.publicnode.com
+    - https://data-seed-prebsc-1-s1.bnbchain.org:8545
+    - https://data-seed-prebsc-2-s1.bnbchain.org:8545
+    # Authenticated (requires TATUM_RPC_API_KEY in .env):
+    # - https://bsc-testnet.gateway.tatum.io
+  explorer_base_url: https://testnet.bscscan.com
+  required_confirmations: 1
+
+competition:
+  contract_address: "0x212c61b9b72c95d95bf29cf032f5e5635629aed5"
+  chain_id: 56
+  rpc_urls:
+    - https://bsc-dataseed.bnbchain.org
+    - https://bsc-dataseed1.defibit.io
+  explorer_base_url: https://bscscan.com
+
+x402:
+  enabled: false
+  network: bsc
+```
+
+The competition contract is intentionally on BSC mainnet. It is used only for
+registration/status and must not replace the BSC testnet trading RPC.
+
+Tatum is optional. Set `TATUM_RPC_API_KEY` in `.env` and uncomment the Tatum
+URL in local `configs/instance.yaml`. CryptoSentinel sends `x-api-key` only to
+`tatum.io` hosts; PublicNode and BNB Chain endpoints remain unauthenticated.
+For future mainnet operation, configure a BSC mainnet Tatum endpoint only in
+Step 9. Step 4 trading remains locked to chain ID 97.
+
+The configured RPC list is used by CryptoSentinel for balance/gas preflight,
+failover, receipt polling, and on-chain verification. TWAK CLI `0.19.1` does
+not expose a custom RPC option for `swap`; its `bsctestnet` chain currently
+uses TWAK's internal `https://bsc-testnet.twnodes.com` endpoint. Therefore a
+TWAK broadcast failure can still occur even when CryptoSentinel's Tatum/BNB
+Chain preflight succeeds.
+
+Spot and perpetual execution are deliberately separate. Spot uses TWAK on
+`bsctestnet`; perpetual orders are EIP-712 signed only for chain ID 97 and
+allowlisted verifying contracts. Perpetual submission remains disabled until
+an official testnet venue URL and contract are configured.
+
+Spot quote and route-step preparation use the Trust Wallet REST Amber API:
+`/amber-api/v1/domains`, `/amber-api/v1/providers`, `/amber-api/v1/route`,
+and `/amber-api/v1/route/step`. The CLI remains used only for TWAK wallet
+address and competition commands. The REST API returns route and transaction
+data; signing and broadcast still require a wallet provider. x402 prefers
+EIP-3009 and does not enable Permit2 auto-approval.
+
+The gas decision is mandatory for spot execution. A trade is rejected when it
+would consume the protected BNB reserve or estimated gas is not lower than
+expected profit. TWAK does not expose unsigned swap calldata before execution,
+so the smoke test uses the supplied conservative gas limit multiplied by the
+gas price read through RPC failover. The estimation mode and failures are
+written to structured logs.
+
+### Run a guarded spot smoke test
+
+First verify that TWAK returns the funded testnet address:
+
+```powershell
+twak wallet address --chain bsctestnet
+twak wallet balance --chain bsctestnet
+```
+
+Then run one small swap through CryptoSentinel's Step 4 layer:
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+.\backend\.venv\Scripts\python.exe .\backend\scripts\test_spot_swap.py `
+  0.0001 BNB USDT `
+  --to-asset <TESTNET_USDT_CONTRACT_ADDRESS> `
+  --slippage 0.5 `
+  --gas-limit 350000 `
+  --expected-profit-usd 1.00 `
+  --bnb-price-usd 600
+```
+
+Use a current BNB/USD value and a defensible expected-benefit estimate; the
+command intentionally fails if the gas guard rejects them. It prompts for the
+TWAK wallet password only to read the wallet address and requires typing
+`TESTNET` before calling the REST route endpoints. Token availability and
+liquidity on PancakeSwap testnet must be checked before choosing the pair.
+
+With the REST path, a successful smoke test prints `Status: prepared` and the
+number of returned route-step transactions. That means Amber authentication,
+quote, provider routing, and route-step preparation worked. It does not mean a
+transaction was signed or broadcast.
+
+The smoke test writes structured diagnostic events to `logs/backend.log` even
+when FastAPI is not running. Relevant events are:
+
+- `spot_smoke_test_started`
+- `rpc_endpoint_failed` or `spot_rpc_preflight_failed`
+- `spot_gas_guard_evaluated`
+- `twak_command_failed` or `spot_twak_swap_failed`
+- `spot_receipt_reconciled`
+
+TWAK diagnostics are bounded and redact URLs, credentials, tokens, passwords,
+private-key labels, and 32-byte hexadecimal values.
+
+If a swap fails, check the events in order:
+
+1. No `spot_smoke_test_started`: the script did not reach execution setup.
+2. `rpc_endpoint_failed`: one RPC failed; the next endpoint is tried.
+3. `spot_rpc_preflight_failed`: every configured RPC failed.
+4. Rejected `spot_gas_guard_evaluated`: balance/reserve or gas/profit check failed.
+5. `twak_command_failed`: quote, liquidity, TWAK wallet, or TWAK internal RPC failed.
+6. `spot_receipt_reconciled` is not confirmed: the transaction reverted or remains unknown.
+
+If `TWAK REST credentials are not configured` appears, `Settings` does not see
+both `TWAK_ACCESS_ID` and `TWAK_HMAC_SECRET`. Add them to `.env` with exactly
+those names and restart the shell/backend process.
+
+Competition registration is a separate BSC mainnet prerequisite, not a trading
+operation:
+
+```powershell
+twak compete status --json
+twak compete register --json
+```
+
+Verify registration through `/api/v1/execution/competition/status` and BscScan.
+Never pass wallet passwords as command-line arguments.
 
 Authentication accepts either:
 

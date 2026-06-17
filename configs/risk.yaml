@@ -12,6 +12,6 @@ risk:
   correlation_limit: 0.8
   cooldown_minutes: 30
   bnb_gas_reserve_pct: 15.0
-  bnb_gas_reserve_min:
+  bnb_gas_reserve_min: 0.005
   min_portfolio_value_usd: 5.0
   minimum_trades_per_day: 1

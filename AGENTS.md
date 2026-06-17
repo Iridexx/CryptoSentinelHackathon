@@ -92,6 +92,17 @@ Operational rules for AI agents working on CryptoSentinelHackathon.
 - Future dashboard must point to port `5176`.
 - Existing frontend/mobile patterns should be preserved unless explicitly redesigning.
 - Do not run local frontend builds if doing so may load real `.env`; prefer CI or safe temporary environments.
+- Complete the legacy frontend IT-to-EN i18n conversion before Step 8. Keep English as the default and preserve Italian; replace strings without rewriting component logic.
+- Resolve the existing React lint debt as a separate, narrowly scoped task before making `npm run lint` a mandatory CI gate.
+
+## Active Constraints From Step 3 Review
+
+- The accepted Step 3 follow-ups do not block Step 4.
+- Implement the 5-minute Volume Profile feed in Step 6 using Binance klines:
+  - Futures: `GET /fapi/v1/klines`
+  - Spot: `GET /api/v3/klines`
+- Keep the Binance kline feed specialized to the signal engine, including `signals/perp/volume_profile.py`; do not route it through the generic `MarketDataProvider`.
+- Ensure the GitHub Actions secret `VITE_API_READ_TOKEN` is configured before APK builds that need frontend market-data access. Never print or inspect its value.
 
 ## Android And CI Rules
 
