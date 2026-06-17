@@ -4,6 +4,7 @@ import type { Coin, PriceAlert, RangeAlert } from '../types';
 import type { Currency } from '../hooks/useCurrency';
 import { useCoinChart } from '../hooks/useCoinChart';
 import { openExternalUrl } from '../utils/notifications';
+import { fetchMarkets } from '../services/marketData';
 
 interface Props {
   coin: Coin;
@@ -45,8 +46,27 @@ const CoinChartSheet: FC<Props> = ({
 
   const { lineData, candleData, loading, error } = useCoinChart(coin.id, currency, DAYS[tf], mode);
 
+  const [livePrice, setLivePrice] = useState<number>(coin.current_price);
+  const [livePct24h, setLivePct24h] = useState<number>(coin.price_change_percentage_24h ?? 0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const coins = await fetchMarkets(1, 1, currency, undefined, [coin.id]);
+        if (!cancelled && coins.length > 0) {
+          setLivePrice(coins[0].current_price);
+          setLivePct24h(coins[0].price_change_percentage_24h ?? 0);
+        }
+      } catch { /* silent — keep last known price */ }
+    };
+    refresh();
+    const id = setInterval(refresh, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [coin.id, currency]);
+
   const sym = SYMBOL[currency];
-  const isPositive = (coin.price_change_percentage_24h ?? 0) >= 0;
+  const isPositive = livePct24h >= 0;
 
   const coinAlerts = useMemo(() => alerts.filter(a => a.coinId === coin.id), [alerts, coin.id]);
   const coinRangeAlerts = useMemo(() => rangeAlerts.filter(a => a.coinId === coin.id), [rangeAlerts, coin.id]);
@@ -207,11 +227,11 @@ const CoinChartSheet: FC<Props> = ({
             </div>
             <div className="text-right">
               <p className="text-white font-bold text-xl tabular-nums">
-                {sym}{fmt(crosshairPrice ?? coin.current_price, currency)}
+                {sym}{fmt(crosshairPrice ?? livePrice, currency)}
               </p>
               {crosshairPrice == null ? (
                 <p className={`text-xs font-semibold mt-0.5 ${isPositive ? 'text-accent-green' : 'text-red-400'}`}>
-                  {isPositive ? '▲' : '▼'} {Math.abs(coin.price_change_percentage_24h ?? 0).toFixed(2)}%
+                  {isPositive ? '▲' : '▼'} {Math.abs(livePct24h).toFixed(2)}%
                 </p>
               ) : (
                 <p className="text-xs font-semibold mt-0.5 text-gray-500">storico</p>
