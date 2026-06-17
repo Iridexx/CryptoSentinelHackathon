@@ -71,3 +71,22 @@ class NotificationStatusResponse(BaseModel):
     critical_topic: str | None
     token_store_path: str
     checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DeviceRecord(BaseModel):
+    """Public view of a registered device — no raw FCM token."""
+
+    token_id: str
+    platform: str
+    device_id: str | None
+    app_version: str | None
+    locale: str | None
+    registered_at: str
+    updated_at: str
+
+
+class DeviceListResponse(BaseModel):
+    """List of registered devices."""
+
+    devices: list[DeviceRecord]
+    total: int

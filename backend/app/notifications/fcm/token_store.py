@@ -140,3 +140,12 @@ class DeviceTokenStore:
 
         with get_sync_session() as session:
             return len(session.execute(select(DeviceToken.id)).scalars().all())
+
+    def list_all(self, user_id: UUID = DEFAULT_SINGLE_USER_ID) -> list[DeviceTokenRecord]:
+        """Return all registered device records for a user."""
+
+        with get_sync_session() as session:
+            rows = session.execute(
+                select(DeviceToken).where(DeviceToken.user_id == str(user_id))
+            ).scalars().all()
+            return [_to_record(row) for row in rows]

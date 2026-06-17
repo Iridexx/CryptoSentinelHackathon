@@ -218,6 +218,18 @@ const SettingsTab: FC<Props> = ({
   const [providerState, setProviderState] = useState<ProviderSelectionResponse | null>(null);
   const [providerLoadState, setProviderLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
 
+  interface DeviceRecord {
+    token_id: string;
+    platform: string;
+    device_id: string | null;
+    app_version: string | null;
+    locale: string | null;
+    registered_at: string;
+    updated_at: string;
+  }
+  const [deviceList, setDeviceList] = useState<DeviceRecord[] | null>(null);
+  const [deviceLoadState, setDeviceLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
+
   type DiagState = 'idle' | 'checking' | 'done';
   interface DiagResult {
     backendUrl: string | null;
@@ -338,6 +350,30 @@ const SettingsTab: FC<Props> = ({
       setProviderLoadState('idle');
     } catch {
       setProviderLoadState('error');
+    }
+  };
+
+  const handleLoadDevices = async () => {
+    if (!adminToken) return;
+    const rawUrl = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '') ?? null;
+    if (!rawUrl) { setDeviceLoadState('error'); return; }
+    setDeviceLoadState('loading');
+    try {
+      const r = await CapacitorHttp.request({
+        method: 'GET',
+        url: `${rawUrl}/api/v1/notifications/devices`,
+        headers: { Authorization: `Bearer ${adminToken}` },
+        connectTimeout: 8000,
+        readTimeout: 8000,
+      });
+      if (r.status === 200) {
+        setDeviceList(r.data.devices ?? []);
+        setDeviceLoadState('idle');
+      } else {
+        setDeviceLoadState('error');
+      }
+    } catch {
+      setDeviceLoadState('error');
     }
   };
 
@@ -967,6 +1003,62 @@ const SettingsTab: FC<Props> = ({
                 </p>
                 {providerLoadState === 'error' && (
                   <p className="text-xs text-accent-red">Unable to read or update the provider.</p>
+                )}
+              </div>
+
+              <div className="border-t border-dark-600" />
+
+              {/* ── Dispositivi collegati ── */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Dispositivi collegati</span>
+                  <button
+                    onClick={handleLoadDevices}
+                    disabled={!adminToken || deviceLoadState === 'loading'}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-dark-700 text-gray-300 text-xs rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-40"
+                  >
+                    {deviceLoadState === 'loading' ? (
+                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+                    ) : (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    )}
+                    {deviceLoadState === 'loading' ? 'Carico…' : 'Aggiorna'}
+                  </button>
+                </div>
+                {!adminToken && (
+                  <p className="text-xs text-gray-600">Inserisci admin token per vedere i dispositivi.</p>
+                )}
+                {deviceLoadState === 'error' && (
+                  <p className="text-xs text-accent-red">Errore nel caricamento dispositivi.</p>
+                )}
+                {deviceList !== null && (
+                  deviceList.length === 0 ? (
+                    <p className="text-xs text-gray-600">Nessun dispositivo registrato.</p>
+                  ) : (
+                    <div className="bg-dark-700 rounded-lg divide-y divide-dark-600">
+                      {deviceList.map((d) => (
+                        <div key={d.token_id} className="px-3 py-2.5 flex items-start gap-2">
+                          <span className="text-base flex-shrink-0 mt-0.5">
+                            {d.platform === 'android' ? '📱' : d.platform === 'ios' ? '🍎' : '🌐'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs text-white font-medium capitalize">{d.platform}</span>
+                              {d.app_version && <span className="text-xs text-gray-500">v{d.app_version}</span>}
+                              {d.locale && <span className="text-xs text-gray-600">{d.locale}</span>}
+                            </div>
+                            {d.device_id && (
+                              <p className="text-xs text-gray-500 font-mono truncate mt-0.5">{d.device_id}</p>
+                            )}
+                            <p className="text-xs text-gray-700 font-mono mt-0.5">id: {d.token_id}</p>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              Aggiornato: {new Date(d.updated_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
 

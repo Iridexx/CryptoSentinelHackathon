@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends
 from backend.app.api.dependencies import AdminAccessDep, DeviceAccessDep, ReadAccessDep
 from backend.app.notifications.service import NotificationService, get_notification_service
 from backend.app.schemas.notifications import (
+    DeviceListResponse,
+    DeviceRecord,
     DeviceRegistrationRequest,
     DeviceRegistrationResponse,
     DeviceUnregisterRequest,
@@ -24,6 +26,31 @@ async def notification_status(
     """Return FCM subsystem status."""
 
     return service.status()
+
+
+@router.get("/devices")
+async def list_devices(
+    _: AdminAccessDep,
+    service: NotificationService = Depends(get_notification_service),
+) -> DeviceListResponse:
+    """List all registered device tokens (no raw FCM token exposed)."""
+
+    records = service.list_devices()
+    return DeviceListResponse(
+        devices=[
+            DeviceRecord(
+                token_id=r.token_id,
+                platform=r.platform,
+                device_id=r.device_id,
+                app_version=r.app_version,
+                locale=r.locale,
+                registered_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in records
+        ],
+        total=len(records),
+    )
 
 
 @router.post("/devices", status_code=201)

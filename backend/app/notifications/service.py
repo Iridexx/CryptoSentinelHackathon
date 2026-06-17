@@ -55,6 +55,11 @@ class NotificationService:
             dry_run=request.dry_run,
         )
 
+    def list_devices(self) -> list:
+        """Return all registered device records for the default user."""
+
+        return self.store.list_all(self.settings.default_user_id)
+
     def status(self) -> NotificationStatusResponse:
         """Return notification subsystem status."""
 
