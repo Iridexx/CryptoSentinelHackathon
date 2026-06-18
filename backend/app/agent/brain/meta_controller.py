@@ -1,0 +1,142 @@
+"""Claude meta-controller with constrained trading powers."""
+
+from __future__ import annotations
+
+import json
+from decimal import Decimal
+from typing import Any
+
+import httpx
+
+from backend.app.agent.brain.models import BrainDecision
+from backend.app.core.config import Settings, get_settings
+from backend.app.core.logging import get_logger
+
+logger = get_logger("agent.brain")
+
+
+class MetaControllerError(RuntimeError):
+    """Raised when the meta-controller cannot produce a decision."""
+
+
+class ClaudeMetaController:
+    """LLM meta-controller that can approve, reduce, block, or skip only."""
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
+
+    async def decide(self, *, signal: dict[str, Any], risk: dict[str, Any]) -> BrainDecision:
+        if not self.settings.anthropic_api_key:
+            return self._local_fallback(signal, risk)
+        try:
+            payload = self._build_payload(signal, risk)
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": self.settings.anthropic_api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json=payload,
+                )
+            response.raise_for_status()
+            return self._parse_response(response.json())
+        except Exception as exc:
+            logger.warning("claude_meta_controller_failed", error=str(exc))
+            if self.settings.execution_mode == "dry_run":
+                return self._local_fallback(signal, risk, reason_prefix="claude_unavailable_dry_run")
+            raise MetaControllerError("claude_meta_controller_unavailable") from exc
+
+    def _local_fallback(
+        self,
+        signal: dict[str, Any],
+        risk: dict[str, Any],
+        *,
+        reason_prefix: str = "claude_not_configured_dry_run",
+    ) -> BrainDecision:
+        if self.settings.execution_mode != "dry_run":
+            return BrainDecision(
+                action="block",
+                confidence=Decimal("0"),
+                reasoning="Claude unavailable; fail-closed outside dry-run.",
+            )
+        if not risk.get("allowed"):
+            return BrainDecision(
+                action="block",
+                confidence=Decimal("0"),
+                reasoning=f"{reason_prefix}; risk blocked: {risk.get('reason')}",
+            )
+        quality = Decimal(str(signal.get("quality", 0)))
+        if quality >= Decimal("0.85"):
+            return BrainDecision(
+                action="approve",
+                confidence=quality,
+                reasoning=f"{reason_prefix}; deterministic dry-run approval.",
+            )
+        if quality >= Decimal("0.65"):
+            return BrainDecision(
+                action="reduce",
+                confidence=quality,
+                size_multiplier=Decimal("0.5"),
+                reasoning=f"{reason_prefix}; deterministic dry-run reduced size.",
+            )
+        return BrainDecision(
+            action="skip",
+            confidence=quality,
+            reasoning=f"{reason_prefix}; quality below dry-run threshold.",
+        )
+
+    def _build_payload(self, signal: dict[str, Any], risk: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "model": self.settings.anthropic_model,
+            "max_tokens": min(self.settings.anthropic_max_tokens, 1024),
+            "system": (
+                "You are a constrained trading meta-controller. "
+                "You may only choose approve, reduce, block, or skip. "
+                "Never increase leverage, never invert direction, never change strategy parameters. "
+                "Return strict JSON with action, confidence, size_multiplier, reasoning."
+            ),
+            "messages": [
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "signal": signal,
+                            "risk": risk,
+                            "allowed_actions": ["approve", "reduce", "block", "skip"],
+                        },
+                        default=str,
+                    ),
+                }
+            ],
+        }
+
+    def _parse_response(self, payload: dict[str, Any]) -> BrainDecision:
+        content = payload.get("content") or []
+        text = ""
+        if content and isinstance(content[0], dict):
+            text = str(content[0].get("text", ""))
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise MetaControllerError("claude_returned_non_json") from exc
+        action = str(parsed.get("action", "block")).lower()
+        if action not in {"approve", "reduce", "block", "skip"}:
+            action = "block"
+        confidence = _decimal_between(parsed.get("confidence", 0), Decimal("0"), Decimal("1"))
+        multiplier = _decimal_between(parsed.get("size_multiplier", 1), Decimal("0"), Decimal("1"))
+        return BrainDecision(
+            action=action,  # type: ignore[arg-type]
+            confidence=confidence,
+            size_multiplier=multiplier,
+            reasoning=str(parsed.get("reasoning") or "Claude decision without reasoning."),
+        )
+
+
+def _decimal_between(value: Any, minimum: Decimal, maximum: Decimal) -> Decimal:
+    try:
+        parsed = Decimal(str(value))
+    except Exception:
+        parsed = minimum
+    return max(minimum, min(maximum, parsed))

@@ -47,18 +47,22 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot e perp (GET read / PUT admin) e verifica registrazione competizione on-chain.
+|   |   |       |-- agent.py - status agente, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- views.py - GET /api/v1/views/spot|perp|global: viste dashboard con posizioni, PnL, win rate.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- brain/ - namespace Claude/meta-controller futuro.
-|   |   |   |-- loops/ - namespace loop veloce/lento futuri.
-|   |   |   |-- risk/ - namespace risk engine e guardrail futuri.
+|   |   |   |-- service.py - orchestratore Step 6: segnali, risk, meta-controller, dry-run DB e provider execution astratti.
+|   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
+|   |   |   |-- loops/ - loop veloce gestione posizioni e loop lento scansione/decisione safe-by-default.
+|   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing e guardrail portfolio/drawdown/daily loss.
 |   |   |   `-- signals/ - signal engine modulare Spot/Perp/V2.
 |   |   |       |-- base.py - primitive base signal engine.
-|   |   |       |-- spot/momentum.py - placeholder momentum Spot.
+|   |   |       |-- common/indicators.py - primitive Candle, EMA, VWAP, ATR, RSI e relative volume.
+|   |   |       |-- spot/momentum.py - Spot V1 momentum + struttura: VWAP, EMA 20/50, ATR, RSI filtro e relative volume.
 |   |   |       |-- spot/relative_strength_v2.py - placeholder relative strength V2.
-|   |   |       |-- perp/volume_profile.py - placeholder Volume Profile Perp.
+|   |   |       |-- perp/binance_klines.py - feed Binance klines 5m specializzato per signal engine (`/fapi/v1/klines` o `/api/v3/klines`).
+|   |   |       |-- perp/volume_profile.py - Volume Profile Perp V1 rolling 24h con POC/VAH/VAL, VWAP trend filter e setup rientro in value.
 |   |   |       `-- perp/orderflow_delta_v2.py - placeholder order-flow delta V2.
 |   |   |-- core/ - configurazione, logging e sicurezza.
 |   |   |   |-- config.py - unico loader Settings: fonde .env + configs/*.yaml, valida guardrail hard.
@@ -155,6 +159,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_perp_providers.py - interfaccia PerpExecutionProvider, BnbSdkPerpProvider (status, sign/submit delega al bridge, open/close/get_position gated), selettore perp.
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
 |       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
+|       |-- unit/test_agent_step6.py - regressioni Step 6 per segnali Spot/Perp, risk guardrail e dry-run agent service con persistenza decisione/trade.
 |       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.
 |-- configs/ - configurazione versionata e template installazione.
@@ -178,6 +183,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step3.md - report implementazione astrazione multi-provider e test-gate.
 |       |-- report_step4.md - report layer esecuzione Step 4.
 |       |-- report_step5.md - report persistenza dati Step 5.
+|       |-- report_step6.md - report agente AI Brain Step 6.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -308,6 +314,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 3 - Astrazione Dati Multi-Provider | Parziale | Adapter CMC/CoinGecko, selettore globale, checker/frontend astratti e gate completati; smoke CMC e CoinGecko reali superati. Restano i18n frontend legacy e limite Volume Profile 5m. |
 | Step 4 - Layer di Esecuzione | Parziale | TWAK spot, BNB SDK/EIP-712 perp, RPC fallback, gas/approval guardrail, x402 e verifica competizione implementati e testati; mancano transazioni reali testnet e venue perp ufficiale configurata. |
 | Step 5 - Persistenza Dati | Completato | Schema Spot/Perp/Globale su SQLite/aiosqlite; migrazione JSON→DB (FCM, alert, x402, provider selector); readiness DB reale SELECT 1; viste dashboard; backup periodico configurabile; 16 test tutti passed. |
+| Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -348,6 +355,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | OHLCV non sintetizzato | I 5 minuti CMC sono quote storiche, non OHLCV completo; il backend non inventa volume o candele. |
 | CoinGecko valido per monitoring | CoinGecko resta pienamente utilizzabile per prezzi, liste, ricerca, alert e grafici; il volume delle sue candele OHLC non è fornito e il Volume Profile 5m richiede una fonte adeguata. |
 | Feed Volume Profile Step 6 | Binance klines spot/futures sarà un feed specializzato del signal engine e non passerà dal `MarketDataProvider` generico. |
+| Brain con poteri limitati | Claude può solo approve/reduce/block/skip; non aumenta leva, non inverte direzione e non cambia parametri. Senza Claude, dry-run usa fallback deterministico; live blocca fail-closed. |
+| Loop safe-by-default | Il loop lento non apre trade senza payload/scanner esplicito; il loop veloce gestisce heartbeat e stato posizioni. L'esecuzione live richiede provider astratti e dati completi. |
 | i18n legacy prima dello Step 8 | I testi frontend hardcoded saranno convertiti a EN default/IT conservato senza riscrivere la logica dei componenti. |
 | Dual engine SQLAlchemy (Step 5) | Engine async aiosqlite per nuovo codice; engine sync sqlite3 per store legacy sincroni (`AlertStore`, `DeviceTokenStore`). Stesso file SQLite; serializzazione a livello file. Sicuro per single-user hackathon. |
 | create_all senza Alembic (Step 5) | Schema creato automaticamente al boot; nessuno script di migrazione per deadline hackathon. Alembic resta in requirements per Step 10 (VPS). |
@@ -382,5 +391,5 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
-| Step boundary | Step 5 completato; Step 6 non avviato — in attesa di approvazione. |
+| Step boundary | Step 6 implementato parzialmente e pronto per revisione; Step 7 non avviato — in attesa di approvazione. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |

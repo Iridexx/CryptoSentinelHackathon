@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from backend.app.agent.heartbeat import heartbeat
+from backend.app.agent.loops import fast_loop as agent_fast_loop
+from backend.app.agent.loops import slow_loop as agent_slow_loop
 from backend.app.api.routes import api_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
@@ -68,7 +70,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
     price_checker_task = asyncio.create_task(price_checker_loop())
-    background_tasks = [heartbeat_task, price_checker_task]
+    agent_fast_task = asyncio.create_task(agent_fast_loop(settings))
+    agent_slow_task = asyncio.create_task(agent_slow_loop(settings))
+    background_tasks = [heartbeat_task, price_checker_task, agent_fast_task, agent_slow_task]
     if settings.db_backup_enabled:
         background_tasks.append(asyncio.create_task(_backup_loop(settings)))
     logger.info(
