@@ -31,6 +31,7 @@ firebase-adminsdk*.json
 android/app/google-services.json
 wallet*.json
 encrypted-wallet*
+scripts/test-wallet-password.cjs
 
 # Python
 __pycache__/

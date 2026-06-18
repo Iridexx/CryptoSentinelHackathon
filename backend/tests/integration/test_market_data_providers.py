@@ -276,6 +276,71 @@ async def test_registry_keeps_cmc_results_when_identity_lookup_fails() -> None:
 
 
 @pytest.mark.asyncio
+async def test_registry_caches_identity_resolution_for_repeated_price_refreshes() -> None:
+    class CountingIdentityProvider(StubProvider):
+        def __init__(self, name: ProviderName) -> None:
+            super().__init__(name)
+            self.identity_calls = 0
+
+        async def resolve_asset_identities(
+            self,
+            asset_ids: list[str],
+            identity_hints: list[AssetIdentity] | None = None,
+        ) -> list[AssetIdentity]:
+            self.identity_calls += 1
+            if self.name is ProviderName.COINGECKO:
+                return [
+                    AssetIdentity(
+                        app_id=asset_id,
+                        provider_id=asset_id,
+                        symbol=asset_id.upper(),
+                        name=asset_id.title(),
+                    )
+                    for asset_id in asset_ids
+                ]
+            return [
+                AssetIdentity(
+                    app_id=hint.app_id,
+                    provider_id=f"cmc-{hint.app_id}",
+                    symbol=hint.symbol,
+                    name=hint.name,
+                )
+                for hint in identity_hints or []
+            ]
+
+        async def get_prices(
+            self,
+            asset_ids: list[str],
+            currencies: list[str],
+        ) -> list[PriceQuote]:
+            self.calls += 1
+            return [
+                PriceQuote(
+                    asset_id=asset_id,
+                    currency=currencies[0],
+                    price=1.0,
+                    provider=self.name,
+                    provider_id=asset_id,
+                )
+                for asset_id in asset_ids
+            ]
+
+    cmc = CountingIdentityProvider(ProviderName.CMC)
+    coingecko = CountingIdentityProvider(ProviderName.COINGECKO)
+    registry = MarketDataRegistry(
+        settings(),
+        providers={ProviderName.CMC: cmc, ProviderName.COINGECKO: coingecko},
+    )
+
+    await registry.get_prices(["bitcoin", "ethereum"], ["usd"])
+    await registry.get_prices(["bitcoin", "ethereum"], ["usd"])
+
+    assert cmc.identity_calls == 1
+    assert coingecko.identity_calls == 1
+    assert cmc.calls == 2
+
+
+@pytest.mark.asyncio
 async def test_cmc_and_coingecko_normalize_to_same_market_asset_shape() -> None:
     def cmc_handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["X-CMC_PRO_API_KEY"] == "test-key"

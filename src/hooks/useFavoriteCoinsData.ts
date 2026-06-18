@@ -24,7 +24,8 @@ function unresolvedFavorite(id: string): Coin {
 export function useFavoriteCoinsData(
   favorites: Set<string>,
   intervalMs: number,
-  currency: string
+  currency: string,
+  seedCoins: Coin[] = [],
 ): Coin[] {
   const [favoriteData, setFavoriteData] = useState<Map<string, Coin>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
@@ -33,6 +34,23 @@ export function useFavoriteCoinsData(
 
   const favoriteIds = [...favorites];
   const favoritesKey = [...favoriteIds].sort().join(',');
+  const seedKey = seedCoins
+    .filter((coin) => favorites.has(coin.id))
+    .map((coin) => `${coin.id}:${coin.current_price}:${coin.price_change_percentage_24h ?? 0}`)
+    .sort()
+    .join('|');
+
+  useEffect(() => {
+    if (favoriteIds.length === 0) return;
+    const visibleFavorites = seedCoins.filter((coin) => favorites.has(coin.id));
+    if (visibleFavorites.length === 0) return;
+    setFavoriteData((previous) => {
+      const next = new Map([...previous].filter(([id]) => favorites.has(id)));
+      for (const coin of visibleFavorites) next.set(coin.id, coin);
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favoritesKey, seedKey]);
 
   useEffect(() => {
     if (favoriteIds.length === 0) {

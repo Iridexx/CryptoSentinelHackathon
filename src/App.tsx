@@ -358,7 +358,7 @@ export default function App() {
     return sortCoins(rawDisplayCoins, sortBy, sortDesc);
   }, [rawDisplayCoins, sortBy, sortDesc]);
 
-  const favoriteCoins = useFavoriteCoinsData(favorites, refreshInterval, currency);
+  const favoriteCoins = useFavoriteCoinsData(favorites, refreshInterval, currency, coins);
   const sortedFavoriteCoins = useMemo(
     () => sortCoins(favoriteCoins, favoriteSortBy, favoriteSortDesc),
     [favoriteCoins, favoriteSortBy, favoriteSortDesc],
