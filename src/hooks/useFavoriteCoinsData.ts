@@ -31,6 +31,7 @@ export function useFavoriteCoinsData(
   const abortRef = useRef<AbortController | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestVersionRef = useRef(0);
+  const favoriteDataRef = useRef<Map<string, Coin>>(new Map());
 
   const favoriteIds = [...favorites];
   const favoritesKey = [...favoriteIds].sort().join(',');
@@ -39,6 +40,10 @@ export function useFavoriteCoinsData(
     .map((coin) => `${coin.id}:${coin.current_price}:${coin.price_change_percentage_24h ?? 0}`)
     .sort()
     .join('|');
+
+  useEffect(() => {
+    favoriteDataRef.current = favoriteData;
+  }, [favoriteData]);
 
   useEffect(() => {
     if (favoriteIds.length === 0) return;
@@ -64,15 +69,24 @@ export function useFavoriteCoinsData(
         clearTimeout(retryRef.current);
         retryRef.current = null;
       }
+      const seededIds = new Set(seedCoins.filter((coin) => favorites.has(coin.id)).map((coin) => coin.id));
+      const knownIds = new Set(seededIds);
+      for (const id of favoriteDataRef.current.keys()) {
+        if (favorites.has(id)) knownIds.add(id);
+      }
+      const missingIds = favoriteIds.filter((id) => !knownIds.has(id));
+      const staleIds = favoriteIds.filter((id) => !seededIds.has(id));
+      const idsToFetch = missingIds.length > 0 ? missingIds : staleIds;
+      if (idsToFetch.length === 0) return;
       abortRef.current?.abort();
       abortRef.current = new AbortController();
       try {
         const data = await fetchMarkets(
-          favoriteIds.length,
+          idsToFetch.length,
           1,
           currency,
           abortRef.current.signal,
-          favoriteIds,
+          idsToFetch,
         );
         if (requestVersion !== requestVersionRef.current) return;
         setFavoriteData((previous) => {
@@ -100,7 +114,7 @@ export function useFavoriteCoinsData(
       abortRef.current?.abort();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [favoritesKey, currency, intervalMs]);
+  }, [favoritesKey, currency, intervalMs, seedKey]);
 
   return favoriteIds.map(id => favoriteData.get(id) ?? unresolvedFavorite(id));
 }

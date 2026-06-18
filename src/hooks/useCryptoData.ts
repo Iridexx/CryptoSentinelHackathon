@@ -9,9 +9,13 @@ async function fetchCoinsAll(perPage: PerPage, page: number, currency: string, s
   return fetchMarkets(perPage, page, currency, signal);
 }
 
-function loadCachedCoins(): Coin[] {
+function cacheKey(perPage: PerPage, page: number, currency: string): string {
+  return `${CACHE_KEY}:${currency}:${perPage}:${page}`;
+}
+
+function loadCachedCoins(perPage: PerPage, page: number, currency: string): Coin[] {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(cacheKey(perPage, page, currency));
     if (!raw) return [];
     return JSON.parse(raw) as Coin[];
   } catch {
@@ -20,7 +24,7 @@ function loadCachedCoins(): Coin[] {
 }
 
 export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page = 1, currency = 'usd') {
-  const [coins, setCoins] = useState<Coin[]>(() => page === 1 ? loadCachedCoins() : []);
+  const [coins, setCoins] = useState<Coin[]>(() => loadCachedCoins(perPage, page, currency));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -28,7 +32,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<() => Promise<void>>(async () => {});
-  const coinsRef = useRef<Coin[]>(page === 1 ? loadCachedCoins() : []);
+  const coinsRef = useRef<Coin[]>(loadCachedCoins(perPage, page, currency));
   const requestVersionRef = useRef(0);
 
   const fetchCoins = useCallback(async () => {
@@ -43,9 +47,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
       setCoins(data);
       setError(null);
       setLastUpdated(new Date());
-      if (page === 1) {
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
-      }
+      try { localStorage.setItem(cacheKey(perPage, page, currency), JSON.stringify(data)); } catch { /* quota */ }
     } catch (err) {
       if (requestVersion !== requestVersionRef.current) return;
       if ((err as Error).name === 'AbortError') return;
@@ -78,6 +80,9 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   }, [fetchCoins, intervalMs]);
 
   useEffect(() => {
+    const cached = loadCachedCoins(perPage, page, currency);
+    coinsRef.current = cached;
+    setCoins(cached);
     setLoading(true);
     fetchCoins();
     timerRef.current = setInterval(fetchCoins, intervalMs);

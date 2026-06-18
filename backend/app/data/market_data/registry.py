@@ -64,6 +64,14 @@ class MarketDataRegistry:
     def active(self) -> MarketDataProvider:
         return self._providers[self._active]
 
+    def _remember_identity(self, item: MarketAsset) -> None:
+        self._identity_cache[(self._active, item.id)] = AssetIdentity(
+            app_id=item.id,
+            provider_id=item.provider_id,
+            symbol=item.symbol,
+            name=item.name,
+        )
+
     def select(self, provider: ProviderName) -> ProviderRuntimeStatus:
         """Apply an explicit global selection; never fall back automatically."""
 
@@ -149,6 +157,8 @@ class MarketDataRegistry:
         started = perf_counter()
         if not asset_ids:
             items = await self.active.get_market_list(currency, limit, page)
+            for item in items:
+                self._remember_identity(item)
             logger.info(
                 "market_list_completed",
                 provider=self._active.value,

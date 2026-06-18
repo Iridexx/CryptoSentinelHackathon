@@ -75,7 +75,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- market_data/ - astrazione multi-provider Step 3.
 |   |   |   |   |-- base.py - interfaccia MarketDataProvider, identità asset e modelli normalizzati.
 |   |   |   |   |-- aliases.py - mapping ID storico app/CoinGecko verso slug CMC.
-|   |   |   |   |-- registry.py - selettore globale e riconciliazione ID storici resiliente: conserva i risultati CMC se il catalogo identità è indisponibile e mantiene una cache in memoria delle identità risolte per ridurre refresh lenti su preferiti/alert.
+|   |   |   |   |-- registry.py - selettore globale e riconciliazione ID storici resiliente: conserva i risultati CMC se il catalogo identità è indisponibile, mantiene una cache in memoria delle identità risolte e la popola anche dalle liste ranked per ridurre refresh lenti su preferiti/alert.
 |   |   |   |   |-- cmc.py - adapter CMC REST con liste a blocchi da 200, ricerca progressiva e risoluzione preferiti per simbolo/ID.
 |   |   |   |   |-- coingecko.py - adapter CoinGecko secondario e catalogo identità degli ID storici con cache giornaliera.
 |   |   |   |   |-- http.py - client condiviso con cache, rate limiting e contatore crediti.
@@ -201,7 +201,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
-|   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti mancanti con retry rapido, seed immediato dai prezzi gia' presenti nella lista mercato e righe temporanee per tutti gli ID salvati.
+|   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti mancanti con retry rapido, seed immediato dai prezzi gia' presenti nella lista mercato, fetch dedicato solo per gli ID non coperti dal mercato e righe temporanee per tutti gli ID salvati.
 |   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.
 |   |-- index.css - CSS globale/Tailwind.
 |   |-- main.tsx - entrypoint React.
@@ -313,7 +313,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Task Android package rename | Completato | Package Android/appId rinominato da `com.cryptosentinel.app` a `com.cryptosentinelai.app` per evitare conflitto con il fork/app esistente. |
 | Task CI FCM Android config | Completato | Workflow aggiorna `android/app/google-services.json` da GitHub Secret base64 prima della build APK. |
 | Task CI APK artifact robustness | Completato | Artifact APK caricato prima delle release GitHub; release non bloccanti per non impedire download APK/Pages. |
-| Task regressione market-data frontend | Completato | Preferiti seedati dal dataset mercato gia' caricato e cache identita' backend per evitare risoluzioni CMC/CoinGecko ripetute a ogni refresh. |
+| Task regressione market-data frontend | Completato | Cache lista mercato separata per limit/page/currency, preferiti seedati dal dataset mercato gia' caricato, fetch dedicato solo per ID non coperti e cache identita' backend popolata anche dalle liste ranked. |
 | Step 3 - Astrazione Dati Multi-Provider | Parziale | Adapter CMC/CoinGecko, selettore globale, checker/frontend astratti e gate completati; smoke CMC e CoinGecko reali superati. Restano i18n frontend legacy e limite Volume Profile 5m. |
 | Step 4 - Layer di Esecuzione | Parziale | TWAK spot, BNB SDK/EIP-712 perp, RPC fallback, gas/approval guardrail, x402 e verifica competizione implementati e testati; mancano transazioni reali testnet e venue perp ufficiale configurata. |
 | Step 5 - Persistenza Dati | Completato | Schema Spot/Perp/Globale su SQLite/aiosqlite; migrazione JSON→DB (FCM, alert, x402, provider selector); readiness DB reale SELECT 1; viste dashboard; backup periodico configurabile; 16 test tutti passed. |
@@ -348,13 +348,14 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | ID applicativo stabile | L'app conserva gli ID storici usati prima dello Step 3 (`bitcoin`, `binancecoin`, ecc.); gli adapter mantengono separati slug e ID nativi dei provider. |
 | Compatibilità preferiti pre-Step 3 | Gli ID CoinGecko persistiti dalle release precedenti restano l'identità dell'app; l'adapter CMC traduce alias come `binancecoin/bnb`, `ripple/xrp` e `avalanche-2/avalanche` in entrambe le direzioni. |
 | Preferiti indipendenti dal mercato | L'app richiede sempre tutti gli ID preferiti e conserva gli ultimi dati validi; il selettore 50/100/200/400/600 riguarda soltanto la lista mercato. |
-| Seed preferiti da mercato | Quando una coin preferita e' gia' nel dataset mercato visibile, la tab Preferiti aggiorna subito prezzo e variazioni senza attendere la chiamata dedicata `ids`. |
+| Seed preferiti da mercato | Quando una coin preferita e' gia' nel dataset mercato visibile, la tab Preferiti aggiorna subito prezzo e variazioni senza attendere la chiamata dedicata `ids`; gli ID fuori lista vengono aggiornati separatamente. |
+| Cache frontend per limite | La cache mercato e' separata per `currency/perPage/page`, evitando che un vecchio cache hit da 50 elementi mascheri una selezione 100/200/400/600. |
 | Ordinamento Preferiti indipendente | Mercati e Preferiti mantengono separatamente criterio, direzione e periodo visualizzato per Rank, 24h, 7g, Volume e Prezzo. |
 | Logger moduli inizializzati lazy | Provider market-data e checker notifiche acquisiscono la configurazione structlog definitiva applicata durante l'avvio backend. |
 | Catalogo CMC paginato | `/v1/cryptocurrency/map` viene letto in pagine da 5.000 elementi fino a esaurimento; i preferiti meno capitalizzati non spariscono perché fuori dalla prima pagina CMC. |
 | Cache prima del conteggio crediti | Una cache hit non incrementa richieste o crediti CMC; il budget osservato espone livelli ok/warning/critical/exhausted. |
 | Single-flight provider | Richieste concorrenti con la stessa chiave condividono una sola chiamata esterna; le altre attendono il risultato in cache senza consumare rate limit o crediti. |
-| Cache identita' provider | Le identita' app/provider gia' risolte restano in memoria nel `MarketDataRegistry`, cosi' refresh prezzo e preferiti ripetuti non rieseguono la mappa CMC completa. |
+| Cache identita' provider | Le identita' app/provider gia' risolte restano in memoria nel `MarketDataRegistry`; le liste ranked popolano la stessa cache, cosi' refresh prezzo e preferiti ripetuti non rieseguono la mappa CMC completa. |
 | MCP CMC separato da REST | Lo stato espone endpoint/header ufficiali senza chiavi; REST serve i flussi applicativi, MCP resta disponibile per futuri client agente. |
 | OHLCV CMC segmentato | Startup include un mese di storico. Le richieste OHLCV usano `time_start`/`time_end`, finestre massime di 30 giorni e deduplicazione dei punti di confine; dati più vecchi della profondità del piano possono comunque essere rifiutati. |
 | OHLCV non sintetizzato | I 5 minuti CMC sono quote storiche, non OHLCV completo; il backend non inventa volume o candele. |

@@ -41,3 +41,41 @@
 ## 6. STATO DELIVERABLE
 
 Completato e verificato con test mirati.
+
+## 7. FOLLOW-UP 2026-06-18
+
+### 1. COSA E STATO FATTO
+
+- Corretta la regressione residua per cui una cache frontend da 50 elementi poteva continuare a mascherare la selezione 100/200/400/600.
+- Corretta la logica Preferiti: i dati presenti nella lista mercato aggiornano subito la tab Preferiti, mentre la chiamata dedicata scarica solo gli ID non coperti dal mercato.
+- La cache identita' backend viene ora popolata anche dalle liste ranked, non solo dalle chiamate esplicite con `ids`.
+
+### 2. COME E STATO FATTO
+
+- `useCryptoData` usa una cache separata per `currency/perPage/page` e resetta lo stato con la cache corrispondente quando cambiano i parametri.
+- `useFavoriteCoinsData` calcola gli ID fuori dal seed mercato e aggiorna solo quelli, evitando refresh completi e lenti di tutti i preferiti.
+- `MarketDataRegistry.get_market_list` registra le identita' app/provider dei risultati ranked.
+
+### 3. COSA E STATO VERIFICATO
+
+- Test mirati:
+  - `backend\.venv\Scripts\python.exe -m pytest backend/tests/integration/test_market_data_providers.py::test_registry_caches_identity_resolution_for_repeated_price_refreshes backend/tests/integration/test_market_data_providers.py::test_registry_reuses_ranked_market_identities_for_favorite_refreshes backend/tests/integration/test_market_data_api.py::test_backend_market_data_response_shape`
+  - esito: `3 passed`
+- Lint backend mirato:
+  - `backend\.venv\Scripts\python.exe -m ruff check backend/app/data/market_data/registry.py backend/tests/integration/test_market_data_providers.py`
+  - esito: `All checks passed`
+- Typecheck frontend:
+  - `npx tsc --noEmit`
+  - esito: nessun errore
+
+### 4. SCOSTAMENTI DAL PIANO
+
+- Build Vite locale non eseguita per non caricare `.env` reale.
+
+### 5. QUESTIONI APERTE
+
+- Il bundle installato deve essere aggiornato via CI/APK per vedere il fix sul device.
+
+### 6. STATO DELIVERABLE
+
+Completato e verificato con test mirati.
