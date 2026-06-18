@@ -47,9 +47,11 @@ def _price_config(device_id: str | None, coin_id: str, coin_name: str) -> AlertS
 class _FakeFcm:
     def __init__(self) -> None:
         self.sent: list[tuple[tuple[str, ...], str, str]] = []
+        self.payloads: list[dict] = []
 
     def send(self, tokens, title, body, severity, data, dry_run=False):
         self.sent.append((tuple(tokens), data["type"], data["coin_id"]))
+        self.payloads.append(data)
         return SimpleNamespace(success_count=len(tokens))
 
 
@@ -122,3 +124,46 @@ async def test_legacy_token_without_device_uses_global_store(db, monkeypatch) ->
     await price_checker.run_price_check()
 
     assert (("tokLegacy",), "price_alert", "bitcoin") in fcm.sent
+
+
+@pytest.mark.asyncio
+async def test_crossing_alert_rearms_after_leaving_band(db, monkeypatch) -> None:
+    get_alert_store("devA").save_config(
+        AlertSyncRequest(
+            device_id="devA",
+            price_alerts=[
+                PriceAlertItem(
+                    coin_id="bitcoin",
+                    coin_name="Bitcoin",
+                    direction="above",
+                    threshold=100.0,
+                    crossing_only=True,
+                    keep_active_after_trigger=True,
+                    rearm_percent=1.0,
+                    last_observed_price=99.0,
+                )
+            ],
+        )
+    )
+
+    fcm = _FakeFcm()
+    monkeypatch.setattr(
+        price_checker,
+        "get_notification_service",
+        lambda: _fake_service([("tokA", "devA")], fcm),
+    )
+
+    prices = iter([100.2, 99.8, 101.2, 99.8])
+
+    async def _fake_fetch(coins, vs, registry=None):
+        return {"bitcoin": {"usd": next(prices)}}
+
+    monkeypatch.setattr(price_checker, "_fetch_prices", _fake_fetch)
+
+    await price_checker.run_price_check()
+    await price_checker.run_price_check()
+    await price_checker.run_price_check()
+    await price_checker.run_price_check()
+
+    assert len(fcm.sent) == 2
+    assert [payload["cross_direction"] for payload in fcm.payloads] == ["up", "down"]

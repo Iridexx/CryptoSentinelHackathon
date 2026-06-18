@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-16
+Ultimo aggiornamento: 2026-06-18
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -96,7 +96,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- i18n/locales/ - traduzioni backend en.json e it.json, incluse chiavi market data Step 3.
 |   |   |-- notifications/ - sistema notifiche server-side.
 |   |   |   |-- alert_store.py - persistenza DB configurazione, stato checker e badge preferiti pendenti (DB-backed da Step 5; interfaccia pubblica invariata).
-|   |   |   |-- price_checker.py - controllo prezzi ogni 60s; raggruppa i token per device_id e invia a ogni device solo i suoi alert (fallback globale per token legacy senza device_id).
+|   |   |   |-- price_checker.py - controllo prezzi ogni 60s; raggruppa i token per device_id e invia a ogni device solo i suoi alert; supporta soglie one-shot e crossing con riarmo percentuale (fallback globale per token legacy senza device_id).
 |   |   |   |-- alert_store.py - store per-device (DeviceAlertConfig per device_id; AlertConfig legacy come fallback). get_alert_store(device_id) con cache per device.
 |   |   |   |-- service.py - orchestration registry + FCM client.
 |   |   |   `-- fcm/ - integrazione Firebase Cloud Messaging.
@@ -133,7 +133,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- pnl.py - PnlRepository (save_snapshot, recent_for_user, upsert_portfolio, get_portfolio).
 |   |   |       `-- x402_budget.py - X402BudgetRepository (load_today, save).
 |   |   |-- schemas/ - schemi API.
-|   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti.
+|   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti, incluse opzioni crossing/riarmo per alert prezzo.
 |   |   |   |-- notifications.py - device token, notification request/response e status.
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot.
@@ -154,6 +154,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_execution_providers.py - interfaccia ExecutionProvider, selettore twak/pancakeswap, quote getAmountsOut, costruzione swap tx, guardrail (slippage/gas/gate mainnet), normalizzazione TWAK.
 |       |-- unit/test_perp_providers.py - interfaccia PerpExecutionProvider, BnbSdkPerpProvider (status, sign/submit delega al bridge, open/close/get_position gated), selettore perp.
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
+|       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
 |       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.
 |-- configs/ - configurazione versionata e template installazione.
@@ -327,6 +328,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Gate segreti build APK | La CI interrompe la build prima di Vite se URL backend o token client obbligatori sono assenti, evitando APK parzialmente funzionanti. |
 | FCM come unico percorso background | Rimossi WorkManager e BootReceiver: il backend controlla gli alert ogni 60 secondi e FCM consegna anche ad app chiusa. |
 | Backend unica fonte notifiche | Gli hook frontend non fanno scattare notifiche, beep o popup autonomi; in foreground viene mostrato localmente solo il push FCM ricevuto. |
+| Alert crossing con riarmo | Gli alert prezzo possono scattare solo su attraversamento soglia, registrare up/down e restare attivi con riarmo percentuale; default one-shot preserva il comportamento prudente. |
 | Stato UI derivato dal push | Il payload FCM dei preferiti ripristina evidenziazione arancione e popup; il tap sulla notifica apre la tab Preferiti senza rieseguire controlli prezzo locali. |
 | Badge preferiti persistente backend | Un push consegnato crea uno stato pending per coin. L'app lo recupera all'avvio/rientro in foreground e lo rimuove solo dopo “Ho capito”, coprendo app chiusa, avvio manuale e mancato tap sulla notifica. |
 | Scope client separati | Il token device registra/rimuove solo device; il token alerts sincronizza solo alert; stato FCM richiede read e invio manuale richiede admin. |

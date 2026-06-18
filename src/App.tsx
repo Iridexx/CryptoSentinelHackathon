@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { Coin } from './types';
+import type { Coin, PriceAlertTriggerOptions } from './types';
 import { useCryptoData, type PerPage } from './hooks/useCryptoData';
 import { useFavorites } from './hooks/useFavorites';
 import { useFavoriteCoinsData } from './hooks/useFavoriteCoinsData';
@@ -293,7 +293,7 @@ export default function App() {
 
   const { results: searchResults, searching, error: searchError } = useSearch(search, currency);
   const { favorites, toggle: toggleFavorite, isFavorite, clear: clearFavorites } = useFavorites();
-  const { alerts, addAlert, removeAlert, resetAlert, editAlert, toggleAlert, clearAlerts, history, clearHistory } = useAlerts();
+  const { alerts, addAlert, removeAlert, resetAlert, editAlert, toggleAlert, clearAlerts, evaluateAlerts, history, clearHistory } = useAlerts();
   const { rangeAlerts, addRangeAlert, removeRangeAlert, editRangeAlert, toggleRangeAlert } = useRangeAlerts();
 
   const [refreshFlash, setRefreshFlash] = useState(false);
@@ -363,6 +363,13 @@ export default function App() {
     () => sortCoins(favoriteCoins, favoriteSortBy, favoriteSortDesc),
     [favoriteCoins, favoriteSortBy, favoriteSortDesc],
   );
+
+  useEffect(() => {
+    const prices = new Map<string, number>();
+    for (const coin of coins) prices.set(coin.id, coin.current_price);
+    for (const coin of favoriteCoins) prices.set(coin.id, coin.current_price);
+    if (prices.size > 0) evaluateAlerts(prices);
+  }, [coins, favoriteCoins, evaluateAlerts]);
   const syncedFavoriteCoins = useMemo(() => {
     const resolvedFavorites = new Map(
       favoriteCoins.map(c => [c.id, { id: c.id, name: c.name, symbol: c.symbol }]),
@@ -402,7 +409,13 @@ export default function App() {
   }, []);
 
   const handleConfirmAlert = useCallback(
-    (direction: 'above' | 'below', threshold: number, percentChange?: number, note?: string) => {
+    (
+      direction: 'above' | 'below',
+      threshold: number,
+      percentChange?: number,
+      note?: string,
+      triggerOptions?: PriceAlertTriggerOptions,
+    ) => {
       if (!selectedCoin) return;
       addAlert({
         coinId: selectedCoin.id,
@@ -413,6 +426,7 @@ export default function App() {
         threshold,
         percentChange,
         note,
+        ...triggerOptions,
       });
     },
     [selectedCoin, addAlert]

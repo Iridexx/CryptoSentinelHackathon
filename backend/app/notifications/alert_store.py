@@ -27,6 +27,8 @@ class CheckerState:
     """Runtime state persisted between price-check ticks."""
 
     triggered_keys: set[str] = field(default_factory=set)
+    price_last_observed: dict[str, float] = field(default_factory=dict)
+    price_waiting_rearm: set[str] = field(default_factory=set)
     range_last_notified: dict[str, float] = field(default_factory=dict)
     range_is_inside: dict[str, bool | None] = field(default_factory=dict)
     fav_ref_prices: dict[str, float] = field(default_factory=dict)
@@ -64,6 +66,16 @@ class AlertStore:
 
             self._config = config
             self._state.triggered_keys.intersection_update(active_price_keys)
+            self._state.price_last_observed = {
+                key: value
+                for key, value in self._state.price_last_observed.items()
+                if key in active_price_keys
+            }
+            for alert in config.price_alerts:
+                key = f"{alert.coin_id}:{alert.direction}:{alert.threshold}"
+                if key not in self._state.price_last_observed and alert.last_observed_price is not None:
+                    self._state.price_last_observed[key] = alert.last_observed_price
+            self._state.price_waiting_rearm.intersection_update(active_price_keys)
             self._state.range_last_notified = {
                 key: value
                 for key, value in self._state.range_last_notified.items()
@@ -94,6 +106,8 @@ class AlertStore:
         with self._lock:
             return CheckerState(
                 triggered_keys=set(self._state.triggered_keys),
+                price_last_observed=dict(self._state.price_last_observed),
+                price_waiting_rearm=set(self._state.price_waiting_rearm),
                 range_last_notified=dict(self._state.range_last_notified),
                 range_is_inside=dict(self._state.range_is_inside),
                 fav_ref_prices=dict(self._state.fav_ref_prices),
@@ -126,6 +140,8 @@ class AlertStore:
     def _state_to_dict(self) -> dict:
         return {
             "triggered_keys": list(self._state.triggered_keys),
+            "price_last_observed": self._state.price_last_observed,
+            "price_waiting_rearm": list(self._state.price_waiting_rearm),
             "range_last_notified": self._state.range_last_notified,
             "range_is_inside": dict(self._state.range_is_inside),
             "fav_ref_prices": self._state.fav_ref_prices,
@@ -199,6 +215,8 @@ class AlertStore:
                 st = json.loads(row.state_json)
                 self._state = CheckerState(
                     triggered_keys=set(st.get("triggered_keys", [])),
+                    price_last_observed=st.get("price_last_observed", {}),
+                    price_waiting_rearm=set(st.get("price_waiting_rearm", [])),
                     range_last_notified=st.get("range_last_notified", {}),
                     range_is_inside=st.get("range_is_inside", {}),
                     fav_ref_prices=st.get("fav_ref_prices", {}),

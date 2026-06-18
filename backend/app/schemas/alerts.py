@@ -10,6 +10,10 @@ class PriceAlertItem(BaseModel):
     direction: str  # "above" | "below"
     threshold: float
     note: str | None = None
+    crossing_only: bool = False
+    keep_active_after_trigger: bool = False
+    rearm_percent: float = Field(default=0.0, ge=0.0)
+    last_observed_price: float | None = None
 
 
 class RangeAlertItem(BaseModel):

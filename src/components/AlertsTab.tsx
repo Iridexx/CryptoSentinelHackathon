@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type FC } from 'react';
-import type { PriceAlert, Coin, AlertDirection, AlertHistoryEntry, RangeAlert } from '../types';
+import type { PriceAlert, Coin, AlertDirection, AlertHistoryEntry, RangeAlert, PriceAlertTriggerOptions } from '../types';
 import { hapticMedium, hapticLight } from '../utils/haptics';
 
 // Slider personalizzato con pointer events — aggiornamento DOM diretto durante drag
@@ -102,7 +102,14 @@ interface Props {
   onRemove: (id: string) => void;
   onReset: (id: string) => void;
   coins: Coin[];
-  onEdit: (id: string, threshold: number, direction: AlertDirection, percentChange?: number, note?: string) => void;
+  onEdit: (
+    id: string,
+    threshold: number,
+    direction: AlertDirection,
+    percentChange?: number,
+    note?: string,
+    triggerOptions?: PriceAlertTriggerOptions,
+  ) => void;
   history: AlertHistoryEntry[];
   onClearHistory: () => void;
   sliderRange: number;
@@ -256,7 +263,14 @@ interface AlertRowProps {
   alert: PriceAlert;
   onRemove: (id: string) => void;
   onReset: (id: string) => void;
-  onEdit: (id: string, threshold: number, direction: AlertDirection, percentChange?: number, note?: string) => void;
+  onEdit: (
+    id: string,
+    threshold: number,
+    direction: AlertDirection,
+    percentChange?: number,
+    note?: string,
+    triggerOptions?: PriceAlertTriggerOptions,
+  ) => void;
   coin?: Coin;
   sliderRange: number;
 }
@@ -270,6 +284,9 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
   const [priceInput, setPriceInput] = useState('');
   const [pctInput, setPctInput] = useState('');
   const [draftNote, setDraftNote] = useState(alert.note ?? '');
+  const [draftCrossingOnly, setDraftCrossingOnly] = useState(alert.crossingOnly === true);
+  const [draftKeepActive, setDraftKeepActive] = useState(alert.keepActiveAfterTrigger === true);
+  const [draftRearmPct, setDraftRearmPct] = useState(String(alert.rearmPercent ?? 0));
 
   const isAbove = alert.direction === 'above';
   const pivotPrice = coin?.current_price ?? alert.threshold;
@@ -290,6 +307,9 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
     setDraftThreshold(alert.threshold);
     setDraftDirection(alert.direction);
     setDraftNote(alert.note ?? '');
+    setDraftCrossingOnly(alert.crossingOnly === true);
+    setDraftKeepActive(alert.keepActiveAfterTrigger === true);
+    setDraftRearmPct(String(alert.rearmPercent ?? 0));
     setEditField(null);
     setEditing(true);
   };
@@ -306,7 +326,12 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
     const newPct = coin
       ? Math.abs((draftThreshold - coin.current_price) / coin.current_price * 100)
       : undefined;
-    onEdit(alert.id, draftThreshold, draftDirection, newPct, draftNote.trim() || undefined);
+    const rearmPercent = Math.max(0, Number.parseFloat(draftRearmPct.replace(',', '.')) || 0);
+    onEdit(alert.id, draftThreshold, draftDirection, newPct, draftNote.trim() || undefined, {
+      crossingOnly: draftCrossingOnly,
+      keepActiveAfterTrigger: draftCrossingOnly && draftKeepActive,
+      rearmPercent: draftCrossingOnly && draftKeepActive ? rearmPercent : 0,
+    });
     setEditing(false);
   };
 
@@ -341,6 +366,20 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
             {alert.triggered && (
               <span className="text-xs bg-accent-yellow/20 text-accent-yellow px-1.5 py-0.5 rounded-full">Scattato</span>
             )}
+            {alert.crossingOnly && !alert.triggered && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                alert.waitingForRearm ? 'bg-accent-yellow/15 text-accent-yellow' : 'bg-accent-blue/15 text-accent-blue'
+              }`}>
+                {alert.waitingForRearm ? 'Riarmo' : 'Cross'}
+              </span>
+            )}
+            {alert.lastCrossDirection && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                alert.lastCrossDirection === 'up' ? 'bg-accent-green/10 text-accent-green' : 'bg-accent-red/10 text-accent-red'
+              }`}>
+                {alert.lastCrossDirection === 'up' ? 'Up' : 'Down'}
+              </span>
+            )}
             {alert.triggered && alert.triggeredAt && (
               <span className="text-xs text-gray-500">
                 {new Date(alert.triggeredAt).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
@@ -349,9 +388,19 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
           </div>
           <div className={`text-xs mt-0.5 flex items-center gap-1.5 ${isAbove ? 'text-accent-green' : 'text-accent-red'}`}>
             {isAbove ? '▲ Sopra' : '▼ Sotto'} ${formatPrice(alert.threshold)}
+            {alert.crossingOnly && (
+              <span className="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-accent-blue/10 text-accent-blue">
+                Cross
+              </span>
+            )}
             {alert.percentChange != null && (
               <span className={`px-1.5 py-0.5 rounded-full text-xs font-semibold ${isAbove ? 'bg-accent-green/10' : 'bg-accent-red/10'}`}>
                 {isAbove ? '+' : '-'}{alert.percentChange.toFixed(1)}%
+              </span>
+            )}
+            {alert.crossingOnly && alert.keepActiveAfterTrigger && (
+              <span className="px-1.5 py-0.5 rounded-full text-xs font-semibold bg-dark-600 text-gray-300">
+                {Math.max(0, alert.rearmPercent ?? 0)}%
               </span>
             )}
           </div>
@@ -472,6 +521,57 @@ const AlertRow: FC<AlertRowProps> = ({ alert, onRemove, onReset, onEdit, coin, s
             <span>${formatPrice(sliderMin)}</span>
             <span className="text-gray-700">−{sliderRange}% · +{sliderRange}%</span>
             <span>${formatPrice(sliderMax)}</span>
+          </div>
+
+          <div className="mb-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDraftCrossingOnly((value) => {
+                  const next = !value;
+                  if (!next) setDraftKeepActive(false);
+                  return next;
+                });
+              }}
+              className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 border transition-colors ${
+                draftCrossingOnly ? 'bg-accent-blue/10 border-accent-blue/40' : 'bg-dark-700 border-dark-600'
+              }`}
+            >
+              <span className="text-xs font-semibold text-white">Solo crossing</span>
+              <span className={`w-9 h-5 rounded-full p-0.5 flex-shrink-0 transition-colors ${draftCrossingOnly ? 'bg-accent-blue' : 'bg-dark-600'}`}>
+                <span className={`block w-4 h-4 rounded-full bg-white transition-transform ${draftCrossingOnly ? 'translate-x-4' : ''}`} />
+              </span>
+            </button>
+            {draftCrossingOnly && (
+              <div className="grid grid-cols-[1fr_1fr_80px] gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftKeepActive(false)}
+                  className={`py-2 rounded-lg text-xs font-semibold ${!draftKeepActive ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}
+                >
+                  1 volta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftKeepActive(true)}
+                  className={`py-2 rounded-lg text-xs font-semibold ${draftKeepActive ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}
+                >
+                  Continua
+                </button>
+                <div className="flex items-center bg-dark-700 rounded-lg px-2 border border-dark-600">
+                  <input
+                    type="number"
+                    value={draftRearmPct}
+                    onChange={(e) => setDraftRearmPct(e.target.value)}
+                    disabled={!draftKeepActive}
+                    className="w-full bg-transparent text-white py-2 outline-none text-xs text-right disabled:text-gray-600"
+                    min="0"
+                    step="0.1"
+                  />
+                  <span className="text-gray-500 text-xs ml-0.5">%</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mb-3">
@@ -662,6 +762,7 @@ const RangeAlertRow: FC<RangeAlertRowProps> = ({ alert, onRemove, onEdit, coin }
 
 const HistoryRow: FC<{ entry: AlertHistoryEntry }> = ({ entry }) => {
   const isAbove = entry.direction === 'above';
+  const label = entry.crossDirection === 'up' ? 'Cross up' : entry.crossDirection === 'down' ? 'Cross down' : isAbove ? 'Sopra' : 'Sotto';
   const priceDiff = ((entry.triggeredPrice - entry.threshold) / entry.threshold) * 100;
   const date = new Date(entry.triggeredAt);
   const dateStr = date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
@@ -674,7 +775,7 @@ const HistoryRow: FC<{ entry: AlertHistoryEntry }> = ({ entry }) => {
         <div className="flex items-center gap-1.5">
           <span className="text-white text-xs font-semibold">{entry.coinName}</span>
           <span className={`text-xs font-bold ${isAbove ? 'text-accent-green' : 'text-accent-red'}`}>
-            {isAbove ? '▲' : '▼'} ${formatPrice(entry.triggeredPrice)}
+            {label} ${formatPrice(entry.triggeredPrice)}
           </span>
         </div>
         <div className="text-xs text-gray-500 mt-0.5">

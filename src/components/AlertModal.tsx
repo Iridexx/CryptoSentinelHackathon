@@ -1,10 +1,16 @@
 import { useState, useRef, type FC } from 'react';
-import type { Coin, AlertDirection } from '../types';
+import type { Coin, AlertDirection, PriceAlertTriggerOptions } from '../types';
 import { hapticMedium, hapticLight } from '../utils/haptics';
 
 interface Props {
   coin: Coin;
-  onConfirm: (direction: AlertDirection, threshold: number, percentChange?: number, note?: string) => void;
+  onConfirm: (
+    direction: AlertDirection,
+    threshold: number,
+    percentChange?: number,
+    note?: string,
+    triggerOptions?: PriceAlertTriggerOptions,
+  ) => void;
   onConfirmRange: (minPrice: number, maxPrice: number, note?: string) => void;
   onClose: () => void;
 }
@@ -63,6 +69,9 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
     const p = coin.current_price * 1.05;
     return p >= 1 ? p.toFixed(2) : p.toFixed(6);
   });
+  const [crossingOnly, setCrossingOnly] = useState(false);
+  const [keepActiveAfterTrigger, setKeepActiveAfterTrigger] = useState(false);
+  const [rearmPct, setRearmPct] = useState('0.5');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
@@ -85,13 +94,23 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
       onClose();
       return;
     }
+    const rearmNum = parseFloat(rearmPct.replace(',', '.'));
+    if (crossingOnly && keepActiveAfterTrigger && (isNaN(rearmNum) || rearmNum < 0)) {
+      setError('Riarmo non valido');
+      return;
+    }
+    const triggerOptions: PriceAlertTriggerOptions = {
+      crossingOnly,
+      keepActiveAfterTrigger: crossingOnly && keepActiveAfterTrigger,
+      rearmPercent: crossingOnly && keepActiveAfterTrigger ? rearmNum : 0,
+    };
     if (mode === 'price') {
       const num = parsePrice(priceValue);
       if (isNaN(num) || num <= 0) {
         setError('Inserisci un prezzo valido maggiore di zero');
         return;
       }
-      onConfirm(direction, num, undefined, trimmedNote);
+      onConfirm(direction, num, undefined, trimmedNote, triggerOptions);
     } else {
       if (isNaN(pctNum) || pctNum <= 0) {
         setError('Inserisci una percentuale valida maggiore di zero');
@@ -101,7 +120,7 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
         setError('Percentuale non valida');
         return;
       }
-      onConfirm(direction, calcThreshold, pctNum, trimmedNote);
+      onConfirm(direction, calcThreshold, pctNum, trimmedNote, triggerOptions);
     }
     onClose();
   };
@@ -243,6 +262,77 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
             </div>
           )}
 
+          {mode !== 'range' && (
+            <div className="mb-4 space-y-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  hapticLight();
+                  setCrossingOnly((value) => {
+                    const next = !value;
+                    if (!next) setKeepActiveAfterTrigger(false);
+                    return next;
+                  });
+                }}
+                className={`w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 border transition-colors ${
+                  crossingOnly
+                    ? 'bg-accent-blue/10 border-accent-blue/40'
+                    : 'bg-dark-700 border-dark-600'
+                }`}
+              >
+                <span className="text-left min-w-0">
+                  <span className="block text-sm font-semibold text-white">Solo attraversamento</span>
+                  <span className="block text-xs text-gray-500 truncate">Scatta quando passa la soglia</span>
+                </span>
+                <span className={`w-10 h-5 rounded-full p-0.5 flex-shrink-0 transition-colors ${crossingOnly ? 'bg-accent-blue' : 'bg-dark-600'}`}>
+                  <span className={`block w-4 h-4 rounded-full bg-white transition-transform ${crossingOnly ? 'translate-x-5' : ''}`} />
+                </span>
+              </button>
+
+              {crossingOnly && (
+                <div className="bg-dark-700 border border-dark-600 rounded-xl p-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setKeepActiveAfterTrigger(false)}
+                      className={`py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        !keepActiveAfterTrigger ? 'bg-accent-blue text-white' : 'bg-dark-600 text-gray-400'
+                      }`}
+                    >
+                      1 volta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setKeepActiveAfterTrigger(true)}
+                      className={`py-2 rounded-lg text-xs font-semibold transition-colors ${
+                        keepActiveAfterTrigger ? 'bg-accent-blue text-white' : 'bg-dark-600 text-gray-400'
+                      }`}
+                    >
+                      Continua
+                    </button>
+                  </div>
+                  {keepActiveAfterTrigger && (
+                    <div>
+                      <label className="text-gray-400 text-xs mb-1.5 block">Riarmo (%)</label>
+                      <div className="flex items-center bg-dark-600 rounded-lg px-3 border border-dark-500 focus-within:border-accent-blue">
+                        <input
+                          type="number"
+                          value={rearmPct}
+                          onChange={(e) => { setRearmPct(e.target.value); setError(''); }}
+                          className="flex-1 bg-transparent text-white py-2 outline-none text-sm"
+                          placeholder="0.5"
+                          step="0.1"
+                          min="0"
+                        />
+                        <span className="text-gray-500 ml-1">%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Input range price */}
           {mode === 'range' && (
             <div className="mb-4 space-y-3">
@@ -304,10 +394,14 @@ const AlertModal: FC<Props> = ({ coin, onConfirm, onConfirmRange, onClose }) => 
                 </>
               ) : (
                 <>
-                  Notifica quando {coin.name} andrà{' '}
-                  <span className={direction === 'above' ? 'text-accent-green' : 'text-accent-red'}>
-                    {direction === 'above' ? 'sopra' : 'sotto'}
-                  </span>{' '}
+                  {crossingOnly ? 'Attraversa' : `Notifica quando ${coin.name} andra`}{' '}
+                  {!crossingOnly && (
+                    <>
+                      <span className={direction === 'above' ? 'text-accent-green' : 'text-accent-red'}>
+                        {direction === 'above' ? 'sopra' : 'sotto'}
+                      </span>{' '}
+                    </>
+                  )}
                   {mode === 'percent'
                     ? calcThreshold !== null && pctNum > 0
                       ? `$${formatPrice(calcThreshold)} (${direction === 'above' ? '+' : '-'}${pctValue}%)`

@@ -15,6 +15,13 @@ export interface Coin {
 }
 
 export type AlertDirection = 'above' | 'below';
+export type AlertCrossDirection = 'up' | 'down';
+
+export interface PriceAlertTriggerOptions {
+  crossingOnly?: boolean;
+  keepActiveAfterTrigger?: boolean;
+  rearmPercent?: number;
+}
 
 export interface PriceAlert {
   id: string;
@@ -28,6 +35,13 @@ export interface PriceAlert {
   note?: string;
   triggered: boolean;
   triggeredAt?: number;
+  lastTriggeredPrice?: number;
+  lastCrossDirection?: AlertCrossDirection;
+  crossingOnly?: boolean;
+  keepActiveAfterTrigger?: boolean;
+  rearmPercent?: number;
+  lastObservedPrice?: number;
+  waitingForRearm?: boolean;
   active?: boolean;
   createdAt: number;
 }
@@ -39,6 +53,7 @@ export interface AlertHistoryEntry {
   coinSymbol: string;
   coinImage: string;
   direction: AlertDirection;
+  crossDirection?: AlertCrossDirection;
   threshold: number;
   triggeredPrice: number;
   triggeredAt: number;

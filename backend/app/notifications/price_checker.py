@@ -151,13 +151,39 @@ def _evaluate_and_send(
     # --- Price alerts (one-shot) ---
     for alert in config.price_alerts:
         key = _price_key(alert.coin_id, alert.direction, alert.threshold)
-        if key in state.triggered_keys:
+        if key in state.triggered_keys and not alert.keep_active_after_trigger:
             continue
         price = prices.get(alert.coin_id, {}).get("usd", -1.0)
         if price < 0:
             continue
-        fire = (alert.direction == "above" and price >= alert.threshold) or \
-               (alert.direction == "below" and price <= alert.threshold)
+        previous_price = state.price_last_observed.get(key)
+        if previous_price is None and alert.last_observed_price is not None:
+            previous_price = alert.last_observed_price
+        state.price_last_observed[key] = price
+        state_changed = True
+
+        cross_direction: str | None = None
+        if alert.crossing_only:
+            if previous_price is None or previous_price <= 0:
+                continue
+            rearm_percent = max(0.0, alert.rearm_percent)
+            rearm_band = alert.threshold * (rearm_percent / 100.0)
+            inside_rearm_band = alert.threshold - rearm_band <= price <= alert.threshold + rearm_band
+            if key in state.price_waiting_rearm and rearm_percent > 0 and inside_rearm_band:
+                continue
+            if key in state.price_waiting_rearm:
+                state.price_waiting_rearm.discard(key)
+                continue
+            crossed_up = previous_price < alert.threshold <= price
+            crossed_down = previous_price > alert.threshold >= price
+            if crossed_up:
+                cross_direction = "up"
+            elif crossed_down:
+                cross_direction = "down"
+            fire = cross_direction is not None
+        else:
+            fire = (alert.direction == "above" and price >= alert.threshold) or \
+                   (alert.direction == "below" and price <= alert.threshold)
         if not fire:
             continue
         arrow = "▲" if alert.direction == "above" else "▼"
@@ -166,13 +192,29 @@ def _evaluate_and_send(
         body = f"Soglia: ${_fmt(alert.threshold)}  ·  Prezzo: ${_fmt(price)}"
         if alert.note:
             body += f"\n📝 {alert.note}"
+        effective_direction = alert.direction
+        if cross_direction == "up":
+            title = f"UP {alert.coin_name} - soglia superata al rialzo"
+            effective_direction = "above"
+        elif cross_direction == "down":
+            title = f"DOWN {alert.coin_name} - soglia superata al ribasso"
+            effective_direction = "below"
         svc.fcm.send(
             tokens=tokens, title=title, body=body, severity="critical",
-            data={"type": "price_alert", "coin_id": alert.coin_id},
+            data={
+                "type": "price_alert",
+                "coin_id": alert.coin_id,
+                "cross_direction": cross_direction or "",
+            },
         )
-        state.triggered_keys.add(key)
+        if alert.keep_active_after_trigger:
+            if alert.crossing_only and alert.rearm_percent > 0:
+                state.price_waiting_rearm.add(key)
+            state.triggered_keys.discard(key)
+        else:
+            state.triggered_keys.add(key)
         state_changed = True
-        logger.info("fcm_price_alert_fired", coin=alert.coin_id, direction=alert.direction, price=price)
+        logger.info("fcm_price_alert_fired", coin=alert.coin_id, direction=effective_direction, price=price)
 
     # --- Range alerts (repeating with cooldown) ---
     for alert in config.range_alerts:

@@ -30,7 +30,7 @@ export async function syncAlertsToBackend(
       data: {
         device_id: getDeviceId(),
         price_alerts: priceAlerts
-          .filter((a) => !a.triggered && a.active !== false)
+          .filter((a) => (!a.triggered || a.keepActiveAfterTrigger) && a.active !== false)
           .map((a) => ({
             coin_id: a.coinId,
             coin_name: a.coinName,
@@ -38,6 +38,10 @@ export async function syncAlertsToBackend(
             direction: a.direction,
             threshold: a.threshold,
             note: a.note ?? null,
+            crossing_only: a.crossingOnly === true,
+            keep_active_after_trigger: a.keepActiveAfterTrigger === true,
+            rearm_percent: Math.max(0, Number(a.rearmPercent ?? 0)),
+            last_observed_price: a.lastObservedPrice ?? null,
           })),
         range_alerts: rangeAlerts
           .filter((a) => a.active !== false)
