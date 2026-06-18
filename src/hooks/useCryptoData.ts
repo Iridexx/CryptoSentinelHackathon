@@ -23,6 +23,21 @@ function loadCachedCoins(perPage: PerPage, page: number, currency: string): Coin
   }
 }
 
+function loadAnyCachedCoins(currency: string): Coin[] {
+  const preferred: PerPage[] = [600, 400, 200, 100, 50];
+  for (const cachedPerPage of preferred) {
+    const data = loadCachedCoins(cachedPerPage, 1, currency);
+    if (data.length > 0) return data;
+  }
+  try {
+    const legacy = localStorage.getItem(CACHE_KEY);
+    if (!legacy) return [];
+    return JSON.parse(legacy) as Coin[];
+  } catch {
+    return [];
+  }
+}
+
 export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page = 1, currency = 'usd') {
   const [coins, setCoins] = useState<Coin[]>(() => loadCachedCoins(perPage, page, currency));
   const [loading, setLoading] = useState(true);
@@ -58,12 +73,21 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
         setError(msg);
         return;
       }
-      // Retry silently if rate-limited or if we already have data to display
+      // Retry silently if rate-limited or if we already have data to display.
       if (isRateLimit || coinsRef.current.length > 0) {
+        setError(null);
         retryRef.current = setTimeout(() => fetchRef.current(), isRateLimit ? 15_000 : 10_000);
         return;
       }
-      setError('Unable to load prices. Showing cached data.');
+      const fallback = loadAnyCachedCoins(currency);
+      if (fallback.length > 0) {
+        coinsRef.current = fallback;
+        setCoins(fallback);
+        setError(null);
+        retryRef.current = setTimeout(() => fetchRef.current(), 10_000);
+        return;
+      }
+      setError('Unable to load prices. Retrying.');
     } finally {
       if (requestVersion === requestVersionRef.current) setLoading(false);
     }
@@ -81,8 +105,10 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
 
   useEffect(() => {
     const cached = loadCachedCoins(perPage, page, currency);
-    coinsRef.current = cached;
-    setCoins(cached);
+    if (cached.length > 0) {
+      coinsRef.current = cached;
+      setCoins(cached);
+    }
     setLoading(true);
     fetchCoins();
     timerRef.current = setInterval(fetchCoins, intervalMs);

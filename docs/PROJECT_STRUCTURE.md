@@ -349,7 +349,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Compatibilità preferiti pre-Step 3 | Gli ID CoinGecko persistiti dalle release precedenti restano l'identità dell'app; l'adapter CMC traduce alias come `binancecoin/bnb`, `ripple/xrp` e `avalanche-2/avalanche` in entrambe le direzioni. |
 | Preferiti indipendenti dal mercato | L'app richiede sempre tutti gli ID preferiti e conserva gli ultimi dati validi; il selettore 50/100/200/400/600 riguarda soltanto la lista mercato. |
 | Seed preferiti da mercato | Quando una coin preferita e' gia' nel dataset mercato visibile, la tab Preferiti aggiorna subito prezzo e variazioni senza attendere la chiamata dedicata `ids`; gli ID fuori lista vengono aggiornati separatamente. |
-| Cache frontend per limite | La cache mercato e' separata per `currency/perPage/page`, evitando che un vecchio cache hit da 50 elementi mascheri una selezione 100/200/400/600. |
+| Cache frontend per limite | La cache mercato e' separata per `currency/perPage/page`; se manca cache per il nuovo limite, la UI mantiene i dati precedenti finche' la nuova fetch completa. |
 | Ordinamento Preferiti indipendente | Mercati e Preferiti mantengono separatamente criterio, direzione e periodo visualizzato per Rank, 24h, 7g, Volume e Prezzo. |
 | Logger moduli inizializzati lazy | Provider market-data e checker notifiche acquisiscono la configurazione structlog definitiva applicata durante l'avvio backend. |
 | Catalogo CMC paginato | `/v1/cryptocurrency/map` viene letto in pagine da 5.000 elementi fino a esaurimento; i preferiti meno capitalizzati non spariscono perché fuori dalla prima pagina CMC. |

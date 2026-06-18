@@ -79,3 +79,33 @@ Completato e verificato con test mirati.
 ### 6. STATO DELIVERABLE
 
 Completato e verificato con test mirati.
+
+## 8. FOLLOW-UP 2026-06-18 - fallback cache UI
+
+### 1. COSA E STATO FATTO
+
+- Corretto il caso in cui, passando a un limite senza cache dedicata, la lista veniva svuotata prima della fetch e poteva mostrare il banner `Unable to load prices`.
+
+### 2. COME E STATO FATTO
+
+- `useCryptoData` non svuota piu' `coins` quando manca una cache per il nuovo `perPage/page/currency`.
+- Se una fetch fallisce e non ci sono dati nel ref corrente, viene usata la miglior cache disponibile tra 600/400/200/100/50 o la vecchia cache legacy.
+- Se ci sono dati precedenti o fallback, il banner errore viene pulito e il retry resta silenzioso.
+
+### 3. COSA E STATO VERIFICATO
+
+- Typecheck frontend:
+  - `npx tsc --noEmit`
+  - esito: nessun errore
+
+### 4. SCOSTAMENTI DAL PIANO
+
+- Build Vite locale non eseguita per non caricare `.env` reale.
+
+### 5. QUESTIONI APERTE
+
+- Il fix va distribuito in un nuovo bundle/APK per essere visibile sul device.
+
+### 6. STATO DELIVERABLE
+
+Completato e verificato con typecheck mirato.
