@@ -6,7 +6,31 @@ export type PerPage = 50 | 100 | 200 | 400 | 600;
 
 const CACHE_KEY = 'cryptosentinel_coins_cache';
 async function fetchCoinsAll(perPage: PerPage, page: number, currency: string, signal: AbortSignal): Promise<Coin[]> {
-  return fetchMarkets(perPage, page, currency, signal);
+  if (perPage > 50) {
+    const chunkSize = 50;
+    const chunksNeeded = Math.ceil(perPage / chunkSize);
+    const firstPage = (page - 1) * chunksNeeded + 1;
+    const chunks: Coin[][] = [];
+
+    for (let index = 0; index < chunksNeeded && !signal.aborted; index += 1) {
+      const chunk = await fetchMarkets(chunkSize, firstPage + index, currency, signal);
+      chunks.push(chunk);
+      if (chunk.length < chunkSize) break;
+    }
+
+    const seen = new Set<string>();
+    return chunks
+      .flat()
+      .filter((coin) => {
+        if (seen.has(coin.id)) return false;
+        seen.add(coin.id);
+        return true;
+      })
+      .slice(0, perPage);
+  }
+
+  const primary = await fetchMarkets(perPage, page, currency, signal);
+  return primary.slice(0, perPage);
 }
 
 function cacheKey(perPage: PerPage, page: number, currency: string): string {

@@ -109,3 +109,34 @@ Completato e verificato con test mirati.
 ### 6. STATO DELIVERABLE
 
 Completato e verificato con typecheck mirato.
+
+## 9. FOLLOW-UP 2026-06-18 - selettore mercato oltre 50
+
+### 1. COSA E STATO FATTO
+
+- Stabilizzato il selettore mercato per 100/200/400/600 elementi.
+- Il frontend non si affida piu' a una singola risposta `limit=100/200/400/600`.
+
+### 2. COME E STATO FATTO
+
+- `useCryptoData` compone le selezioni sopra 50 con pagine successive da 50 elementi.
+- Per esempio, 100 usa due pagine da 50; 200 usa quattro pagine da 50.
+- I risultati vengono deduplicati per `coin.id` e tagliati al limite richiesto.
+
+### 3. COSA E STATO VERIFICATO
+
+- Typecheck frontend:
+  - `npx tsc --noEmit`
+  - esito: nessun errore
+
+### 4. SCOSTAMENTI DAL PIANO
+
+- La strategia e' volutamente conservativa: aumenta il numero di richieste per limiti alti, ma evita che una singola risposta troncata a 50 rompa mercato e preferiti.
+
+### 5. QUESTIONI APERTE
+
+- Per 400/600 il caricamento puo' essere piu' lento perche' vengono richieste piu' pagine.
+
+### 6. STATO DELIVERABLE
+
+Completato e verificato con typecheck mirato.
