@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { hapticLight } from '../utils/haptics';
 
-export type Tab = 'dashboard' | 'favorites' | 'alerts' | 'settings';
+export type Tab = 'dashboard' | 'favorites' | 'alerts' | 'agent' | 'settings';
 
 interface Props {
   activeTab: Tab;
@@ -42,6 +42,18 @@ const IconAlerts: FC<{ active: boolean }> = ({ active }) => (
   </svg>
 );
 
+const IconAgent: FC<{ active: boolean }> = ({ active }) => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth={active ? 2 : 1.75} strokeLinecap="round" strokeLinejoin="round">
+    <rect x="5" y="7" width="14" height="11" rx="3" />
+    <path d="M9 7V5a3 3 0 016 0v2" />
+    <circle cx="9.5" cy="12.5" r="1" />
+    <circle cx="14.5" cy="12.5" r="1" />
+    <path d="M10 16h4" />
+    <path d="M3 12h2M19 12h2" />
+  </svg>
+);
+
 const IconSettings: FC<{ active: boolean }> = ({ active }) => (
   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={active ? 2 : 1.75} strokeLinecap="round" strokeLinejoin="round">
@@ -56,6 +68,7 @@ const TABS: { id: Tab; label: string; Icon: FC<{ active: boolean }> }[] = [
   { id: 'dashboard',  label: 'Mercato',      Icon: IconMarket    },
   { id: 'favorites',  label: 'Preferiti',    Icon: IconFavorites },
   { id: 'alerts',     label: 'Allarmi',      Icon: IconAlerts    },
+  { id: 'agent',      label: 'Agente',       Icon: IconAgent     },
   { id: 'settings',   label: 'Impostazioni', Icon: IconSettings  },
 ];
 

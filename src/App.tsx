@@ -33,6 +33,7 @@ import SettingsTab from './components/SettingsTab';
 import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
+import AgentTab from './components/AgentTab';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const PERPAGE_KEY = 'cryptosentinel_perpage';
@@ -40,9 +41,11 @@ const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
 const FAV_UP_KEY = 'cs_fav_up_pct';
 const FAV_DOWN_KEY = 'cs_fav_down_pct';
 const RANK_ANIM_KEY = 'cs_rank_anim_topn';
+const AI_COIN_STATES_KEY = 'cs_ai_coin_states';
 
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
+type AiCoinState = 'inactive' | 'analysis' | 'long' | 'short';
 
 function sortCoins(coins: Coin[], sortBy: SortBy, sortDesc: boolean): Coin[] {
   const sorted = [...coins];
@@ -232,6 +235,13 @@ export default function App() {
   const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
+  const [aiCoinStates, setAiCoinStates] = useState<Record<string, AiCoinState>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(AI_COIN_STATES_KEY) ?? '{}') as Record<string, AiCoinState>;
+    } catch {
+      return {};
+    }
+  });
 
   const handleChartTap = useCallback((coin: Coin) => {
     setChartCoin(coin);
@@ -245,6 +255,17 @@ export default function App() {
       return next;
     });
     setSelectedFavAlert(null);
+  }, []);
+
+  const handleToggleAiCoin = useCallback((coin: Coin) => {
+    const sequence: AiCoinState[] = ['inactive', 'analysis', 'long', 'short'];
+    setAiCoinStates((prev) => {
+      const current = prev[coin.id] ?? 'inactive';
+      const nextState = sequence[(sequence.indexOf(current) + 1) % sequence.length];
+      const next = { ...prev, [coin.id]: nextState };
+      localStorage.setItem(AI_COIN_STATES_KEY, JSON.stringify(next));
+      return next;
+    });
   }, []);
 
   const { currency, changeCurrency } = useCurrency();
@@ -658,6 +679,8 @@ export default function App() {
                       showVolume={sortBy === 'volume'}
                       timeFrame={timeFrame}
                       rankDelta={rankDeltas.get(coin.id)}
+                      aiState={aiCoinStates[coin.id] ?? 'inactive'}
+                      onToggleAi={handleToggleAiCoin}
                     />
                   ))}
                 </div>
@@ -711,6 +734,8 @@ export default function App() {
                         timeFrame={favoriteTimeFrame}
                         alertPending={pendingFavAlerts.get(coin.id)}
                         onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
+                        aiState={aiCoinStates[coin.id] ?? 'inactive'}
+                        onToggleAi={handleToggleAiCoin}
                       />
                     ))}
                   </div>
@@ -721,6 +746,10 @@ export default function App() {
 
           {tab === 'alerts' && (
             <AlertsTab alerts={alerts} onRemove={removeAlert} onReset={resetAlert} coins={coins} onEdit={editAlert} history={history} onClearHistory={clearHistory} sliderRange={sliderRange} rangeAlerts={rangeAlerts} onRemoveRange={removeRangeAlert} onEditRange={editRangeAlert} />
+          )}
+
+          {tab === 'agent' && (
+            <AgentTab />
           )}
 
           {tab === 'settings' && (

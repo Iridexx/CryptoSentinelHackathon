@@ -32,6 +32,7 @@ function formatMarketCap(val: number | null | undefined, currency: Currency): st
 }
 
 type TimeFrame = '1h' | '24h' | '7d';
+type AiState = 'inactive' | 'analysis' | 'long' | 'short';
 
 interface Props {
   coin: Coin;
@@ -45,9 +46,18 @@ interface Props {
   alertPending?: FavAlertData;
   onAlertTap?: () => void;
   rankDelta?: number;
+  aiState?: AiState;
+  onToggleAi?: (coin: Coin) => void;
 }
 
-const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, onChartTap, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta }) => {
+const AI_STYLES: Record<AiState, { label: string; className: string; title: string }> = {
+  inactive: { label: 'AI', className: 'border-gray-600 text-gray-500', title: 'AI inactive' },
+  analysis: { label: 'AI', className: 'border-accent-yellow text-accent-yellow', title: 'AI analysis' },
+  long: { label: 'L', className: 'border-accent-green text-accent-green', title: 'AI long' },
+  short: { label: 'S', className: 'border-accent-red text-accent-red', title: 'AI short' },
+};
+
+const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, onChartTap, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta, aiState, onToggleAi }) => {
   const displayChange =
     timeFrame === '1h' ? (coin.price_change_percentage_1h_in_currency ?? coin.price_change_percentage_24h ?? 0) :
     timeFrame === '7d' ? (coin.price_change_percentage_7d_in_currency ?? coin.price_change_percentage_24h ?? 0) :
@@ -175,6 +185,16 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
       </div>
 
       <div className="flex flex-col gap-1 flex-shrink-0 ml-1">
+        {aiState && onToggleAi && (
+          <button
+            onClick={() => { hapticLight(); onToggleAi(coin); }}
+            className={`h-5 min-w-5 rounded-full border px-1 text-[10px] font-bold leading-none transition-colors ${AI_STYLES[aiState].className}`}
+            aria-label={AI_STYLES[aiState].title}
+            title={AI_STYLES[aiState].title}
+          >
+            {AI_STYLES[aiState].label}
+          </button>
+        )}
         <button
           onClick={() => { hapticMedium(); onToggleFavorite(coin.id); }}
           className={`text-lg leading-none transition-transform active:scale-75 ${isFavorite ? 'text-accent-yellow' : 'text-gray-600 hover:text-gray-400'}`}

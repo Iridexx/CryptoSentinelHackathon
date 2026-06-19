@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-18
+Ultimo aggiornamento: 2026-06-19
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -40,7 +40,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- api/ - router FastAPI e dipendenze API.
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
-|   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data/execution/views.
+|   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data/execution/views/mobile agent.
 |   |   |       |-- alerts.py - sincronizzazione configurazione alert e pending badge preferiti con acknowledgement.
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
@@ -48,6 +48,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot e perp (GET read / PUT admin) e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
+|   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- views.py - GET /api/v1/views/spot|perp|global: viste dashboard con posizioni, PnL, win rate.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
@@ -141,6 +142,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notifications.py - device token, notification request/response e status.
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot.
+|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary.
 |   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint per viste dashboard.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
@@ -160,6 +162,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
 |       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
 |       |-- unit/test_agent_step6.py - regressioni Step 6 per segnali Spot/Perp, risk guardrail e dry-run agent service con persistenza decisione/trade.
+|       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti, onboarding validation e wallet multi-network.
 |       |-- integration/test_market_data_providers.py - regressioni provider market-data, inclusa cache identità su refresh ripetuti dei prezzi.
 |       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.
@@ -185,6 +188,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step4.md - report layer esecuzione Step 4.
 |       |-- report_step5.md - report persistenza dati Step 5.
 |       |-- report_step6.md - report agente AI Brain Step 6.
+|       |-- report_step7.md - report estensione app mobile Step 7.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- plans/ - piani operativi.
@@ -194,13 +198,15 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
+|   |   `-- AgentTab.tsx - tab mobile Step 7 con viste Spot/Perp/Global, setup agente, onboarding, kill switch e wallet.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
+|   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.
 |   |-- utils/ - notifiche, update, haptics, audio, energy saving.
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
 |   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
-|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
+|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati e monta la tab agente additiva Step 7.
 |   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti con fetch dedicato di tutti gli ID salvati, retry rapido e righe temporanee per tutti gli ID salvati.
 |   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.
 |   |-- index.css - CSS globale/Tailwind.
@@ -318,6 +324,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 4 - Layer di Esecuzione | Parziale | TWAK spot, BNB SDK/EIP-712 perp, RPC fallback, gas/approval guardrail, x402 e verifica competizione implementati e testati; mancano transazioni reali testnet e venue perp ufficiale configurata. |
 | Step 5 - Persistenza Dati | Completato | Schema Spot/Perp/Globale su SQLite/aiosqlite; migrazione JSON→DB (FCM, alert, x402, provider selector); readiness DB reale SELECT 1; viste dashboard; backup periodico configurabile; 16 test tutti passed. |
 | Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
+| Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -362,6 +369,9 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Feed Volume Profile Step 6 | Binance klines spot/futures sarà un feed specializzato del signal engine e non passerà dal `MarketDataProvider` generico. |
 | Brain con poteri limitati | Claude può solo approve/reduce/block/skip; non aumenta leva, non inverte direzione e non cambia parametri. Senza Claude, dry-run usa fallback deterministico; live blocca fail-closed. |
 | Loop safe-by-default | Il loop lento non apre trade senza payload/scanner esplicito; il loop veloce gestisce heartbeat e stato posizioni. L'esecuzione live richiede provider astratti e dati completi. |
+| Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
+| Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |
+| Mobile settings runtime | Le impostazioni agente salvate dalla mobile app sono persistite in `RuntimeState` e confermate dal backend; l'applicazione live completa ai loop va validata end-to-end prima della gara. |
 | i18n legacy prima dello Step 8 | I testi frontend hardcoded saranno convertiti a EN default/IT conservato senza riscrivere la logica dei componenti. |
 | Dual engine SQLAlchemy (Step 5) | Engine async aiosqlite per nuovo codice; engine sync sqlite3 per store legacy sincroni (`AlertStore`, `DeviceTokenStore`). Stesso file SQLite; serializzazione a livello file. Sicuro per single-user hackathon. |
 | create_all senza Alembic (Step 5) | Schema creato automaticamente al boot; nessuno script di migrazione per deadline hackathon. Alembic resta in requirements per Step 10 (VPS). |
@@ -392,9 +402,10 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | GitHub Releases | Gli step release sono non bloccanti; se falliscono, controllare il job ma scaricare comunque l'APK dagli artifact CI. |
 | Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
 | Step 5 | Completato: readiness DB con SELECT 1 + latency; migrazione JSON→DB (FCM, alert, x402, provider selector); schema ORM completo; 16 test passed. |
+| Step 7 | Nuova tab mobile agente additiva; verificare su APK/dispositivo reale layout, token admin session-only, onboarding validation e kill switch contro backend avviato. |
 | Step 3 CMC reale | Verificato dall'utente con chiave esportata nel processo: `1 passed, 9 deselected in 3.71s`, senza leggere `.env`. |
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
-| Step boundary | Step 6 implementato parzialmente e pronto per revisione; Step 7 non avviato — in attesa di approvazione. |
+| Step boundary | Step 7 implementato parzialmente e pronto per revisione; Step 8 non avviato — in attesa di approvazione. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |

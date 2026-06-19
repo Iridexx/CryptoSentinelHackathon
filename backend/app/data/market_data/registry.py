@@ -41,6 +41,9 @@ class MarketDataRegistry:
         }
         self._user_id = str(settings.default_user_id)
         self._active = self._load_active(settings)
+        self._identity_cache: dict[ProviderName, dict[str, AssetIdentity]] = {
+            provider_name: {} for provider_name in self._providers
+        }
 
     def _load_active(self, settings: Settings) -> ProviderName:
         """Boot default from Settings, overridden by a persisted selection."""
@@ -77,39 +80,54 @@ class MarketDataRegistry:
 
     async def _active_identities(self, asset_ids: list[str]) -> list[AssetIdentity]:
         started = perf_counter()
+        cache = self._identity_cache.setdefault(self._active, {})
+        missing_ids = [asset_id for asset_id in asset_ids if asset_id not in cache]
+        if not missing_ids:
+            return [cache[asset_id] for asset_id in asset_ids]
+
         if self._active is not ProviderName.CMC:
-            identities = await self.active.resolve_asset_identities(asset_ids)
+            identities = await self.active.resolve_asset_identities(missing_ids)
+            for identity in identities:
+                cache[identity.app_id] = identity
             logger.info(
                 "identity_resolution_completed",
                 provider=self._active.value,
-                requested_count=len(asset_ids),
+                requested_count=len(missing_ids),
                 resolved_count=len(identities),
-                unresolved_ids=[asset_id for asset_id in asset_ids if asset_id not in {item.app_id for item in identities}],
+                unresolved_ids=[asset_id for asset_id in missing_ids if asset_id not in {item.app_id for item in identities}],
                 elapsed_ms=round((perf_counter() - started) * 1000, 2),
             )
-            return identities
+            return [cache[asset_id] for asset_id in asset_ids if asset_id in cache]
+
         identity_source = self._providers[ProviderName.COINGECKO]
         try:
-            hints = await identity_source.resolve_asset_identities(asset_ids)
+            hint_cache = self._identity_cache.setdefault(ProviderName.COINGECKO, {})
+            hint_missing_ids = [asset_id for asset_id in missing_ids if asset_id not in hint_cache]
+            if hint_missing_ids:
+                for hint in await identity_source.resolve_asset_identities(hint_missing_ids):
+                    hint_cache[hint.app_id] = hint
+            hints = [hint_cache[asset_id] for asset_id in missing_ids if asset_id in hint_cache]
         except ProviderError as exc:
             logger.warning(
                 "identity_hint_failed",
-                requested_count=len(asset_ids),
+                requested_count=len(missing_ids),
                 error_type=type(exc).__name__,
             )
             hints = []
-        identities = await self.active.resolve_asset_identities(asset_ids, hints)
+        identities = await self.active.resolve_asset_identities(missing_ids, hints)
+        for identity in identities:
+            cache[identity.app_id] = identity
         resolved_ids = {item.app_id for item in identities}
         logger.info(
             "identity_resolution_completed",
             provider=self._active.value,
-            requested_count=len(asset_ids),
+            requested_count=len(missing_ids),
             hint_count=len(hints),
             resolved_count=len(identities),
-            unresolved_ids=[asset_id for asset_id in asset_ids if asset_id not in resolved_ids],
+            unresolved_ids=[asset_id for asset_id in missing_ids if asset_id not in resolved_ids],
             elapsed_ms=round((perf_counter() - started) * 1000, 2),
         )
-        return identities
+        return [cache[asset_id] for asset_id in asset_ids if asset_id in cache]
 
     async def get_market_list(
         self,
@@ -121,6 +139,14 @@ class MarketDataRegistry:
         started = perf_counter()
         if not asset_ids:
             items = await self.active.get_market_list(currency, limit, page)
+            cache = self._identity_cache.setdefault(self._active, {})
+            for item in items:
+                cache[item.id] = AssetIdentity(
+                    app_id=item.id,
+                    provider_id=item.provider_id or item.id,
+                    symbol=item.symbol,
+                    name=item.name,
+                )
             logger.info(
                 "market_list_completed",
                 provider=self._active.value,

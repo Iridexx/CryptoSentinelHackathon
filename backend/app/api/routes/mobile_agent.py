@@ -1,0 +1,150 @@
+"""Additive mobile endpoints for Step 7 agent views and setup."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter
+
+from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SettingsDep
+from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
+from backend.app.schemas.mobile_agent import (
+    AgentMobileSettings,
+    AgentMobileSettingsResponse,
+    CredentialCheck,
+    CredentialValidationResponse,
+    MobileWalletView,
+    WalletNetworkView,
+)
+
+router = APIRouter(prefix="/api/v1/mobile/agent", tags=["mobile-agent"])
+SETTINGS_KEY = "mobile_agent_settings"
+ONBOARDING_LOCK_SECONDS = 600
+
+
+def _settings_from_runtime(settings: SettingsDep) -> tuple[AgentMobileSettings, str, bool]:
+    user_id = str(settings.default_user_id)
+    raw = get_runtime_value(user_id, SETTINGS_KEY)
+    if raw:
+        try:
+            return AgentMobileSettings.model_validate_json(raw), "runtime", True
+        except ValueError:
+            pass
+    return _settings_from_config(settings), "config", False
+
+
+def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
+    return AgentMobileSettings(
+        mode=settings.agent_mode,
+        markets_enabled=settings.markets_enabled,
+        execution_mode=settings.execution_mode,
+        network=settings.bsc_network,
+        test_scaling_pct=settings.test_scaling_pct,
+        operating_hours_utc=settings.operating_hours_utc,
+        capital_per_trade_pct=settings.risk_capital_per_trade_pct,
+        max_open_positions=settings.risk_max_open_positions,
+        max_total_exposure_pct=settings.risk_max_total_exposure_pct,
+        daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
+        drawdown_cap_pct=settings.risk_max_drawdown_pct,
+        min_pool_liquidity_usd=settings.risk_min_pool_liquidity_usd,
+        max_slippage_pct=settings.risk_max_slippage_pct,
+        cooldown_minutes=settings.risk_cooldown_minutes,
+        spot_confidence_threshold=settings.spot_confidence_threshold,
+        spot_volatility_trigger_pct=settings.spot_volatility_trigger_pct,
+        spot_relative_volume_threshold=settings.spot_relative_volume_threshold,
+        spot_atr_stop_multiplier=settings.spot_atr_stop_multiplier,
+        spot_trailing_distance_pct=settings.spot_trailing_distance_pct,
+        spot_partial_take_profit_pct=settings.spot_partial_take_profit_pct,
+        spot_time_stop_hours=settings.spot_time_stop_hours,
+        perp_direction_mode=settings.perp_direction_mode,
+        perp_default_leverage=settings.perp_default_leverage,
+        perp_dynamic_leverage_enabled=settings.perp_dynamic_leverage_enabled,
+        perp_value_area_pct=settings.perp_value_area_pct,
+        perp_atr_stop_multiplier=settings.perp_atr_stop_multiplier,
+        perp_time_stop_hours=settings.perp_time_stop_hours,
+    )
+
+
+@router.get("/settings", response_model=AgentMobileSettingsResponse)
+async def mobile_agent_settings(
+    settings: SettingsDep,
+    _: ReadAccessDep,
+) -> AgentMobileSettingsResponse:
+    """Return the mobile agent settings contract without exposing secrets."""
+
+    payload, source, persisted = _settings_from_runtime(settings)
+    return AgentMobileSettingsResponse(settings=payload, source=source, persisted=persisted)
+
+
+@router.put("/settings", response_model=AgentMobileSettingsResponse)
+async def update_mobile_agent_settings(
+    request: AgentMobileSettings,
+    settings: SettingsDep,
+    _: AdminAccessDep,
+) -> AgentMobileSettingsResponse:
+    """Persist the mobile agent settings view for the current single user."""
+
+    serialized = request.model_dump_json()
+    set_runtime_value(str(settings.default_user_id), SETTINGS_KEY, serialized)
+    return AgentMobileSettingsResponse(settings=request, source="runtime", persisted=True)
+
+
+@router.post("/onboarding/validate", response_model=CredentialValidationResponse)
+async def validate_mobile_onboarding(
+    settings: SettingsDep,
+    _: AdminAccessDep,
+) -> CredentialValidationResponse:
+    """Validate mobile onboarding prerequisites without returning secret values."""
+
+    configured = {
+        "CMC": bool(settings.cmc_api_key),
+        "TWAK": bool(settings.twak_access_id and settings.twak_hmac_secret),
+        "Claude": bool(settings.anthropic_api_key),
+        "Wallet": bool(settings.wallet_address and settings.wallet_encrypted_private_key_path),
+        "BSC RPC": bool(settings.bsc_rpc_urls),
+        "FCM": bool(settings.fcm_enabled and settings.fcm_project_id and settings.fcm_credentials_path),
+        "x402": bool(settings.x402_enabled and settings.x402_usdc_wallet_address),
+    }
+    checks = [
+        CredentialCheck(
+            name=name,
+            configured=is_configured,
+            status="ready" if is_configured else "missing",
+        )
+        for name, is_configured in configured.items()
+    ]
+    expires_at = datetime.now(UTC) + timedelta(seconds=ONBOARDING_LOCK_SECONDS)
+    set_runtime_value(
+        str(settings.default_user_id),
+        "mobile_onboarding_lock_expires_at",
+        expires_at.isoformat(),
+    )
+    return CredentialValidationResponse(
+        checks=checks,
+        lock_expires_at=expires_at.isoformat(),
+        lock_ttl_seconds=ONBOARDING_LOCK_SECONDS,
+    )
+
+
+@router.get("/wallet", response_model=MobileWalletView)
+async def mobile_wallet(
+    settings: SettingsDep,
+    _: ReadAccessDep,
+) -> MobileWalletView:
+    """Return a non-sensitive multi-network wallet summary for mobile."""
+
+    networks = [
+        WalletNetworkView(
+            network=f"BSC {settings.bsc_network}",
+            address=settings.wallet_address,
+            configured=bool(settings.wallet_address),
+            role="gas+trading",
+        ),
+        WalletNetworkView(
+            network="Base",
+            address=settings.x402_usdc_wallet_address,
+            configured=bool(settings.x402_usdc_wallet_address),
+            role="x402 USDC",
+        ),
+    ]
+    return MobileWalletView(networks=networks)
