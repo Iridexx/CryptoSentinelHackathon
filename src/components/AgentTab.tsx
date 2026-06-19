@@ -127,110 +127,145 @@ const SelectInput: FC<{
   </label>
 );
 
-const SpotPane: FC<{ data: SpotView | null }> = ({ data }) => (
-  <div className="space-y-3">
-    <div className="grid grid-cols-2 gap-2">
-      <Stat label="Spot PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
-      <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
-      <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
-      <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
-    </div>
-    {data && data.open_positions.length > 0 ? (
-      <div className="space-y-2">
-        {data.open_positions.map((position) => (
-          <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-white">{position.asset}</p>
-              <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>{fmtUsd(position.pnl_unrealized)}</p>
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
-              <span>Entry {fmtUsd(position.entry_price)}</span>
-              <span>Now {fmtUsd(position.current_price)}</span>
-              <span>{position.status}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <EmptyState title="No spot positions" detail="Spot is the UI priority for Track 1. New trades will appear here after the agent opens them." />
-    )}
-    {data && data.history.length > 0 && (
-      <div className="space-y-2">
-        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot history</h3>
-        {data.history.slice(0, 5).map((trade) => (
-          <div key={trade.trade_id} className="flex items-center justify-between rounded-lg bg-dark-800 px-3 py-2 text-xs">
-            <span className="text-white">{trade.asset} {trade.side}</span>
-            <span className="text-gray-500">{trade.status}</span>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-);
+const SpotPane: FC<{ data: SpotView | null }> = ({ data }) => {
+  const hasPositions = (data?.open_positions.length ?? 0) > 0;
+  const hasHistory = (data?.history.length ?? 0) > 0;
+  const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
 
-const PerpPane: FC<{ data: PerpView | null }> = ({ data }) => (
-  <div className="space-y-3">
-    <div className="grid grid-cols-2 gap-2">
-      <Stat label="Perp PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
-      <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
-      <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
-      <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
-    </div>
-    {data && data.open_positions.length > 0 ? (
-      <div className="space-y-2">
-        {data.open_positions.map((position) => (
-          <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
-              <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
-              <span>PnL {fmtUsd(position.pnl_unrealized)}</span>
-              <span>Liq {position.liquidation_price ? fmtUsd(position.liquidation_price) : '-'}</span>
-              <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
-              <span>{position.status}</span>
-            </div>
-          </div>
-        ))}
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Stat label="Spot PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
+        <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
+        <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
       </div>
-    ) : (
-      <EmptyState title="No perp positions" detail="Perp architecture is visible here, while Spot remains the ranking priority for Track 1." />
-    )}
-  </div>
-);
-
-const GlobalPane: FC<{ data: GlobalView | null; status: AgentStatus | null }> = ({ data, status }) => (
-  <div className="space-y-3">
-    <div className="grid grid-cols-2 gap-2">
-      <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
-      <Stat label="Total PnL" value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
-      <Stat label="Drawdown" value={fmtPct(data?.drawdown_pct)} tone={Number(data?.drawdown_pct ?? 0) < -10 ? 'bad' : 'neutral'} />
-      <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
-      <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
-      <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />
-    </div>
-    {data && data.pnl_history.length > 0 ? (
-      <div className="rounded-xl bg-dark-800 px-4 py-3">
-        <h3 className="text-xs font-semibold uppercase text-gray-500">Equity snapshots</h3>
-        <div className="mt-3 flex h-20 items-end gap-1">
-          {data.pnl_history.slice(-24).map((point) => {
-            const equity = Number(point.total_equity_usd);
-            const max = Math.max(...data.pnl_history.slice(-24).map((p) => Number(p.total_equity_usd)), 1);
-            return (
-              <span
-                key={point.timestamp_utc}
-                className="flex-1 rounded-t bg-accent-blue/70"
-                style={{ height: `${Math.max(8, (equity / max) * 80)}px` }}
-              />
-            );
-          })}
+      {!hasActivity && (
+        <EmptyState title="In attesa di segnali spot" detail="Nessuna posizione aperta e nessun trade registrato." />
+      )}
+      {hasPositions ? (
+        <div className="space-y-2">
+          {data!.open_positions.map((position) => (
+            <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">{position.asset}</p>
+                <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>{fmtUsd(position.pnl_unrealized)}</p>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                <span>Entry {fmtUsd(position.entry_price)}</span>
+                <span>Now {fmtUsd(position.current_price)}</span>
+                <span>{position.status}</span>
+              </div>
+            </div>
+          ))}
         </div>
+      ) : hasActivity && (
+        <EmptyState title="Nessuna posizione aperta" detail="Lo Spot e' pronto: le nuove entrate appariranno qui." />
+      )}
+      {hasHistory ? (
+        <div className="space-y-2">
+          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot history</h3>
+          {data!.history.slice(0, 5).map((trade) => (
+            <div key={trade.trade_id} className="flex items-center justify-between rounded-lg bg-dark-800 px-3 py-2 text-xs">
+              <span className="text-white">{trade.asset} {trade.side}</span>
+              <span className="text-gray-500">{trade.status}</span>
+            </div>
+          ))}
+        </div>
+      ) : hasActivity && (
+        <EmptyState title="Nessun trade oggi" detail="Lo storico si popola quando l'agente prepara o chiude operazioni spot." />
+      )}
+    </div>
+  );
+};
+
+const PerpPane: FC<{ data: PerpView | null }> = ({ data }) => {
+  const hasPositions = (data?.open_positions.length ?? 0) > 0;
+  const hasHistory = (data?.history.length ?? 0) > 0;
+  const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Stat label="Perp PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
+        <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
+        <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
       </div>
-    ) : (
-      <EmptyState title="No global history" detail="PnL snapshots and drawdown will fill this view once the agent records portfolio state." />
-    )}
-  </div>
-);
+      {!hasActivity && (
+        <EmptyState title="In attesa di segnali perp" detail="Nessuna posizione aperta e nessun trade registrato." />
+      )}
+      {hasPositions ? (
+        <div className="space-y-2">
+          {data!.open_positions.map((position) => (
+            <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
+                <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                <span>PnL {fmtUsd(position.pnl_unrealized)}</span>
+                <span>Liq {position.liquidation_price ? fmtUsd(position.liquidation_price) : '-'}</span>
+                <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
+                <span>{position.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : hasActivity && (
+        <EmptyState title="Nessuna posizione aperta" detail="Le posizioni perp long/short appariranno qui." />
+      )}
+      {!hasHistory && hasActivity && (
+        <EmptyState title="Nessun trade perp" detail="Lo storico perp si popola dopo le prime operazioni." />
+      )}
+    </div>
+  );
+};
+
+const GlobalPane: FC<{ data: GlobalView | null; status: AgentStatus | null }> = ({ data, status }) => {
+  const hasHistory = (data?.pnl_history.length ?? 0) > 0;
+  const hasPortfolio = Number(data?.total_equity_usd ?? 0) > 0 || Number(data?.initial_equity_usd ?? 0) > 0;
+  const hasTradesToday = Number(data?.trades_today ?? 0) > 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
+        <Stat label="Total PnL" value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Drawdown" value={fmtPct(data?.drawdown_pct)} tone={Number(data?.drawdown_pct ?? 0) < -10 ? 'bad' : 'neutral'} />
+        <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
+        <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
+        <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />
+      </div>
+      {!hasPortfolio && !hasHistory && (
+        <EmptyState title="In attesa dello stato globale" detail="Equity, drawdown ed esposizione saranno visibili al primo snapshot." />
+      )}
+      {!hasTradesToday && (
+        <EmptyState title="Nessun trade oggi" detail="Il contatore UTC si aggiorna dopo il primo trade valido." />
+      )}
+      {hasHistory ? (
+        <div className="rounded-xl bg-dark-800 px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase text-gray-500">Equity snapshots</h3>
+          <div className="mt-3 flex h-20 items-end gap-1">
+            {data!.pnl_history.slice(-24).map((point) => {
+              const equity = Number(point.total_equity_usd);
+              const max = Math.max(...data!.pnl_history.slice(-24).map((p) => Number(p.total_equity_usd)), 1);
+              return (
+                <span
+                  key={point.timestamp_utc}
+                  className="flex-1 rounded-t bg-accent-blue/70"
+                  style={{ height: `${Math.max(8, (equity / max) * 80)}px` }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : hasPortfolio && (
+        <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
+      )}
+    </div>
+  );
+};
 
 const SetupPane: FC<{
   settings: AgentMobileSettings;
@@ -239,6 +274,7 @@ const SetupPane: FC<{
   onAdminToken: (value: string) => void;
   wallet: MobileWalletView | null;
   validation: CredentialValidationResponse | null;
+  agentStatus: AgentStatus | null;
   saving: boolean;
   actionError: string;
   onSave: () => void;
@@ -251,6 +287,7 @@ const SetupPane: FC<{
   onAdminToken,
   wallet,
   validation,
+  agentStatus,
   saving,
   actionError,
   onSave,
@@ -258,6 +295,22 @@ const SetupPane: FC<{
   onKill,
 }) => {
   const patch = (partial: Partial<AgentMobileSettings>) => onSettings({ ...settings, ...partial });
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const copyAddress = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = address;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopiedAddress(address);
+    setTimeout(() => setCopiedAddress(null), 1600);
+  };
+
   return (
     <div className="space-y-4">
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
@@ -270,11 +323,30 @@ const SetupPane: FC<{
           autoComplete="off"
           className="w-full rounded-lg border border-dark-600 bg-dark-900 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
         />
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => onKill('running')} disabled={!adminToken || saving} className="rounded-lg bg-dark-700 px-2 py-2 text-xs font-semibold text-gray-300 disabled:opacity-40">Run</button>
-          <button onClick={() => onKill('soft_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-yellow/20 px-2 py-2 text-xs font-semibold text-accent-yellow disabled:opacity-40">Soft stop</button>
-          <button onClick={() => onKill('hard_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-red/20 px-2 py-2 text-xs font-semibold text-accent-red disabled:opacity-40">Hard stop</button>
+      </section>
+
+      <section className="rounded-xl border border-accent-red/20 bg-dark-800 px-4 py-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white">Kill switch</h3>
+            <p className="mt-0.5 text-xs text-gray-500 truncate">Soft stop blocca nuove entrate. Hard stop ferma tutto.</p>
+          </div>
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+            agentStatus?.kill_switch === 'hard_stop'
+              ? 'bg-accent-red/20 text-accent-red'
+              : agentStatus?.kill_switch === 'soft_stop' || agentStatus?.kill_switch === 'degraded'
+                ? 'bg-accent-yellow/20 text-accent-yellow'
+                : 'bg-accent-green/15 text-accent-green'
+          }`}>
+            {agentStatus?.kill_switch ?? 'unknown'}
+          </span>
         </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => onKill('running')} disabled={!adminToken || saving} className="rounded-lg bg-dark-700 px-2 py-2.5 text-xs font-semibold text-gray-300 disabled:opacity-40">Run</button>
+          <button onClick={() => onKill('soft_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-yellow/20 px-2 py-2.5 text-xs font-semibold text-accent-yellow disabled:opacity-40">Soft</button>
+          <button onClick={() => onKill('hard_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-red/20 px-2 py-2.5 text-xs font-semibold text-accent-red disabled:opacity-40">Hard</button>
+        </div>
+        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
       </section>
 
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
@@ -297,12 +369,48 @@ const SetupPane: FC<{
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
         <h3 className="text-sm font-semibold text-white">Wallet</h3>
         {wallet?.networks.map((network) => (
-          <div key={network.network} className="rounded-lg bg-dark-900 px-3 py-2">
+          <div key={network.network} className="rounded-lg bg-dark-900 px-3 py-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold text-white">{network.network}</p>
               <span className={network.configured ? 'text-xs text-accent-green' : 'text-xs text-gray-500'}>{network.configured ? 'ready' : 'missing'}</span>
             </div>
-            <p className="mt-1 truncate text-xs text-gray-500">{network.role} {network.address ? `- ${network.address}` : ''}</p>
+            <button
+              type="button"
+              disabled={!network.address}
+              onClick={() => network.address && copyAddress(network.address)}
+              className="w-full rounded-lg bg-dark-800 px-3 py-2 text-left disabled:opacity-50"
+            >
+              <span className="block text-[11px] uppercase text-gray-600">{network.role}</span>
+              <span className="mt-1 block break-all font-mono text-xs leading-relaxed text-gray-300">
+                {network.address ?? 'Wallet not configured'}
+              </span>
+              {network.address && (
+                <span className="mt-1 block text-[11px] text-accent-blue">
+                  {copiedAddress === network.address ? 'Copied' : 'Tap to copy'}
+                </span>
+              )}
+            </button>
+            {network.balances.length > 0 ? (
+              <div className="space-y-1.5">
+                {network.balances.map((balance) => (
+                  <div key={`${network.network}-${balance.asset}`} className="flex items-center justify-between rounded-lg bg-dark-800 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{balance.asset}</p>
+                      <p className="text-[11px] text-gray-600">{balance.source}</p>
+                    </div>
+                    <p className="font-mono text-sm font-bold text-accent-green">{balance.balance}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-dark-700 px-3 py-2 text-xs text-gray-500">
+                {network.balance_status === 'rpc_not_configured'
+                  ? 'Balance RPC not configured.'
+                  : network.balance_status === 'unavailable'
+                    ? 'Balance unavailable.'
+                    : 'No asset balance greater than 0.'}
+              </p>
+            )}
           </div>
         ))}
       </section>
@@ -496,6 +604,7 @@ const AgentTab: FC = () => {
           onAdminToken={setAdminToken}
           wallet={wallet}
           validation={validation}
+          agentStatus={status}
           saving={saving}
           actionError={actionError}
           onSave={handleSave}

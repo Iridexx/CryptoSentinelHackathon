@@ -9,6 +9,9 @@
 - Aggiunti setup agente, onboarding credenziali e wallet multi-network tramite nuovi endpoint additivi `/api/v1/mobile/agent/*`.
 - Aggiunte icone AI opzionali sulle `CoinCard`, con stato locale per coin: inactive, analysis, long, short.
 - Aggiunti empty state dedicati per le nuove viste agente.
+- Rifiniti gli empty state Spot, Perp e Global quando il backend ritorna array vuoti o metriche a zero: posizioni assenti, nessun trade e storico PnL non ancora disponibile sono ora mostrati esplicitamente.
+- Reso esplicito il kill switch nella sezione Setup mobile, con stato runtime corrente e comandi Run/Soft/Hard separati dall'input admin token.
+- Estesa la sezione Wallet del Setup: indirizzi completi copiabili al tap e balance per asset con saldo maggiore di zero per ogni wallet/network supportato.
 - Aggiunto test backend Step 7 per settings mobile, onboarding validation e wallet multi-network.
 - Riallineata la cache identita' market-data backend ai test esistenti: il registry riusa identita' gia' risolte e quelle provenienti dalle liste ranked; CMC usa chunk da 200 elementi per le liste mercato.
 

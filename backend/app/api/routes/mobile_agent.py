@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SettingsDep
+from backend.app.execution.rpc import MultiRpcClient, RpcUnavailableError
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import (
     AgentMobileSettings,
@@ -14,12 +15,14 @@ from backend.app.schemas.mobile_agent import (
     CredentialCheck,
     CredentialValidationResponse,
     MobileWalletView,
+    WalletAssetBalance,
     WalletNetworkView,
 )
 
 router = APIRouter(prefix="/api/v1/mobile/agent", tags=["mobile-agent"])
 SETTINGS_KEY = "mobile_agent_settings"
 ONBOARDING_LOCK_SECONDS = 600
+WEI_PER_BNB = 10**18
 
 
 def _settings_from_runtime(settings: SettingsDep) -> tuple[AgentMobileSettings, str, bool]:
@@ -133,18 +136,52 @@ async def mobile_wallet(
 ) -> MobileWalletView:
     """Return a non-sensitive multi-network wallet summary for mobile."""
 
+    bsc_balances, bsc_balance_status = await _bsc_balances(settings)
     networks = [
         WalletNetworkView(
             network=f"BSC {settings.bsc_network}",
             address=settings.wallet_address,
             configured=bool(settings.wallet_address),
             role="gas+trading",
+            balance_status=bsc_balance_status,
+            balances=bsc_balances,
         ),
         WalletNetworkView(
             network="Base",
             address=settings.x402_usdc_wallet_address,
             configured=bool(settings.x402_usdc_wallet_address),
             role="x402 USDC",
+            balance_status="rpc_not_configured" if settings.x402_usdc_wallet_address else "not_configured",
+            balances=[],
         ),
     ]
     return MobileWalletView(networks=networks)
+
+
+async def _bsc_balances(settings: SettingsDep) -> tuple[list[WalletAssetBalance], str]:
+    if not settings.wallet_address:
+        return [], "not_configured"
+    if not settings.bsc_rpc_urls:
+        return [], "rpc_not_configured"
+    client = MultiRpcClient(
+        settings.bsc_rpc_urls,
+        settings.bsc_rpc_timeout_seconds,
+        settings.tatum_rpc_api_key,
+    )
+    try:
+        raw_balance = await client.call("eth_getBalance", [settings.wallet_address, "latest"])
+        balance_wei = int(str(raw_balance), 16)
+    except (RpcUnavailableError, ValueError, TypeError):
+        return [], "unavailable"
+
+    if balance_wei <= 0:
+        return [], "empty"
+    balance = balance_wei / WEI_PER_BNB
+    return [
+        WalletAssetBalance(
+            asset="BNB",
+            balance=f"{balance:.8f}".rstrip("0").rstrip("."),
+            decimals=18,
+            source="native",
+        )
+    ], "ok"

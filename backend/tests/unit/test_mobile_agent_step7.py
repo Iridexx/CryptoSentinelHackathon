@@ -71,6 +71,8 @@ def settings(**overrides):
         wallet_address="0x0000000000000000000000000000000000000001",
         wallet_encrypted_private_key_path="configured",
         bsc_rpc_urls=["https://rpc.example"],
+        bsc_rpc_timeout_seconds=8.0,
+        tatum_rpc_api_key=None,
         fcm_enabled=True,
         fcm_project_id="project",
         fcm_credentials_path="configured",
@@ -112,9 +114,27 @@ async def test_onboarding_validation_returns_status_only(sync_db) -> None:
 
 @pytest.mark.asyncio
 async def test_mobile_wallet_exposes_bsc_and_base_without_keys() -> None:
-    response = await mobile_wallet(settings(), AuthScope.READ)
+    response = await mobile_wallet(settings(bsc_rpc_urls=[]), AuthScope.READ)
 
     assert [network.network for network in response.networks] == ["BSC testnet", "Base"]
     assert response.networks[0].role == "gas+trading"
     assert response.networks[1].role == "x402 USDC"
     assert all(network.configured for network in response.networks)
+    assert response.networks[0].balance_status == "rpc_not_configured"
+    assert response.networks[0].balances == []
+
+
+@pytest.mark.asyncio
+async def test_mobile_wallet_includes_positive_bnb_balance(monkeypatch) -> None:
+    async def fake_call(self, method, params=None):
+        del self, params
+        assert method == "eth_getBalance"
+        return hex(1234000000000000000)
+
+    monkeypatch.setattr("backend.app.execution.rpc.MultiRpcClient.call", fake_call)
+
+    response = await mobile_wallet(settings(), AuthScope.READ)
+
+    assert response.networks[0].balance_status == "ok"
+    assert response.networks[0].balances[0].asset == "BNB"
+    assert response.networks[0].balances[0].balance == "1.234"

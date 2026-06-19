@@ -142,7 +142,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notifications.py - device token, notification request/response e status.
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot.
-|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary.
+|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary con balance asset non-zero.
 |   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint per viste dashboard.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
@@ -198,7 +198,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile Step 7 con viste Spot/Perp/Global, setup agente, onboarding, kill switch e wallet.
+|   |   `-- AgentTab.tsx - tab mobile Step 7 con viste Spot/Perp/Global, setup agente, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.

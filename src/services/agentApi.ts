@@ -162,6 +162,13 @@ export interface MobileWalletView {
     address: string | null;
     configured: boolean;
     role: string;
+    balance_status: string;
+    balances: Array<{
+      asset: string;
+      balance: string;
+      decimals: number;
+      source: string;
+    }>;
   }>;
 }
 

@@ -53,11 +53,20 @@ class CredentialValidationResponse(BaseModel):
     lock_ttl_seconds: int
 
 
+class WalletAssetBalance(BaseModel):
+    asset: str
+    balance: str
+    decimals: int
+    source: str
+
+
 class WalletNetworkView(BaseModel):
     network: str
     address: str | None = None
     configured: bool
     role: str
+    balance_status: str = "not_configured"
+    balances: list[WalletAssetBalance] = Field(default_factory=list)
 
 
 class MobileWalletView(BaseModel):
