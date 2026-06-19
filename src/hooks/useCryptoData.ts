@@ -4,19 +4,14 @@ import { fetchMarkets } from '../services/marketData';
 
 export type PerPage = 50 | 100 | 200 | 400 | 600;
 
-const CACHE_KEY_PREFIX = 'cryptosentinel_coins_cache';
-
-function cacheKey(perPage: PerPage): string {
-  return `${CACHE_KEY_PREFIX}_${perPage}`;
-}
-
+const CACHE_KEY = 'cryptosentinel_coins_cache';
 async function fetchCoinsAll(perPage: PerPage, page: number, currency: string, signal: AbortSignal): Promise<Coin[]> {
   return fetchMarkets(perPage, page, currency, signal);
 }
 
-function loadCachedCoins(perPage: PerPage): Coin[] {
+function loadCachedCoins(): Coin[] {
   try {
-    const raw = localStorage.getItem(cacheKey(perPage));
+    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as Coin[];
   } catch {
@@ -25,7 +20,7 @@ function loadCachedCoins(perPage: PerPage): Coin[] {
 }
 
 export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page = 1, currency = 'usd') {
-  const [coins, setCoins] = useState<Coin[]>(() => page === 1 ? loadCachedCoins(perPage) : []);
+  const [coins, setCoins] = useState<Coin[]>(() => page === 1 ? loadCachedCoins() : []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -33,38 +28,23 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<() => Promise<void>>(async () => {});
-  const coinsRef = useRef<Coin[]>(page === 1 ? loadCachedCoins(perPage) : []);
+  const coinsRef = useRef<Coin[]>(page === 1 ? loadCachedCoins() : []);
   const requestVersionRef = useRef(0);
-  // Tracks which perPage was used for the last successful fetch, so we know
-  // when the selector changes and coinsRef needs to be re-seeded from the
-  // per-perPage cache instead of carrying over stale data from another limit.
-  const fetchedPerPageRef = useRef<PerPage | null>(null);
 
   const fetchCoins = useCallback(async () => {
     const requestVersion = ++requestVersionRef.current;
     if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
-
-    // When perPage changes, reset coinsRef to the per-perPage cache so that a
-    // failed fetch for the new limit doesn't silently fall back to stale data
-    // from a different limit (e.g. 50 masking a 100-coin request failure).
-    if (fetchedPerPageRef.current !== null && fetchedPerPageRef.current !== perPage) {
-      const nextCache = page === 1 ? loadCachedCoins(perPage) : [];
-      coinsRef.current = nextCache;
-      setCoins(nextCache);
-    }
-
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     try {
       const data = await fetchCoinsAll(perPage, page, currency, abortRef.current.signal);
       if (requestVersion !== requestVersionRef.current) return;
       coinsRef.current = data;
-      fetchedPerPageRef.current = perPage;
       setCoins(data);
       setError(null);
       setLastUpdated(new Date());
       if (page === 1) {
-        try { localStorage.setItem(cacheKey(perPage), JSON.stringify(data)); } catch { /* quota */ }
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
       }
     } catch (err) {
       if (requestVersion !== requestVersionRef.current) return;
