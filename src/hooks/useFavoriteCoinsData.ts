@@ -24,38 +24,15 @@ function unresolvedFavorite(id: string): Coin {
 export function useFavoriteCoinsData(
   favorites: Set<string>,
   intervalMs: number,
-  currency: string,
-  seedCoins: Coin[] = [],
+  currency: string
 ): Coin[] {
   const [favoriteData, setFavoriteData] = useState<Map<string, Coin>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestVersionRef = useRef(0);
-  const favoriteDataRef = useRef<Map<string, Coin>>(new Map());
 
   const favoriteIds = [...favorites];
   const favoritesKey = [...favoriteIds].sort().join(',');
-  const seedKey = seedCoins
-    .filter((coin) => favorites.has(coin.id))
-    .map((coin) => `${coin.id}:${coin.current_price}:${coin.price_change_percentage_24h ?? 0}`)
-    .sort()
-    .join('|');
-
-  useEffect(() => {
-    favoriteDataRef.current = favoriteData;
-  }, [favoriteData]);
-
-  useEffect(() => {
-    if (favoriteIds.length === 0) return;
-    const visibleFavorites = seedCoins.filter((coin) => favorites.has(coin.id));
-    if (visibleFavorites.length === 0) return;
-    setFavoriteData((previous) => {
-      const next = new Map([...previous].filter(([id]) => favorites.has(id)));
-      for (const coin of visibleFavorites) next.set(coin.id, coin);
-      return next;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [favoritesKey, seedKey]);
 
   useEffect(() => {
     if (favoriteIds.length === 0) {
@@ -69,24 +46,15 @@ export function useFavoriteCoinsData(
         clearTimeout(retryRef.current);
         retryRef.current = null;
       }
-      const seededIds = new Set(seedCoins.filter((coin) => favorites.has(coin.id)).map((coin) => coin.id));
-      const knownIds = new Set(seededIds);
-      for (const id of favoriteDataRef.current.keys()) {
-        if (favorites.has(id)) knownIds.add(id);
-      }
-      const missingIds = favoriteIds.filter((id) => !knownIds.has(id));
-      const staleIds = favoriteIds.filter((id) => !seededIds.has(id));
-      const idsToFetch = missingIds.length > 0 ? missingIds : staleIds;
-      if (idsToFetch.length === 0) return;
       abortRef.current?.abort();
       abortRef.current = new AbortController();
       try {
         const data = await fetchMarkets(
-          idsToFetch.length,
+          favoriteIds.length,
           1,
           currency,
           abortRef.current.signal,
-          idsToFetch,
+          favoriteIds,
         );
         if (requestVersion !== requestVersionRef.current) return;
         setFavoriteData((previous) => {
@@ -114,7 +82,7 @@ export function useFavoriteCoinsData(
       abortRef.current?.abort();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [favoritesKey, currency, intervalMs, seedKey]);
+  }, [favoritesKey, currency, intervalMs]);
 
   return favoriteIds.map(id => favoriteData.get(id) ?? unresolvedFavorite(id));
 }

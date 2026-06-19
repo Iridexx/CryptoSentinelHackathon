@@ -6,40 +6,12 @@ export type PerPage = 50 | 100 | 200 | 400 | 600;
 
 const CACHE_KEY = 'cryptosentinel_coins_cache';
 async function fetchCoinsAll(perPage: PerPage, page: number, currency: string, signal: AbortSignal): Promise<Coin[]> {
-  if (perPage > 50) {
-    const chunkSize = 50;
-    const chunksNeeded = Math.ceil(perPage / chunkSize);
-    const firstPage = (page - 1) * chunksNeeded + 1;
-    const chunks: Coin[][] = [];
-
-    for (let index = 0; index < chunksNeeded && !signal.aborted; index += 1) {
-      const chunk = await fetchMarkets(chunkSize, firstPage + index, currency, signal);
-      chunks.push(chunk);
-      if (chunk.length < chunkSize) break;
-    }
-
-    const seen = new Set<string>();
-    return chunks
-      .flat()
-      .filter((coin) => {
-        if (seen.has(coin.id)) return false;
-        seen.add(coin.id);
-        return true;
-      })
-      .slice(0, perPage);
-  }
-
-  const primary = await fetchMarkets(perPage, page, currency, signal);
-  return primary.slice(0, perPage);
+  return fetchMarkets(perPage, page, currency, signal);
 }
 
-function cacheKey(perPage: PerPage, page: number, currency: string): string {
-  return `${CACHE_KEY}:${currency}:${perPage}:${page}`;
-}
-
-function loadCachedCoins(perPage: PerPage, page: number, currency: string): Coin[] {
+function loadCachedCoins(): Coin[] {
   try {
-    const raw = localStorage.getItem(cacheKey(perPage, page, currency));
+    const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return [];
     return JSON.parse(raw) as Coin[];
   } catch {
@@ -47,23 +19,8 @@ function loadCachedCoins(perPage: PerPage, page: number, currency: string): Coin
   }
 }
 
-function loadAnyCachedCoins(currency: string): Coin[] {
-  const preferred: PerPage[] = [600, 400, 200, 100, 50];
-  for (const cachedPerPage of preferred) {
-    const data = loadCachedCoins(cachedPerPage, 1, currency);
-    if (data.length > 0) return data;
-  }
-  try {
-    const legacy = localStorage.getItem(CACHE_KEY);
-    if (!legacy) return [];
-    return JSON.parse(legacy) as Coin[];
-  } catch {
-    return [];
-  }
-}
-
 export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page = 1, currency = 'usd') {
-  const [coins, setCoins] = useState<Coin[]>(() => loadCachedCoins(perPage, page, currency));
+  const [coins, setCoins] = useState<Coin[]>(() => page === 1 ? loadCachedCoins() : []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -71,7 +28,7 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchRef = useRef<() => Promise<void>>(async () => {});
-  const coinsRef = useRef<Coin[]>(loadCachedCoins(perPage, page, currency));
+  const coinsRef = useRef<Coin[]>(page === 1 ? loadCachedCoins() : []);
   const requestVersionRef = useRef(0);
 
   const fetchCoins = useCallback(async () => {
@@ -86,7 +43,9 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
       setCoins(data);
       setError(null);
       setLastUpdated(new Date());
-      try { localStorage.setItem(cacheKey(perPage, page, currency), JSON.stringify(data)); } catch { /* quota */ }
+      if (page === 1) {
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+      }
     } catch (err) {
       if (requestVersion !== requestVersionRef.current) return;
       if ((err as Error).name === 'AbortError') return;
@@ -97,21 +56,12 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
         setError(msg);
         return;
       }
-      // Retry silently if rate-limited or if we already have data to display.
+      // Retry silently if rate-limited or if we already have data to display
       if (isRateLimit || coinsRef.current.length > 0) {
-        setError(null);
         retryRef.current = setTimeout(() => fetchRef.current(), isRateLimit ? 15_000 : 10_000);
         return;
       }
-      const fallback = loadAnyCachedCoins(currency);
-      if (fallback.length > 0) {
-        coinsRef.current = fallback;
-        setCoins(fallback);
-        setError(null);
-        retryRef.current = setTimeout(() => fetchRef.current(), 10_000);
-        return;
-      }
-      setError('Unable to load prices. Retrying.');
+      setError('Unable to load prices. Showing cached data.');
     } finally {
       if (requestVersion === requestVersionRef.current) setLoading(false);
     }
@@ -128,11 +78,6 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   }, [fetchCoins, intervalMs]);
 
   useEffect(() => {
-    const cached = loadCachedCoins(perPage, page, currency);
-    if (cached.length > 0) {
-      coinsRef.current = cached;
-      setCoins(cached);
-    }
     setLoading(true);
     fetchCoins();
     timerRef.current = setInterval(fetchCoins, intervalMs);

@@ -201,7 +201,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
 |   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati.
-|   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti mancanti con retry rapido, seed immediato dai prezzi gia' presenti nella lista mercato, fetch dedicato solo per gli ID non coperti dal mercato e righe temporanee per tutti gli ID salvati.
+|   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti con fetch dedicato di tutti gli ID salvati, retry rapido e righe temporanee per tutti gli ID salvati.
 |   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.
 |   |-- index.css - CSS globale/Tailwind.
 |   |-- main.tsx - entrypoint React.
@@ -313,7 +313,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Task Android package rename | Completato | Package Android/appId rinominato da `com.cryptosentinel.app` a `com.cryptosentinelai.app` per evitare conflitto con il fork/app esistente. |
 | Task CI FCM Android config | Completato | Workflow aggiorna `android/app/google-services.json` da GitHub Secret base64 prima della build APK. |
 | Task CI APK artifact robustness | Completato | Artifact APK caricato prima delle release GitHub; release non bloccanti per non impedire download APK/Pages. |
-| Task regressione market-data frontend | Completato | Cache lista mercato separata per limit/page/currency, preferiti seedati dal dataset mercato gia' caricato, fetch dedicato solo per ID non coperti e cache identita' backend popolata anche dalle liste ranked. |
+| Task regressione market-data frontend | Completato | Ripristinato il flusso frontend pre-regressione per selettore mercato e preferiti; rimossa la logica di seed/cache/chunking introdotta nei fix intermedi. |
 | Step 3 - Astrazione Dati Multi-Provider | Parziale | Adapter CMC/CoinGecko, selettore globale, checker/frontend astratti e gate completati; smoke CMC e CoinGecko reali superati. Restano i18n frontend legacy e limite Volume Profile 5m. |
 | Step 4 - Layer di Esecuzione | Parziale | TWAK spot, BNB SDK/EIP-712 perp, RPC fallback, gas/approval guardrail, x402 e verifica competizione implementati e testati; mancano transazioni reali testnet e venue perp ufficiale configurata. |
 | Step 5 - Persistenza Dati | Completato | Schema Spot/Perp/Globale su SQLite/aiosqlite; migrazione JSON→DB (FCM, alert, x402, provider selector); readiness DB reale SELECT 1; viste dashboard; backup periodico configurabile; 16 test tutti passed. |
@@ -348,9 +348,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | ID applicativo stabile | L'app conserva gli ID storici usati prima dello Step 3 (`bitcoin`, `binancecoin`, ecc.); gli adapter mantengono separati slug e ID nativi dei provider. |
 | Compatibilità preferiti pre-Step 3 | Gli ID CoinGecko persistiti dalle release precedenti restano l'identità dell'app; l'adapter CMC traduce alias come `binancecoin/bnb`, `ripple/xrp` e `avalanche-2/avalanche` in entrambe le direzioni. |
 | Preferiti indipendenti dal mercato | L'app richiede sempre tutti gli ID preferiti e conserva gli ultimi dati validi; il selettore 50/100/200/400/600 riguarda soltanto la lista mercato. |
-| Seed preferiti da mercato | Quando una coin preferita e' gia' nel dataset mercato visibile, la tab Preferiti aggiorna subito prezzo e variazioni senza attendere la chiamata dedicata `ids`; gli ID fuori lista vengono aggiornati separatamente. |
-| Cache frontend per limite | La cache mercato e' separata per `currency/perPage/page`; se manca cache per il nuovo limite, la UI mantiene i dati precedenti finche' la nuova fetch completa. |
-| Fetch mercato a blocchi | Le selezioni 100/200/400/600 vengono composte lato frontend con pagine da 50, cosi' il selettore non dipende da provider/API che possono troncare una singola risposta a 50 elementi. |
+| Selettore mercato diretto | Il frontend passa direttamente `perPage` e `page` a `/api/v1/market-data/markets`; non compone pagine artificiali e non sostituisce 100/200/400/600 con fallback da 50. |
 | Ordinamento Preferiti indipendente | Mercati e Preferiti mantengono separatamente criterio, direzione e periodo visualizzato per Rank, 24h, 7g, Volume e Prezzo. |
 | Logger moduli inizializzati lazy | Provider market-data e checker notifiche acquisiscono la configurazione structlog definitiva applicata durante l'avvio backend. |
 | Catalogo CMC paginato | `/v1/cryptocurrency/map` viene letto in pagine da 5.000 elementi fino a esaurimento; i preferiti meno capitalizzati non spariscono perché fuori dalla prima pagina CMC. |

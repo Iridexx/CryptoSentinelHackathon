@@ -140,3 +140,40 @@ Completato e verificato con typecheck mirato.
 ### 6. STATO DELIVERABLE
 
 Completato e verificato con typecheck mirato.
+
+## 10. FOLLOW-UP 2026-06-19 - rollback workaround frontend
+
+### 1. COSA E STATO FATTO
+
+- Identificata la regressione nei workaround frontend introdotti dopo `60d804d`.
+- Ripristinati `useCryptoData`, `useFavoriteCoinsData` e la chiamata in `App.tsx` alla versione del commit funzionante.
+- Rimosse le logiche di cache separata per limite, seed preferiti dal mercato e fetch mercato a blocchi da 50.
+
+### 2. COME E STATO FATTO
+
+- `useCryptoData` torna a chiamare direttamente `fetchMarkets(perPage, page, currency)`.
+- `useFavoriteCoinsData` torna a fare fetch dedicato di tutti gli ID preferiti salvati.
+- `App.tsx` torna a chiamare `useFavoriteCoinsData(favorites, refreshInterval, currency)` senza passare `coins` come seed.
+
+### 3. COSA E STATO VERIFICATO
+
+- Diff locale rispetto a `60d804d` sui tre file frontend critici:
+  - `src/App.tsx`
+  - `src/hooks/useCryptoData.ts`
+  - `src/hooks/useFavoriteCoinsData.ts`
+  - esito: nessuna differenza.
+- Typecheck frontend:
+  - `npx tsc --noEmit`
+  - esito: nessun errore.
+
+### 4. SCOSTAMENTI DAL PIANO
+
+- Nessuna build Vite locale eseguita per evitare caricamento `.env` reale.
+
+### 5. QUESTIONI APERTE
+
+- Dopo il deploy del rollback, se il problema persiste, va verificato dai log runtime che la richiesta `limit=100/200` arrivi effettivamente al backend.
+
+### 6. STATO DELIVERABLE
+
+Completato e verificato con diff e typecheck mirati.
