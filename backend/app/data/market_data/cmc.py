@@ -473,7 +473,11 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
         start = (page - 1) * bounded_limit + 1
         items: list[dict[str, Any]] = []
         while len(items) < bounded_limit:
-            chunk_limit = min(200, bounded_limit - len(items))
+            # Use chunks of 100 to stay within conservative API plan limits.
+            # Break only on an empty chunk (genuine end of data), not on a
+            # partial chunk — the API may cap a single response at fewer items
+            # than requested while still having more data available.
+            chunk_limit = min(100, bounded_limit - len(items))
             payload = await self._request_json(
                 "/v1/cryptocurrency/listings/latest",
                 params={
@@ -488,7 +492,7 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
             )
             chunk = list(payload.get("data", []))
             items.extend(chunk)
-            if len(chunk) < chunk_limit:
+            if len(chunk) == 0:
                 break
         return [self._asset(item, currency) for item in items]
 
