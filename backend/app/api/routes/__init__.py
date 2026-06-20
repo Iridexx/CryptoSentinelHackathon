@@ -11,6 +11,7 @@ from backend.app.api.routes import (
     market_data,
     mobile_agent,
     notifications,
+    observability,
     status,
     views,
 )
@@ -26,3 +27,4 @@ api_router.include_router(market_data.router)
 api_router.include_router(execution.router)
 api_router.include_router(views.router)
 api_router.include_router(mobile_agent.router)
+api_router.include_router(observability.router)

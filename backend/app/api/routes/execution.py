@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep
 from backend.app.execution.perp_registry import (
@@ -17,8 +17,12 @@ from backend.app.execution.service import ExecutionService, get_execution_servic
 from backend.app.schemas.execution import (
     ExecutionProviderSelectionRequest,
     ExecutionProviderSelectionResponse,
+    ExecutionNetworkSelectionRequest,
+    ExecutionWalletsResponse,
+    ExecutionWalletSelectionRequest,
     PerpProviderSelectionRequest,
     PerpProviderSelectionResponse,
+    RpcEndpointSelectionRequest,
 )
 
 router = APIRouter(prefix="/api/v1/execution", tags=["execution"])
@@ -35,6 +39,16 @@ async def execution_status(
     """Return non-sensitive execution readiness."""
 
     return service.status()
+
+
+@router.get("/wallets", response_model=ExecutionWalletsResponse)
+async def execution_wallets(
+    service: ExecutionServiceDep,
+    _: ReadAccessDep,
+) -> ExecutionWalletsResponse:
+    """Return non-sensitive execution wallets and live BNB balances."""
+
+    return await service.wallets()
 
 
 @router.get("/provider", response_model=ExecutionProviderSelectionResponse)
@@ -93,6 +107,61 @@ async def select_perp_provider(
     )
 
 
+@router.put("/network", response_model=ExecutionWalletsResponse)
+async def select_execution_network(
+    request: ExecutionNetworkSelectionRequest,
+    service: ExecutionServiceDep,
+    _: AdminAccessDep,
+) -> ExecutionWalletsResponse:
+    """Select the BSC network used by execution diagnostics and new providers."""
+
+    get_execution_provider_registry.cache_clear()
+    get_perp_execution_registry.cache_clear()
+    return await service.select_network(request.network)
+
+
+@router.put("/wallet", response_model=ExecutionWalletsResponse)
+async def select_execution_wallet(
+    request: ExecutionWalletSelectionRequest,
+    service: ExecutionServiceDep,
+    _: AdminAccessDep,
+) -> ExecutionWalletsResponse:
+    """Select the public wallet address used by execution diagnostics and requests."""
+
+    try:
+        return await service.select_wallet(request.address)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/wallets", response_model=ExecutionWalletsResponse)
+async def add_execution_wallet(
+    request: ExecutionWalletSelectionRequest,
+    service: ExecutionServiceDep,
+    _: AdminAccessDep,
+) -> ExecutionWalletsResponse:
+    """Add a public wallet address to the runtime wallet list and select it."""
+
+    try:
+        return await service.add_wallet(request.address)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/rpc-endpoint", response_model=ExecutionWalletsResponse)
+async def select_rpc_endpoint(
+    request: RpcEndpointSelectionRequest,
+    service: ExecutionServiceDep,
+    _: AdminAccessDep,
+) -> ExecutionWalletsResponse:
+    """Force the preferred BSC RPC endpoint for subsequent execution attempts."""
+
+    try:
+        return await service.select_rpc_endpoint(request.index)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/competition/status")
 async def competition_status(
     service: ExecutionServiceDep,
@@ -101,4 +170,3 @@ async def competition_status(
     """Verify competition registration directly against the configured contract."""
 
     return await service.competition_registration_status()
-

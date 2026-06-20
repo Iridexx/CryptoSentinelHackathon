@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         environment=settings.app_env,
         execution_mode=settings.execution_mode,
         markets_enabled=settings.markets_enabled,
+        eligible_token_count=len(settings.eligible_tokens),
         auth_configured=settings.auth_configured,
     )
     try:

@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
-from backend.app.agent.risk import KillSwitchState, RiskManager, SignalIntent
+from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
+from backend.app.agent.signals.perp.binance_klines import BinanceMarket, get_kline_cache_entry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
-from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
+from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 from backend.app.execution.models import ExecutionStatus
@@ -61,7 +62,53 @@ class AgentService:
             "execution_mode": self.settings.execution_mode,
             "kill_switch": self.risk.kill_switch.value,
             "degraded_reasons": sorted(self.risk.degraded_reasons),
+            "eligible_token_count": len(self.settings.eligible_tokens),
+            "eligible_symbol_count": len(self.risk.eligible_symbols),
             "heartbeat": heartbeat.as_dict(),
+        }
+
+    def data_coverage(self) -> dict:
+        """Return signal-engine OHLCV cache coverage for eligible active assets."""
+
+        markets = _active_markets(self.settings.markets_enabled)
+        items = []
+        now = datetime.now(UTC)
+        for asset in self.settings.eligible_tokens:
+            if "spot" in markets:
+                items.append(
+                    _coverage_item(
+                        asset=asset,
+                        market="spot",
+                        symbol=f"{asset.upper()}USDT",
+                        required_candles=MIN_SPOT_CANDLES,
+                        source="Binance klines 5m",
+                        cache_market="spot",
+                        now=now,
+                    )
+                )
+            if "perp" in markets:
+                interval = f"{self.settings.perp_volume_profile_candle_minutes}m"
+                window = int(
+                    self.settings.perp_volume_profile_window_hours
+                    * 60
+                    / self.settings.perp_volume_profile_candle_minutes
+                )
+                items.append(
+                    _coverage_item(
+                        asset=asset,
+                        market="perp",
+                        symbol=f"{asset.upper()}USDT",
+                        required_candles=max(24, window // 4),
+                        source="Binance klines 5m",
+                        cache_market="futures",
+                        now=now,
+                        interval=interval,
+                    )
+                )
+        return {
+            "generated_at": now.isoformat(),
+            "active_markets": sorted(markets),
+            "items": items,
         }
 
     def set_kill_switch(self, state: KillSwitchState) -> dict:
@@ -100,6 +147,18 @@ class AgentService:
         }
 
     async def _handle_signal(self, signal: dict, session: AsyncSession) -> dict:
+        if signal.get("action") == "skip":
+            risk_decision = RiskDecision(False, f"signal_skipped:{signal.get('reason') or 'skip'}")
+            brain_decision = await self._brain_decision(signal, risk_decision)
+            decision = await self._record_decision(session, signal, risk_decision, brain_decision)
+            return {
+                "signal": signal,
+                "risk": risk_decision.__dict__,
+                "brain": brain_decision.__dict__,
+                "decision_id": decision.decision_id,
+                "execution": {"status": "skipped", "reason": signal.get("reason") or "signal_skipped"},
+            }
+
         user_id = str(self.settings.default_user_id)
         portfolio = await PnlRepository(session).get_portfolio(user_id)
         spot_positions = await SpotPositionRepository(session).open_for_user(user_id)
@@ -290,6 +349,53 @@ def _optional_decimal(value) -> Decimal | None:
         return None
     parsed = Decimal(str(value))
     return parsed if parsed > 0 else None
+
+
+def _active_markets(value: str) -> set[str]:
+    normalized = value.lower()
+    if normalized == "spot":
+        return {"spot"}
+    if normalized in {"perp", "perpetual"}:
+        return {"perp"}
+    return {"spot", "perp"}
+
+
+def _coverage_item(
+    *,
+    asset: str,
+    market: str,
+    symbol: str,
+    required_candles: int,
+    source: str,
+    cache_market: BinanceMarket,
+    now: datetime,
+    interval: str = "5m",
+) -> dict:
+    entry = get_kline_cache_entry(market=cache_market, symbol=symbol, interval=interval)
+    candles = entry.candles if entry else []
+    candle_count = len(candles)
+    first_timestamp = candles[0].timestamp if candles else None
+    last_timestamp = candles[-1].timestamp if candles else None
+    updated_at = entry.updated_at if entry else None
+    if candle_count >= required_candles:
+        status = "ready"
+    elif candle_count > 0:
+        status = "warming_up"
+    else:
+        status = "insufficient"
+    return {
+        "asset": asset,
+        "market": market,
+        "symbol": symbol,
+        "available_candles": candle_count,
+        "required_candles": required_candles,
+        "status": status,
+        "first_candle_at": first_timestamp.isoformat() if first_timestamp else None,
+        "last_candle_at": last_timestamp.isoformat() if last_timestamp else None,
+        "updated_at": updated_at.isoformat() if updated_at else None,
+        "age_seconds": round((now - updated_at).total_seconds(), 2) if updated_at else None,
+        "source": source,
+    }
 
 
 @lru_cache

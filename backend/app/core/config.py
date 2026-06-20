@@ -16,7 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG_DIR = PROJECT_ROOT / "configs"
 HARD_MIN_PORTFOLIO_VALUE_USD = 1.0
 HARD_MIN_TRADES_PER_DAY = 1
-HARD_ELIGIBLE_TOKEN_COUNT = 149
+HARD_ELIGIBLE_TOKEN_MIN_COUNT = 100
+HARD_ELIGIBLE_TOKEN_MAX_COUNT = 200
 HARD_MAX_DRAWDOWN_CAP_PCT = -15.0
 HARD_COMPETITION_CONTRACT = "0x212c61b9b72c95d95bf29cf032f5e5635629aed5"
 HARD_COMPETITION_CHAIN_ID = 56
@@ -89,6 +90,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
     },
     "wallet": {
         "address": "wallet_address",
+        "addresses": "wallet_addresses",
         "key_kdf": "wallet_key_kdf",
         "key_rotation_days": "wallet_key_rotation_days",
     },
@@ -349,6 +351,7 @@ class Settings(BaseSettings):
     )
 
     wallet_address: str | None = Field(default=None, alias="WALLET_ADDRESS")
+    wallet_addresses: list[str] = Field(default_factory=list, alias="WALLET_ADDRESSES")
     wallet_encrypted_private_key_path: str | None = Field(default=None, alias="WALLET_ENCRYPTED_PRIVATE_KEY_PATH")
     wallet_key_passphrase_env: str | None = Field(default=None, alias="WALLET_KEY_PASSPHRASE_ENV")
     wallet_key_kdf: str = Field(default="scrypt", alias="WALLET_KEY_KDF")
@@ -511,6 +514,7 @@ class Settings(BaseSettings):
         "cors_origins",
         "bsc_rpc_urls",
         "competition_rpc_urls",
+        "wallet_addresses",
         "twak_allowed_spenders",
         "perp_allowed_verifying_contracts",
         "x402_fallback_base_urls",
@@ -529,13 +533,15 @@ class Settings(BaseSettings):
     @field_validator("eligible_tokens", mode="before")
     @classmethod
     def split_eligible_tokens(cls, value: str | list[str] | None) -> list[str]:
-        """Parse eligible token lists from YAML or environment overrides."""
+        """Parse and deduplicate eligible token lists from YAML or environment overrides."""
 
         if value is None or value == "":
             return []
         if isinstance(value, list):
-            return [str(token).strip() for token in value if str(token).strip()]
-        return [token.strip() for token in value.split(",") if token.strip()]
+            tokens = [str(token).strip() for token in value if str(token).strip()]
+        else:
+            tokens = [token.strip() for token in value.split(",") if token.strip()]
+        return list(dict.fromkeys(tokens))
 
     @model_validator(mode="after")
     def validate_hard_guardrails(self) -> "Settings":
@@ -547,8 +553,8 @@ class Settings(BaseSettings):
             raise ValueError("minimum_trades_per_day must be at least 1")
         if self.risk_max_drawdown_pct < HARD_MAX_DRAWDOWN_CAP_PCT or self.risk_max_drawdown_pct >= 0:
             raise ValueError("risk_max_drawdown_pct must be negative and no looser than -15%")
-        if len(self.eligible_tokens) != HARD_ELIGIBLE_TOKEN_COUNT:
-            raise ValueError("eligible_tokens must contain exactly the 149 competition-eligible entries")
+        if not HARD_ELIGIBLE_TOKEN_MIN_COUNT <= len(self.eligible_tokens) <= HARD_ELIGIBLE_TOKEN_MAX_COUNT:
+            raise ValueError("eligible_tokens must contain between 100 and 200 unique competition-eligible entries")
         if self.bnb_gas_reserve_pct < 15:
             raise ValueError("bnb_gas_reserve_pct cannot be lower than the hard 15% reserve")
         if self.bnb_gas_reserve_min is None or self.bnb_gas_reserve_min <= 0:

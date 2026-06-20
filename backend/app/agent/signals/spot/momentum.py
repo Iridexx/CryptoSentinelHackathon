@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.app.agent.signals.base import SignalModule, SignalPayload, SignalResult
 from backend.app.agent.signals.common.indicators import (
+    Candle,
     atr,
     clamp,
     ema,
@@ -12,7 +13,13 @@ from backend.app.agent.signals.common.indicators import (
     sanitize_candles,
     vwap,
 )
+from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.logging import get_logger
+
+logger = get_logger("agent.signals.spot")
+MIN_SPOT_CANDLES = 50
+SPOT_WARMUP_CANDLES = 100
 
 
 class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
@@ -20,12 +27,16 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
 
     name = "spot_momentum_v1"
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, feed: BinanceKlineFeed | None = None) -> None:
         self.settings = settings or get_settings()
+        self.feed = feed or BinanceKlineFeed(timeout_seconds=self.settings.market_data_request_timeout_seconds)
 
     async def evaluate(self, payload: SignalPayload) -> SignalResult:
         candles = sanitize_candles(payload.get("candles", []))
-        if len(candles) < 50:
+        if len(candles) < MIN_SPOT_CANDLES:
+            candles = await self._warmup_candles(payload, existing=candles)
+
+        if len(candles) < MIN_SPOT_CANDLES:
             return {
                 "signal_id": payload.get("signal_id"),
                 "market": "spot",
@@ -33,7 +44,7 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 "action": "skip",
                 "quality": 0.0,
                 "reason": "insufficient_ohlcv_history",
-                "components": {},
+                "components": {"candle_count": len(candles), "required_candles": MIN_SPOT_CANDLES},
             }
 
         closes = [candle.close for candle in candles]
@@ -121,6 +132,36 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 "extension_ok": extension_ok,
             },
         }
+
+    async def _warmup_candles(self, payload: SignalPayload, *, existing: list[Candle]) -> list[Candle]:
+        existing_count = len(existing)
+        symbol = _spot_symbol(payload)
+        if not symbol:
+            logger.info("spot_ohlcv_warmup_skipped", reason="symbol_unavailable", existing_count=existing_count)
+            return existing
+        try:
+            candles = await self.feed.fetch(
+                symbol=symbol,
+                interval="5m",
+                limit=SPOT_WARMUP_CANDLES,
+                market="spot",
+            )
+        except Exception as exc:
+            logger.warning("spot_ohlcv_warmup_failed", symbol=symbol, error=str(exc), existing_count=existing_count)
+            return existing
+        logger.info("spot_ohlcv_warmup_loaded", symbol=symbol, candle_count=len(candles), existing_count=existing_count)
+        return candles
+
+
+def _spot_symbol(payload: SignalPayload) -> str | None:
+    raw_symbol = payload.get("symbol") or payload.get("binance_symbol")
+    if raw_symbol:
+        return str(raw_symbol).strip().upper()
+    asset = str(payload.get("asset") or "").strip().upper()
+    if not asset:
+        return None
+    quote = str(payload.get("quote_asset") or "USDT").strip().upper()
+    return f"{asset}{quote}"
 
 
 def _rsi_score(value: float | None) -> float:

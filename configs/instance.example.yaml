@@ -75,6 +75,7 @@ competition:
 
 wallet:
   address: ""
+  addresses: []
   key_kdf: scrypt
   key_rotation_days: 7
 

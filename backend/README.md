@@ -219,7 +219,7 @@ twak wallet address --chain bsctestnet
 Fund the address returned by the second command with test BNB from the official
 [BNB Chain Testnet Faucet](https://www.bnbchain.org/en/testnet-faucet). Testnet
 BNB has no monetary value. Keep enough BNB above the configured 15% reserve and
-the `0.005` BNB floor.
+the `0.000005` BNB floor.
 
 ### Configure BSC
 

@@ -7,8 +7,11 @@ from decimal import Decimal
 from enum import StrEnum
 
 from backend.app.core.config import Settings, get_settings
+from backend.app.core.logging import get_logger
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
+
+logger = get_logger("agent.risk")
 
 
 class KillSwitchState(StrEnum):
@@ -48,6 +51,11 @@ class RiskManager:
         self.kill_switch = KillSwitchState.RUNNING
         self.degraded_reasons: set[str] = set()
         self.eligible_symbols = {token.upper() for token in self.settings.eligible_tokens}
+        logger.info(
+            "risk_manager_eligible_tokens_loaded",
+            eligible_token_count=len(self.settings.eligible_tokens),
+            eligible_symbol_count=len(self.eligible_symbols),
+        )
 
     def set_kill_switch(self, state: KillSwitchState) -> None:
         self.kill_switch = state

@@ -11,6 +11,7 @@ from functools import lru_cache
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
+from backend.app.execution.network_selection import effective_execution_settings
 from backend.app.execution.base import (
     ExecutionProvider,
     ExecutionProviderName,
@@ -32,6 +33,7 @@ class ExecutionProviderRegistry:
         settings: Settings,
         providers: dict[ExecutionProviderName, ExecutionProvider] | None = None,
     ) -> None:
+        settings = effective_execution_settings(settings)
         self.settings = settings
         self._providers = providers or {
             ExecutionProviderName.TWAK: TWAKProvider(settings),

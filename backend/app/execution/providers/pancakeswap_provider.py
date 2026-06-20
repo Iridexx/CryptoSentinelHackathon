@@ -36,6 +36,7 @@ from backend.app.execution.coordinator import ExecutionCoordinator
 from backend.app.execution.models import ExecutionStatus, GasDecision, TransactionResult
 from backend.app.execution.reconciliation import TransactionReconciler
 from backend.app.execution.rpc import MultiRpcClient
+from backend.app.execution.rpc_selection import ordered_bsc_rpc_urls
 
 logger = get_logger("execution.pancakeswap")
 
@@ -71,11 +72,7 @@ class PancakeSwapProvider(ExecutionProvider):
         wallet: Any | None = None,
     ) -> None:
         self._settings = settings
-        self._rpc = rpc or MultiRpcClient(
-            settings.bsc_rpc_urls,
-            settings.bsc_rpc_timeout_seconds,
-            settings.tatum_rpc_api_key,
-        )
+        self._rpc = rpc
         self._wallet = wallet
         self._approval_policy = ExactApprovalPolicy([self.router_address])
 
@@ -204,7 +201,7 @@ class PancakeSwapProvider(ExecutionProvider):
         if amount_in_atomic <= 0:
             raise ExecutionProviderError("Quote amount must be positive")
         path = self.build_path(from_asset, to_asset)
-        result_hex = await self._rpc.call(
+        result_hex = await self._rpc_client().call(
             "eth_call",
             [
                 {"to": self.router_address, "data": self.encode_get_amounts_out(amount_in_atomic, path)},
@@ -265,7 +262,8 @@ class PancakeSwapProvider(ExecutionProvider):
             slippage_pct=slippage_pct,
         )
         chain_id = self._settings.bsc_chain_id
-        gas_price_wei = int(await self._rpc.call("eth_gasPrice"), 16)
+        rpc = self._rpc_client()
+        gas_price_wei = int(await rpc.call("eth_gasPrice"), 16)
 
         # 4) Exact ERC-20 approval when swapping a token (native BNB needs none).
         if from_asset != NATIVE_EVM_ASSET:
@@ -279,7 +277,7 @@ class PancakeSwapProvider(ExecutionProvider):
             )
 
         # 5) Build + sign + submit the swap, reconciled on-chain.
-        nonce = int(await self._rpc.call("eth_getTransactionCount", [owner, "pending"]), 16)
+        nonce = int(await rpc.call("eth_getTransactionCount", [owner, "pending"]), 16)
         swap_tx = self.build_swap_transaction(
             from_asset=from_asset,
             to_asset=to_asset,
@@ -312,6 +310,15 @@ class PancakeSwapProvider(ExecutionProvider):
         )
 
     # ── Private I/O helpers ────────────────────────────────────────────────────
+
+    def _rpc_client(self) -> MultiRpcClient:
+        if self._rpc is not None:
+            return self._rpc
+        return MultiRpcClient(
+            ordered_bsc_rpc_urls(self._settings),
+            self._settings.bsc_rpc_timeout_seconds,
+            self._settings.tatum_rpc_api_key,
+        )
 
     def _require_wallet(self) -> Any:
         if self._wallet is not None:
@@ -349,14 +356,15 @@ class PancakeSwapProvider(ExecutionProvider):
             SEL_ALLOWANCE
             + abi_encode(["address", "address"], [owner, self.router_address])
         ).hex()
-        current_hex = await self._rpc.call(
+        rpc = self._rpc_client()
+        current_hex = await rpc.call(
             "eth_call",
             [{"to": Web3.to_checksum_address(token), "data": allowance_data}, "latest"],
         )
         current = int(current_hex, 16) if current_hex and current_hex != "0x" else 0
         if current >= amount_atomic:
             return
-        nonce = int(await self._rpc.call("eth_getTransactionCount", [owner, "pending"]), 16)
+        nonce = int(await rpc.call("eth_getTransactionCount", [owner, "pending"]), 16)
         approve_tx = self.build_approve_transaction(
             token=token,
             amount_atomic=amount_atomic,
@@ -373,7 +381,7 @@ class PancakeSwapProvider(ExecutionProvider):
 
     async def _submit_signed(self, transaction: dict[str, Any], wallet: Any) -> TransactionResult:
         reconciler = TransactionReconciler(
-            self._rpc,
+            self._rpc_client(),
             self._settings.bsc_explorer_base_url,
             self._settings.bsc_required_confirmations,
         )
@@ -388,6 +396,6 @@ class PancakeSwapProvider(ExecutionProvider):
             signed = wallet.sign_transaction(transaction)
             raw = signed["rawTransaction"]
             raw_hex = raw if isinstance(raw, str) else "0x" + bytes(raw).hex()
-            return await self._rpc.call("eth_sendRawTransaction", [raw_hex])
+            return await self._rpc_client().call("eth_sendRawTransaction", [raw_hex])
 
         return await coordinator.submit(_submit)

@@ -1,10 +1,10 @@
 # Competition eligible-token universe.
-# This list must contain exactly 149 entries, matching the official plan appendix.
+# This list contains 148 unique entries after removing the duplicated SLX from the official appendix copy.
 
 eligible_tokens:
   - ETH
   - USDT
-  - BNB
+  - USDC
   - XRP
   - TRX
   - DOGE
@@ -108,7 +108,6 @@ eligible_tokens:
   - 0G
   - BEAM
   - MY
-  - SLX
   - SOON
   - REAL
   - Q

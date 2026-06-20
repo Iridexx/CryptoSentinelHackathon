@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from dataclasses import dataclass
 from typing import Literal
 
 import httpx
@@ -14,6 +15,18 @@ BinanceMarket = Literal["futures", "spot"]
 
 class BinanceKlineFeedError(RuntimeError):
     """Raised when Binance klines cannot be fetched or parsed."""
+
+
+@dataclass(frozen=True)
+class BinanceKlineCacheEntry:
+    market: BinanceMarket
+    symbol: str
+    interval: str
+    candles: list[Candle]
+    updated_at: datetime
+
+
+_KLINE_CACHE: dict[tuple[BinanceMarket, str, str], BinanceKlineCacheEntry] = {}
 
 
 class BinanceKlineFeed:
@@ -53,9 +66,29 @@ class BinanceKlineFeed:
             raise BinanceKlineFeedError(f"binance_klines_http_{response.status_code}")
         try:
             payload = response.json()
-            return [_parse_kline(row) for row in payload]
+            candles = [_parse_kline(row) for row in payload]
         except (TypeError, ValueError, IndexError) as exc:
             raise BinanceKlineFeedError("binance_klines_parse_failed") from exc
+        _KLINE_CACHE[(market, symbol.upper(), interval)] = BinanceKlineCacheEntry(
+            market=market,
+            symbol=symbol.upper(),
+            interval=interval,
+            candles=candles,
+            updated_at=datetime.now(UTC),
+        )
+        return candles
+
+
+def get_kline_cache_entry(*, market: BinanceMarket, symbol: str, interval: str = "5m") -> BinanceKlineCacheEntry | None:
+    """Return the latest in-memory kline cache entry for coverage diagnostics."""
+
+    return _KLINE_CACHE.get((market, symbol.upper(), interval))
+
+
+def clear_kline_cache() -> None:
+    """Clear kline cache for tests."""
+
+    _KLINE_CACHE.clear()
 
 
 def _parse_kline(row: list) -> Candle:

@@ -14,6 +14,8 @@ from backend.app.agent.brain import ClaudeMetaController
 from backend.app.agent.risk import RiskManager, SignalIntent
 from backend.app.agent.service import AgentService
 from backend.app.agent.signals.common.indicators import Candle
+from backend.app.agent.signals.perp import binance_klines
+from backend.app.agent.signals.perp.binance_klines import BinanceKlineCacheEntry, clear_kline_cache
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
@@ -113,6 +115,16 @@ def candles(count: int = 80) -> list[Candle]:
     return values
 
 
+class FakeSpotFeed:
+    def __init__(self, candle_count: int = 80) -> None:
+        self.candle_count = candle_count
+        self.calls: list[dict] = []
+
+    async def fetch(self, **kwargs):
+        self.calls.append(kwargs)
+        return candles(self.candle_count)
+
+
 @pytest.mark.asyncio
 async def test_spot_momentum_signal_enters_on_volume_momentum() -> None:
     signal = await SpotMomentumSignal(settings()).evaluate(
@@ -122,6 +134,30 @@ async def test_spot_momentum_signal_enters_on_volume_momentum() -> None:
     assert signal["action"] == "enter_long"
     assert signal["quality"] >= 0.7
     assert signal["components"]["relative_volume"] > 1.5
+
+
+@pytest.mark.asyncio
+async def test_spot_momentum_warms_up_ohlcv_when_payload_has_no_candles() -> None:
+    feed = FakeSpotFeed()
+    signal = await SpotMomentumSignal(settings(), feed=feed).evaluate(
+        {"asset": "CAKE", "btc_context_score": 0.7, "sentiment_score": 0.7}
+    )
+
+    assert feed.calls[0]["symbol"] == "CAKEUSDT"
+    assert feed.calls[0]["market"] == "spot"
+    assert feed.calls[0]["limit"] == 100
+    assert signal["asset"] == "CAKE"
+    assert signal["reason"] != "insufficient_ohlcv_history"
+
+
+@pytest.mark.asyncio
+async def test_spot_momentum_reports_required_ohlcv_when_warmup_is_short() -> None:
+    feed = FakeSpotFeed(candle_count=20)
+    signal = await SpotMomentumSignal(settings(), feed=feed).evaluate({"asset": "CAKE"})
+
+    assert signal["reason"] == "insufficient_ohlcv_history"
+    assert signal["components"]["candle_count"] == 20
+    assert signal["components"]["required_candles"] == 50
 
 
 @pytest.mark.asyncio
@@ -153,6 +189,27 @@ def test_risk_manager_blocks_assets_outside_eligible_universe() -> None:
 
     assert decision.allowed is False
     assert decision.reason == "asset_not_in_eligible_universe"
+
+
+def test_risk_manager_uses_settings_eligible_tokens() -> None:
+    manager = RiskManager(settings(eligible_tokens=["BabyDoge"] + [f"TOKEN_{i}" for i in range(99)]))
+    decision = manager.evaluate(
+        SignalIntent(
+            asset="BabyDoge",
+            market="spot",
+            side="long",
+            price=Decimal("100"),
+            stop_loss=Decimal("95"),
+            quality=Decimal("0.8"),
+            quote_equity=Decimal("1000"),
+        ),
+        portfolio=None,
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == "risk_approved"
 
 
 @pytest.mark.asyncio
@@ -190,3 +247,77 @@ async def test_agent_service_dry_run_persists_decision_and_trade(db) -> None:
     assert decisions[0].action == "approve"
     assert len(trades) == 1
     assert trades[0].status == "prepared"
+
+
+@pytest.mark.asyncio
+async def test_agent_service_does_not_run_risk_universe_on_skipped_signal(db) -> None:
+    class SkippedSignal:
+        async def evaluate(self, payload):
+            return {
+                "signal_id": "sig-skip",
+                "market": "spot",
+                "asset": payload.get("asset"),
+                "action": "skip",
+                "quality": 0.0,
+                "reason": "insufficient_ohlcv_history",
+                "components": {},
+            }
+
+    service = AgentService(
+        settings(),
+        spot_signal=SkippedSignal(),
+        perp_signal=VolumeProfileSignal(settings()),
+        risk_manager=RiskManager(settings()),
+        brain=ClaudeMetaController(settings()),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    async with get_session_factory()() as session:
+        result = await service.evaluate_spot({"asset": "CAKE"}, session)
+
+    assert result["signal"]["asset"] == "CAKE"
+    assert result["risk"]["reason"] == "signal_skipped:insufficient_ohlcv_history"
+    assert result["execution"]["reason"] == "insufficient_ohlcv_history"
+
+
+def test_agent_service_data_coverage_reports_cached_spot_candles() -> None:
+    clear_kline_cache()
+    binance_klines._KLINE_CACHE[("spot", "CAKEUSDT", "5m")] = BinanceKlineCacheEntry(
+        market="spot",
+        symbol="CAKEUSDT",
+        interval="5m",
+        candles=candles(80),
+        updated_at=datetime.now(UTC),
+    )
+    service = AgentService(
+        settings(markets_enabled="spot", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)]),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+
+    coverage = service.data_coverage()
+    cake = next(item for item in coverage["items"] if item["asset"] == "CAKE")
+
+    assert cake["market"] == "spot"
+    assert cake["available_candles"] == 80
+    assert cake["required_candles"] == 50
+    assert cake["status"] == "ready"
+    assert cake["first_candle_at"] is not None
+    assert cake["last_candle_at"] is not None
+    assert cake["source"] == "Binance klines 5m"
+
+
+def test_agent_service_data_coverage_reports_cache_miss() -> None:
+    clear_kline_cache()
+    service = AgentService(
+        settings(markets_enabled="spot", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)]),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+
+    coverage = service.data_coverage()
+    cake = next(item for item in coverage["items"] if item["asset"] == "CAKE")
+
+    assert cake["available_candles"] == 0
+    assert cake["status"] == "insufficient"
+    assert cake["updated_at"] is None

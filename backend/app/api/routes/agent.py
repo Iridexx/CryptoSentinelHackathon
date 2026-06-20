@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agent.risk import KillSwitchState
 from backend.app.agent.service import get_agent_service
@@ -19,8 +19,18 @@ class KillSwitchRequest(BaseModel):
 
 
 class AgentEvaluateRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     market: Literal["spot", "perp"]
     payload: dict[str, Any] = Field(default_factory=dict)
+
+    def normalized_payload(self) -> dict[str, Any]:
+        """Accept both nested payloads and the legacy flat evaluation body."""
+
+        normalized = dict(self.payload)
+        for key, value in (self.model_extra or {}).items():
+            normalized.setdefault(key, value)
+        return normalized
 
 
 @router.get("/status")
@@ -28,6 +38,13 @@ async def agent_status(_: ReadAccessDep) -> dict:
     """Return non-sensitive agent status."""
 
     return get_agent_service().status()
+
+
+@router.get("/data-coverage")
+async def agent_data_coverage(_: ReadAccessDep) -> dict:
+    """Return OHLCV cache coverage for agent signal engines."""
+
+    return get_agent_service().data_coverage()
 
 
 @router.put("/kill-switch")
@@ -42,9 +59,10 @@ async def evaluate_signal(request: AgentEvaluateRequest, _: AdminAccessDep, sess
     """Evaluate an explicit signal payload through signal, risk and brain layers."""
 
     service = get_agent_service()
+    payload = request.normalized_payload()
     try:
         if request.market == "spot":
-            return await service.evaluate_spot(request.payload, session)
-        return await service.evaluate_perp(request.payload, session)
+            return await service.evaluate_spot(payload, session)
+        return await service.evaluate_perp(payload, session)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

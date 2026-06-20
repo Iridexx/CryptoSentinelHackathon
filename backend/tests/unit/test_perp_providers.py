@@ -19,6 +19,13 @@ from backend.app.execution.perp_providers import BnbSdkPerpProvider
 from backend.app.execution.perp_registry import PerpExecutionRegistry
 
 
+class FakeSettings(SimpleNamespace):
+    def model_copy(self, *, update: dict[str, Any] | None = None) -> "FakeSettings":
+        values = dict(self.__dict__)
+        values.update(update or {})
+        return FakeSettings(**values)
+
+
 class FakeBridge:
     """Stand-in for BnbAgentSdkBridge (no bnbagent import, no network)."""
 
@@ -98,9 +105,12 @@ class FakePerpProvider(PerpExecutionProvider):
 
 
 def test_registry_default_and_selection() -> None:
-    settings = SimpleNamespace(
+    settings = FakeSettings(
         default_user_id="00000000-0000-0000-0000-000000000001",
         perp_execution_provider="bnb_sdk",
+        bsc_network="testnet",
+        wallet_address=None,
+        wallet_addresses=[],
     )
     registry = PerpExecutionRegistry(
         settings,  # type: ignore[arg-type]

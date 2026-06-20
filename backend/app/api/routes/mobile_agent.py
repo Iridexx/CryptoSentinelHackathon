@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SettingsDep
 from backend.app.execution.rpc import MultiRpcClient, RpcUnavailableError
+from backend.app.execution.rpc_selection import ordered_bsc_rpc_urls
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import (
     AgentMobileSettings,
@@ -164,7 +165,7 @@ async def _bsc_balances(settings: SettingsDep) -> tuple[list[WalletAssetBalance]
     if not settings.bsc_rpc_urls:
         return [], "rpc_not_configured"
     client = MultiRpcClient(
-        settings.bsc_rpc_urls,
+        ordered_bsc_rpc_urls(settings),
         settings.bsc_rpc_timeout_seconds,
         settings.tatum_rpc_api_key,
     )
