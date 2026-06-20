@@ -35,6 +35,7 @@ import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 import AgentTab from './components/AgentTab';
 import { fetchEligibleTokens } from './services/agentApi';
+import { toEligibleSymbolSet } from './utils/eligibleTokens';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const PERPAGE_KEY = 'cryptosentinel_perpage';
@@ -236,7 +237,7 @@ export default function App() {
   const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
-  const [eligibleSymbols, setEligibleSymbols] = useState<Set<string>>(() => new Set());
+  const [eligibleSymbols, setEligibleSymbols] = useState<Set<string>>(() => toEligibleSymbolSet());
   const [aiCoinStates, setAiCoinStates] = useState<Record<string, AiCoinState>>(() => {
     try {
       return JSON.parse(localStorage.getItem(AI_COIN_STATES_KEY) ?? '{}') as Record<string, AiCoinState>;
@@ -254,10 +255,10 @@ export default function App() {
     fetchEligibleTokens()
       .then((response) => {
         if (cancelled) return;
-        setEligibleSymbols(new Set(response.tokens.map((token) => token.toUpperCase())));
+        setEligibleSymbols(toEligibleSymbolSet(response.tokens.length > 0 ? response.tokens : undefined));
       })
       .catch(() => {
-        if (!cancelled) setEligibleSymbols(new Set());
+        if (!cancelled) setEligibleSymbols(toEligibleSymbolSet());
       });
     return () => {
       cancelled = true;
