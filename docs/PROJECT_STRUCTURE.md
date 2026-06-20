@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-19
+Ultimo aggiornamento: 2026-06-20
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -47,14 +47,15 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
-|   |   |       |-- agent.py - status agente, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
+|   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
 |   |   |       |-- views.py - GET /api/v1/views/spot|perp|global: viste dashboard con posizioni, PnL, win rate.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC e provider execution astratti.
+|   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
 |   |   |   |-- loops/ - loop veloce gestione posizioni e loop lento scansione/decisione safe-by-default.
 |   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing e guardrail portfolio/drawdown/daily loss.
@@ -169,7 +170,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_execution_wallets.py - regressioni Step 8 per snapshot wallet execution, saldo BNB live e override RPC persistito.
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
 |       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
-|       |-- unit/test_agent_step6.py - regressioni Step 6/9 per segnali Spot/Perp, risk guardrail, meta-controller, kill switch, daily heartbeat e dry-run agent service con persistenza decisione/trade.
+|       |-- unit/test_agent_step6.py - regressioni Step 6/9 per segnali Spot/Perp, risk guardrail, meta-controller, kill switch, daily heartbeat, watchlist scanner e dry-run agent service con persistenza decisione/trade.
 |       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti, onboarding validation e wallet multi-network.
 |       |-- integration/test_market_data_providers.py - regressioni provider market-data, inclusa cache identità su refresh ripetuti dei prezzi.
 |       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
@@ -348,7 +349,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
 | Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
 | Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
-| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto; suite completa 119 passed / 2 failed HMAC TWAK pre-esistenti. |
+| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa consolidata; suite completa 119 passed / 2 failed HMAC TWAK pre-esistenti prima del consolidamento watchlist. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -392,7 +393,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | CoinGecko valido per monitoring | CoinGecko resta pienamente utilizzabile per prezzi, liste, ricerca, alert e grafici; il volume delle sue candele OHLC non è fornito e il Volume Profile 5m richiede una fonte adeguata. |
 | Feed Volume Profile Step 6 | Binance klines spot/futures sarà un feed specializzato del signal engine e non passerà dal `MarketDataProvider` generico. |
 | Brain con poteri limitati | Claude può solo approve/reduce/block/skip; non aumenta leva, non inverte direzione e non cambia parametri. Senza Claude, dry-run usa fallback deterministico; live blocca fail-closed. |
-| Loop safe-by-default | Il loop lento non apre trade senza payload/scanner esplicito; il loop veloce gestisce heartbeat e stato posizioni. L'esecuzione live richiede provider astratti e dati completi. |
+| Loop safe-by-default | Il loop lento valuta solo la watchlist AI selezionata dall'utente; con watchlist vuota resta idle. Il loop veloce gestisce heartbeat e stato posizioni. L'esecuzione live richiede provider astratti, dati completi e guardrail risk/brain favorevoli. |
+| Watchlist AI operativa | `eligible_tokens` definisce solo il perimetro consentito; `agent_watchlist_symbols` in RuntimeState definisce gli asset effettivamente scansionati dall'agente. Le modifiche sono admin-only e la mobile app mostra separatamente token tradabili e token attivi. |
 | Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
 | Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |
 | Mobile settings runtime | Le impostazioni agente salvate dalla mobile app sono persistite in `RuntimeState` e confermate dal backend; l'applicazione live completa ai loop va validata end-to-end prima della gara. |
@@ -436,5 +438,5 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
-| Step boundary | Step 9 implementato parzialmente e pronto per revisione; Step 10 non avviato — in attesa di approvazione. |
+| Step boundary | Step 9 implementato parzialmente e consolidato per revisione; Step 10 non avviato — in attesa di approvazione. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |

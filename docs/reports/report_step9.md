@@ -10,6 +10,7 @@
 - Aggiunto test `test_heartbeat_triggers_at_20utc`.
 - Aggiunto conteggio trade Spot giornalieri in `SpotTradeRepository.count_since`.
 - Predisposto script manuale `backend/scripts/register_competition.py` per chiamare `twak compete register --json` tramite il client TWAK esistente.
+- Consolidamento post-review: aggiunta watchlist operativa AI selezionabile da mobile app. La lista eligible resta solo il perimetro consentito; l'agente lavora solo sui token selezionati dall'utente.
 - Aggiornato `docs/PROJECT_STRUCTURE.md`.
 
 ## 2. COME È STATO FATTO
@@ -20,6 +21,10 @@
 - In `dry_run`, il heartbeat crea un trade Spot preparato da 1 USD, verificabile in DB.
 - Fuori da `dry_run`, il loop non inventa route/token address: se `heartbeat_trade_from_asset`, `heartbeat_trade_to_asset` e `heartbeat_trade_amount_in_atomic` non sono configurati, blocca con `heartbeat_trade_live_route_not_configured` e continua a ritentare nella finestra.
 - Lo script registrazione competizione è esplicito e manuale: richiede `--confirm`, chiede password TWAK con input nascosto e non viene mai eseguito automaticamente.
+- La watchlist AI è persistita in `RuntimeState` tramite `backend/app/agent/watchlist.py`, validata contro `Settings.eligible_tokens` e modificabile solo via endpoint admin-only.
+- `GET /api/v1/agent/watchlist` espone eligible universe e token selezionati; `PUT /api/v1/agent/watchlist` aggiorna la selezione operativa senza esporre segreti.
+- La tab mobile Agente include la nuova vista `Coins` con token tradabili, token selezionati e ricerca. Il toggle AI sulle card usa la stessa watchlist backend: arancione significa token effettivamente passato all'agente.
+- `AgentService.slow_tick` usa la watchlist selezionata per costruire payload `ASSETUSDT` Spot/Perp e valutare i signal engine; con watchlist vuota resta idle/fail-closed.
 
 ## 3. COSA È STATO VERIFICATO
 
@@ -29,18 +34,23 @@
 - I 2 failed sono esattamente il debito HMAC TWAK pre-esistente in `backend/tests/unit/test_execution_layer.py`:
   - `test_twak_hmac_matches_documented_wire_format`
   - `test_twak_hmac_supports_current_sdk_wire_format`
+- Dopo il consolidamento watchlist AI:
+  - `python -m py_compile backend/app/agent/watchlist.py backend/app/agent/service.py backend/app/api/routes/agent.py` completato con successo.
+  - `npm run build` completato con successo.
 
 ## 4. SCOSTAMENTI DAL PIANO
 
 - La registrazione competizione non è stata eseguita automaticamente, come richiesto. È stato predisposto uno script manuale esplicito.
 - Il heartbeat live non esegue un trade se non è configurata una route Spot esplicita; questa scelta evita trade ambigui o fuori universo eligible.
 - La suite completa ora riporta `119 passed, 2 failed`; il numero passato è maggiore rispetto al valore iniziale perché sono stati aggiunti test Step 9.
+- La selezione mobile AI è stata resa operativa oltre il piano iniziale: non abilita tutti gli eligible, ma solo la watchlist scelta dall'utente. Questo riduce rischio e rende chiaro quali asset vengono scansionati.
 
 ## 5. QUESTIONI APERTE
 
 - Configurare una route heartbeat live Spot concreta prima della trading window se si vuole che il retry 20:00-23:30 UTC possa produrre un trade reale fuori dry-run.
 - Eseguire manualmente la registrazione competizione quando wallet, gas e timing gara sono confermati.
 - Il blocco TWAK 403 resta esterno e non risolto in Step 9, come da scope.
+- Eseguire un test end-to-end con backend riavviato: inserire admin token in app, selezionare token dalla scheda Agente > Coins, verificare persistenza dopo restart e osservare `slow_tick` su watchlist non vuota.
 
 ## 6. VERIFICHE TECNICHE
 
@@ -52,8 +62,9 @@
 | Daily heartbeat 20:00 UTC | Passata |
 | Dry-run Spot/Perp cycle | Passata |
 | Competition registration helper | Predisposto, non eseguito |
+| Watchlist AI operativa mobile/backend | Py compile + frontend build passati; E2E runtime da verificare |
 | Full backend suite | 119 passed, 2 failed HMAC TWAK pre-esistenti |
 
 ## 7. STATO DELIVERABLE
 
-Step 9 implementato in forma parziale-operativa e pronto per revisione. Non procedere a Step 10 senza approvazione del revisore.
+Step 9 implementato in forma parziale-operativa e consolidato con watchlist AI operativa. Non procedere a Step 10 senza approvazione del revisore.

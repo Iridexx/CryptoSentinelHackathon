@@ -43,6 +43,7 @@ const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
 const FAV_UP_KEY = 'cs_fav_up_pct';
 const FAV_DOWN_KEY = 'cs_fav_down_pct';
 const RANK_ANIM_KEY = 'cs_rank_anim_topn';
+const ADMIN_TOKEN_KEY = 'cs_agent_admin_token';
 
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
@@ -235,7 +236,7 @@ export default function App() {
   const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
-  const [adminToken, setAdminToken] = useState('');
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '');
   const [eligibleTokens, setEligibleTokens] = useState<string[]>(() => FALLBACK_ELIGIBLE_SYMBOLS);
   const [selectedAiSymbols, setSelectedAiSymbols] = useState<Set<string>>(() => new Set());
   const [aiWatchlistSaving, setAiWatchlistSaving] = useState(false);
@@ -305,6 +306,15 @@ export default function App() {
   const handleToggleAiCoin = useCallback((coin: Coin) => {
     void handleToggleAiSymbol(coin.symbol);
   }, [handleToggleAiSymbol]);
+
+  const handleAdminTokenChange = useCallback((value: string) => {
+    setAdminToken(value);
+    if (value) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, value);
+    } else {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+    }
+  }, []);
 
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
@@ -795,7 +805,7 @@ export default function App() {
           {tab === 'agent' && (
             <AgentTab
               adminToken={adminToken}
-              onAdminToken={setAdminToken}
+              onAdminToken={handleAdminTokenChange}
               eligibleTokens={eligibleTokens}
               selectedAiSymbols={selectedAiSymbols}
               watchlistSaving={aiWatchlistSaving}
