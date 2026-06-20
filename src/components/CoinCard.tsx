@@ -51,10 +51,10 @@ interface Props {
 }
 
 const AI_STYLES: Record<AiState, { label: string; className: string; title: string }> = {
-  inactive: { label: 'AI', className: 'border-gray-600 text-gray-500', title: 'AI inactive' },
-  analysis: { label: 'AI', className: 'border-accent-yellow text-accent-yellow', title: 'AI analysis' },
-  long: { label: 'L', className: 'border-accent-green text-accent-green', title: 'AI long' },
-  short: { label: 'S', className: 'border-accent-red text-accent-red', title: 'AI short' },
+  inactive: { label: 'AI', className: 'border-gray-600 text-gray-500', title: 'Enable AI monitoring' },
+  analysis: { label: 'AI', className: 'border-accent-yellow text-accent-yellow', title: 'Disable AI monitoring' },
+  long: { label: 'L', className: 'border-accent-green text-accent-green', title: 'AI long signal. Tap to disable monitoring.' },
+  short: { label: 'S', className: 'border-accent-red text-accent-red', title: 'AI short signal. Tap to disable monitoring.' },
 };
 
 const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, onChartTap, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta, aiState, onToggleAi }) => {

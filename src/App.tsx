@@ -258,11 +258,15 @@ export default function App() {
   }, []);
 
   const handleToggleAiCoin = useCallback((coin: Coin) => {
-    const sequence: AiCoinState[] = ['inactive', 'analysis', 'long', 'short'];
     setAiCoinStates((prev) => {
       const current = prev[coin.id] ?? 'inactive';
-      const nextState = sequence[(sequence.indexOf(current) + 1) % sequence.length];
-      const next = { ...prev, [coin.id]: nextState };
+      const nextState: AiCoinState = current === 'inactive' ? 'analysis' : 'inactive';
+      const next = { ...prev };
+      if (nextState === 'inactive') {
+        delete next[coin.id];
+      } else {
+        next[coin.id] = nextState;
+      }
       localStorage.setItem(AI_COIN_STATES_KEY, JSON.stringify(next));
       return next;
     });
