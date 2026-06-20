@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
@@ -51,6 +51,24 @@ class SpotTradeRepository:
             "wins": wins,
             "win_rate_pct": round(wins / len(trades) * 100, 1),
         }
+
+    async def count_since(
+        self,
+        user_id: str,
+        *,
+        since: datetime,
+        status: str | None = None,
+    ) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(SpotTrade)
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.timestamp_utc >= since)
+        )
+        if status:
+            stmt = stmt.where(SpotTrade.status == status)
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one())
 
 
 class PerpTradeRepository:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from decimal import Decimal
 from functools import lru_cache
 from uuid import uuid4
@@ -31,6 +31,12 @@ from backend.app.persistence.repositories.positions import PerpPositionRepositor
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 
 logger = get_logger("agent.service")
+
+DAILY_TRADE_CHECK_TIME_UTC = time(20, 0, tzinfo=UTC)
+DAILY_TRADE_RETRY_UNTIL_UTC = time(23, 30, tzinfo=UTC)
+HEARTBEAT_TRADE_ASSET = "ETH"
+HEARTBEAT_TRADE_QUOTE_USD = Decimal("1")
+HEARTBEAT_TRADE_PRICE_USD = Decimal("1")
 
 
 class AgentService:
@@ -136,14 +142,16 @@ class AgentService:
             "kill_switch": self.risk.kill_switch.value,
         }
 
-    async def slow_tick(self, session: AsyncSession) -> dict:
-        """Scanner placeholder: no implicit trading without explicit signal payload."""
+    async def slow_tick(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
+        """Slow scanner tick plus the hard daily Spot trade heartbeat."""
 
         heartbeat.beat("agent_slow_tick")
+        trade_heartbeat = await self._daily_trade_heartbeat(session, now=now)
         return {
-            "status": "idle",
+            "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",
             "reason": "no_watchlist_scanner_configured",
             "markets_enabled": self.settings.markets_enabled,
+            "daily_trade_heartbeat": trade_heartbeat,
         }
 
     async def _handle_signal(self, signal: dict, session: AsyncSession) -> dict:
@@ -329,6 +337,86 @@ class AgentService:
         )
         result = await self.perp_registry.active.open_position(order)
         return {"status": result.status.value, "provider": self.perp_registry.active_name.value, "reason": result.reason}
+
+    async def _daily_trade_heartbeat(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
+        now = now or datetime.now(UTC)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+        now = now.astimezone(UTC)
+        user_id = str(self.settings.default_user_id)
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        trades_today = await SpotTradeRepository(session).count_since(user_id, since=day_start)
+        if trades_today >= self.settings.minimum_trades_per_day:
+            return {
+                "status": "satisfied",
+                "trades_today": trades_today,
+                "check_after_utc": DAILY_TRADE_CHECK_TIME_UTC.isoformat(),
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        current_time = now.timetz()
+        if current_time < DAILY_TRADE_CHECK_TIME_UTC:
+            return {
+                "status": "waiting",
+                "trades_today": trades_today,
+                "check_after_utc": DAILY_TRADE_CHECK_TIME_UTC.isoformat(),
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        if current_time > DAILY_TRADE_RETRY_UNTIL_UTC:
+            return {
+                "status": "missed",
+                "trades_today": trades_today,
+                "reason": "daily_trade_retry_window_closed",
+                "check_after_utc": DAILY_TRADE_CHECK_TIME_UTC.isoformat(),
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        if self.risk.kill_switch != KillSwitchState.RUNNING:
+            return {
+                "status": "blocked",
+                "trades_today": trades_today,
+                "reason": self.risk.kill_switch.value,
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        signal = {
+            "signal_id": f"heartbeat_{now.date().isoformat()}",
+            "market": "spot",
+            "asset": HEARTBEAT_TRADE_ASSET,
+            "action": "enter_long",
+            "quality": 0.86,
+            "confidence": 0.86,
+            "price": HEARTBEAT_TRADE_PRICE_USD,
+            "quote_equity": max(Decimal(str(self.settings.min_portfolio_value_usd)) * Decimal("10"), HEARTBEAT_TRADE_QUOTE_USD),
+            "heartbeat_trade": True,
+        }
+        if self.settings.execution_mode == "dry_run":
+            execution = await self._simulate_trade(session, signal, HEARTBEAT_TRADE_QUOTE_USD)
+            return {
+                "status": "executed",
+                "mode": "dry_run",
+                "trades_today_before": trades_today,
+                "execution": execution,
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        from_asset = getattr(self.settings, "heartbeat_trade_from_asset", None)
+        to_asset = getattr(self.settings, "heartbeat_trade_to_asset", None)
+        amount_in_atomic = getattr(self.settings, "heartbeat_trade_amount_in_atomic", None)
+        if not from_asset or not to_asset or amount_in_atomic is None:
+            return {
+                "status": "blocked",
+                "trades_today": trades_today,
+                "reason": "heartbeat_trade_live_route_not_configured",
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        execution = await self._execute_spot(
+            {**signal, "from_asset": from_asset, "to_asset": to_asset, "amount_in_atomic": amount_in_atomic},
+            HEARTBEAT_TRADE_QUOTE_USD,
+        )
+        return {
+            "status": "executed" if execution.get("status") in {"prepared", "confirmed"} else "blocked",
+            "mode": self.settings.execution_mode,
+            "trades_today_before": trades_today,
+            "execution": execution,
+            "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+        }
 
 
 def _intent_from_signal(signal: dict, *, portfolio_total: Decimal) -> SignalIntent:

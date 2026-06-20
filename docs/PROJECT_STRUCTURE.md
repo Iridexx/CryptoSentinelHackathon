@@ -54,7 +54,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6: segnali, risk, meta-controller, dry-run DB e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC e provider execution astratti.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
 |   |   |   |-- loops/ - loop veloce gestione posizioni e loop lento scansione/decisione safe-by-default.
 |   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing e guardrail portfolio/drawdown/daily loss.
@@ -153,6 +153,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   `-- tasks/ - namespace scheduled/background tasks.
 |   |-- scripts/ - script di avvio backend.
 |   |   |-- encrypt_wallet.py - creazione interattiva keystore Web3 cifrato senza input CLI.
+|   |   |-- register_competition.py - helper manuale esplicito per `twak compete register --json`, con password TWAK via prompt nascosto.
 |   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
 |   |   |-- twak_rpc_route_probe.py - diagnostica quote-only TWAK REST ruotando manualmente le RPC BSC configurate.
 |   |   |-- pancakeswap_smoke_test.py - smoke test PancakeSwap diretto (quote-only di default; --execute swap reale, mainnet solo con --allow-mainnet).
@@ -168,7 +169,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_execution_wallets.py - regressioni Step 8 per snapshot wallet execution, saldo BNB live e override RPC persistito.
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
 |       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
-|       |-- unit/test_agent_step6.py - regressioni Step 6 per segnali Spot/Perp, risk guardrail e dry-run agent service con persistenza decisione/trade.
+|       |-- unit/test_agent_step6.py - regressioni Step 6/9 per segnali Spot/Perp, risk guardrail, meta-controller, kill switch, daily heartbeat e dry-run agent service con persistenza decisione/trade.
 |       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti, onboarding validation e wallet multi-network.
 |       |-- integration/test_market_data_providers.py - regressioni provider market-data, inclusa cache identità su refresh ripetuti dei prezzi.
 |       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
@@ -197,6 +198,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step6.md - report agente AI Brain Step 6.
 |       |-- report_step7.md - report estensione app mobile Step 7.
 |       |-- report_step8.md - report dashboard web unificata Step 8.
+|       |-- report_step9.md - report testing e vincoli qualificazione Step 9.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
@@ -346,6 +348,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
 | Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
 | Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
+| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto; suite completa 119 passed / 2 failed HMAC TWAK pre-esistenti. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -397,6 +400,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Log viewer admin-only | I log backend sono esposti solo tramite endpoint admin con limite righe e redazione pattern sensibili; la dashboard non legge file locali e non espone path reali. |
 | Data Coverage da cache signal engine | `/api/v1/agent/data-coverage` espone la copertura OHLCV in memoria per Spot/Perp senza scaricare dati a ogni refresh dashboard; lo Spot usa Binance klines 5m perché CMC non fornisce OHLCV 5m completo nel provider attuale. |
 | Wallet dashboard | `/api/v1/execution/wallets` espone solo indirizzi pubblici, saldo BNB live e stato provider/RPC; le modifiche wallet/chain/provider/RPC restano admin-only e gli override vivono in `RuntimeState`. |
+| Daily trade heartbeat | Il loop lento dell'agente verifica solo trade Spot del giorno UTC; se alle 20:00 UTC non esiste almeno un trade, tenta un heartbeat trade minimo e ritenta a ogni slow tick fino alle 23:30 UTC. |
 | i18n legacy prima dello Step 8 | I testi frontend hardcoded saranno convertiti a EN default/IT conservato senza riscrivere la logica dei componenti. |
 | Dual engine SQLAlchemy (Step 5) | Engine async aiosqlite per nuovo codice; engine sync sqlite3 per store legacy sincroni (`AlertStore`, `DeviceTokenStore`). Stesso file SQLite; serializzazione a livello file. Sicuro per single-user hackathon. |
 | create_all senza Alembic (Step 5) | Schema creato automaticamente al boot; nessuno script di migrazione per deadline hackathon. Alembic resta in requirements per Step 10 (VPS). |
@@ -432,5 +436,5 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
-| Step boundary | Step 8 implementato parzialmente e pronto per revisione; Step 9 non avviato — in attesa di approvazione. |
+| Step boundary | Step 9 implementato parzialmente e pronto per revisione; Step 10 non avviato — in attesa di approvazione. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |

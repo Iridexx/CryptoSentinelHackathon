@@ -11,7 +11,7 @@ from uuid import UUID
 import pytest
 
 from backend.app.agent.brain import ClaudeMetaController
-from backend.app.agent.risk import RiskManager, SignalIntent
+from backend.app.agent.risk import KillSwitchState, RiskManager, SignalIntent
 from backend.app.agent.service import AgentService
 from backend.app.agent.signals.common.indicators import Candle
 from backend.app.agent.signals.perp import binance_klines
@@ -19,7 +19,9 @@ from backend.app.agent.signals.perp.binance_klines import BinanceKlineCacheEntry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
-from backend.app.persistence.repositories.trades import SpotTradeRepository
+from backend.app.persistence.models.pnl import PortfolioState
+from backend.app.persistence.models.positions import SpotPosition
+from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.sync_database import (
     create_all_sync,
     init_sync_db,
@@ -46,6 +48,7 @@ def settings(**overrides):
     base = dict(
         default_user_id=USER_ID,
         eligible_tokens=["BTC"] + [f"TOKEN_{i}" for i in range(148)],
+        minimum_trades_per_day=1,
         execution_mode="dry_run",
         agent_mode="conservative",
         markets_enabled="both",
@@ -212,6 +215,158 @@ def test_risk_manager_uses_settings_eligible_tokens() -> None:
     assert decision.reason == "risk_approved"
 
 
+def _intent(**overrides) -> SignalIntent:
+    payload = dict(
+        asset="BTC",
+        market="spot",
+        side="long",
+        price=Decimal("100"),
+        stop_loss=Decimal("95"),
+        quality=Decimal("0.8"),
+        quote_equity=Decimal("1000"),
+    )
+    payload.update(overrides)
+    return SignalIntent(**payload)
+
+
+def _portfolio(**overrides) -> PortfolioState:
+    payload = dict(
+        user_id=str(USER_ID),
+        total_equity_usd=Decimal("1000"),
+        initial_equity_usd=Decimal("1000"),
+        peak_equity_usd=Decimal("1000"),
+        drawdown_pct=Decimal("0"),
+        max_drawdown_pct=Decimal("0"),
+        exposure_pct=Decimal("0"),
+        daily_pnl_usd=Decimal("0"),
+        daily_loss_limit_used_pct=Decimal("0"),
+        agent_status="idle",
+        trades_today=0,
+        updated_at=datetime.now(UTC),
+    )
+    payload.update(overrides)
+    return PortfolioState(**payload)
+
+
+def _spot_position(index: int = 0) -> SpotPosition:
+    now = datetime.now(UTC)
+    return SpotPosition(
+        position_id=f"pos-{index}",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("100"),
+        opened_at=now,
+        updated_at=now,
+    )
+
+
+def test_risk_engine_daily_loss_limit() -> None:
+    decision = RiskManager(settings()).evaluate(
+        _intent(),
+        portfolio=_portfolio(daily_loss_limit_used_pct=Decimal("-8.1")),
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "daily_loss_limit_guard"
+
+
+def test_risk_engine_max_positions() -> None:
+    decision = RiskManager(settings(risk_max_open_positions=2)).evaluate(
+        _intent(),
+        portfolio=_portfolio(),
+        open_spot_positions=[_spot_position(1), _spot_position(2)],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "max_open_positions_guard"
+
+
+def test_risk_engine_guardia_dollar() -> None:
+    decision = RiskManager(settings(min_portfolio_value_usd=5.0)).evaluate(
+        _intent(),
+        portfolio=_portfolio(total_equity_usd=Decimal("5")),
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "portfolio_floor_guard"
+
+
+def test_risk_engine_size_cap() -> None:
+    decision = RiskManager(settings()).evaluate(
+        _intent(price=Decimal("100"), stop_loss=Decimal("50")),
+        portfolio=_portfolio(total_equity_usd=Decimal("1000")),
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is True
+    assert decision.size_quote == Decimal("30.00")
+
+
+@pytest.mark.asyncio
+async def test_meta_controller_fallback_on_timeout(monkeypatch) -> None:
+    class TimeoutClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            raise TimeoutError("timeout")
+
+    monkeypatch.setattr("backend.app.agent.brain.meta_controller.httpx.AsyncClient", TimeoutClient)
+
+    decision = await ClaudeMetaController(settings(anthropic_api_key="configured")).decide(
+        signal={"quality": 0.9},
+        risk={"allowed": True, "reason": "risk_approved"},
+    )
+
+    assert decision.action == "approve"
+    assert "claude_unavailable_dry_run" in decision.reasoning
+
+
+@pytest.mark.asyncio
+async def test_meta_controller_reduce() -> None:
+    decision = await ClaudeMetaController(settings()).decide(
+        signal={"quality": 0.7},
+        risk={"allowed": True, "reason": "risk_approved"},
+    )
+
+    assert decision.action == "reduce"
+    assert decision.size_multiplier == Decimal("0.5")
+
+
+def test_kill_switch_soft_stop() -> None:
+    manager = RiskManager(settings())
+    manager.set_kill_switch(KillSwitchState.SOFT_STOP)
+
+    decision = manager.evaluate(_intent(), portfolio=_portfolio(), open_spot_positions=[], open_perp_positions=[])
+
+    assert decision.allowed is False
+    assert decision.reason == "soft_stop"
+
+
+def test_kill_switch_hard_stop() -> None:
+    manager = RiskManager(settings())
+    manager.set_kill_switch(KillSwitchState.HARD_STOP)
+
+    decision = manager.evaluate(_intent(), portfolio=_portfolio(), open_spot_positions=[], open_perp_positions=[])
+
+    assert decision.allowed is False
+    assert decision.reason == "hard_stop_enabled"
+
+
 @pytest.mark.asyncio
 async def test_agent_service_dry_run_persists_decision_and_trade(db) -> None:
     class FakeSignal:
@@ -247,6 +402,65 @@ async def test_agent_service_dry_run_persists_decision_and_trade(db) -> None:
     assert decisions[0].action == "approve"
     assert len(trades) == 1
     assert trades[0].status == "prepared"
+
+
+@pytest.mark.asyncio
+async def test_agent_service_dry_run_persists_perp_decision_and_trade(db) -> None:
+    class FakeSignal:
+        async def evaluate(self, payload):
+            return {
+                "signal_id": "sig-perp-test",
+                "market": "perp",
+                "asset": "BTC",
+                "action": "enter_long",
+                "side": "long",
+                "quality": 0.9,
+                "confidence": 0.9,
+                "price": 100.0,
+                "stop_loss": 95.0,
+                "quote_equity": 1000.0,
+                "leverage": 2,
+            }
+
+    service = AgentService(
+        settings(),
+        spot_signal=SpotMomentumSignal(settings()),
+        perp_signal=FakeSignal(),
+        risk_manager=RiskManager(settings()),
+        brain=ClaudeMetaController(settings()),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    async with get_session_factory()() as session:
+        result = await service.evaluate_perp({}, session)
+        decisions = await AgentDecisionRepository(session).recent_for_user(str(USER_ID))
+        trades = await PerpTradeRepository(session).list_for_user(str(USER_ID))
+
+    assert result["execution"]["status"] == "prepared"
+    assert len(decisions) == 1
+    assert decisions[0].market == "perp"
+    assert len(trades) == 1
+    assert trades[0].status == "prepared"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_triggers_at_20utc(db) -> None:
+    service = AgentService(
+        settings(eligible_tokens=["ETH"] + [f"TOKEN_{i}" for i in range(148)]),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime(2026, 6, 22, 20, 0, tzinfo=UTC)
+    async with get_session_factory()() as session:
+        result = await service.slow_tick(session, now=now)
+        trades = await SpotTradeRepository(session).list_for_user(str(USER_ID))
+
+    heartbeat_result = result["daily_trade_heartbeat"]
+    assert heartbeat_result["status"] == "executed"
+    assert heartbeat_result["mode"] == "dry_run"
+    assert len(trades) == 1
+    assert trades[0].asset == "ETH"
+    assert trades[0].notes == "dry_run_step6"
 
 
 @pytest.mark.asyncio
