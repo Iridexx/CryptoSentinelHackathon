@@ -177,24 +177,26 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
           }`}>
             {sym}{formatPrice(coin.current_price, currency)}
           </div>
-          <div className={`text-xs font-medium mt-0.5 ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
-            {isPositive ? '▲' : '▼'} {Math.abs(displayChange).toFixed(2)}%
-            {timeFrame !== '24h' && <span className="text-gray-600 ml-0.5">{timeFrame === '1h' ? '1h' : '7g'}</span>}
+          <div className="flex items-center justify-end gap-1 mt-0.5">
+            {aiState && onToggleAi && (
+              <button
+                onClick={(e) => { e.stopPropagation(); hapticLight(); onToggleAi(coin); }}
+                className={`h-5 min-w-5 rounded-full border px-1 text-[10px] font-bold leading-none transition-colors ${AI_STYLES[aiState].className}`}
+                aria-label={AI_STYLES[aiState].title}
+                title={AI_STYLES[aiState].title}
+              >
+                {AI_STYLES[aiState].label}
+              </button>
+            )}
+            <span className={`text-xs font-medium ${isPositive ? 'text-accent-green' : 'text-accent-red'}`}>
+              {isPositive ? '▲' : '▼'} {Math.abs(displayChange).toFixed(2)}%
+              {timeFrame !== '24h' && <span className="text-gray-600 ml-0.5">{timeFrame === '1h' ? '1h' : '7g'}</span>}
+            </span>
           </div>
         </div>
       </div>
 
       <div className="flex flex-col gap-1 flex-shrink-0 ml-1">
-        {aiState && onToggleAi && (
-          <button
-            onClick={() => { hapticLight(); onToggleAi(coin); }}
-            className={`h-5 min-w-5 rounded-full border px-1 text-[10px] font-bold leading-none transition-colors ${AI_STYLES[aiState].className}`}
-            aria-label={AI_STYLES[aiState].title}
-            title={AI_STYLES[aiState].title}
-          >
-            {AI_STYLES[aiState].label}
-          </button>
-        )}
         <button
           onClick={() => { hapticMedium(); onToggleFavorite(coin.id); }}
           className={`text-lg leading-none transition-transform active:scale-75 ${isFavorite ? 'text-accent-yellow' : 'text-gray-600 hover:text-gray-400'}`}

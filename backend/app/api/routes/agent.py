@@ -47,6 +47,17 @@ async def agent_data_coverage(_: ReadAccessDep) -> dict:
     return get_agent_service().data_coverage()
 
 
+@router.get("/eligible-tokens")
+async def agent_eligible_tokens(_: ReadAccessDep) -> dict:
+    """Return the configured tradable token universe for client UI gating."""
+
+    service = get_agent_service()
+    return {
+        "count": len(service.settings.eligible_tokens),
+        "tokens": service.settings.eligible_tokens,
+    }
+
+
 @router.put("/kill-switch")
 async def set_kill_switch(request: KillSwitchRequest, _: AdminAccessDep) -> dict:
     """Set the process-level agent kill switch."""

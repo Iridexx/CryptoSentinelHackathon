@@ -14,6 +14,11 @@ export interface AgentStatus {
   slow_loop_last_tick: string | null;
 }
 
+export interface EligibleTokensResponse {
+  count: number;
+  tokens: string[];
+}
+
 export interface SpotPositionView {
   position_id: string;
   asset: string;
@@ -220,6 +225,10 @@ async function request<T>(
 
 export function fetchAgentStatus(): Promise<AgentStatus> {
   return request<AgentStatus>('/api/v1/agent/status');
+}
+
+export function fetchEligibleTokens(): Promise<EligibleTokensResponse> {
+  return request<EligibleTokensResponse>('/api/v1/agent/eligible-tokens');
 }
 
 export function fetchSpotView(): Promise<SpotView> {

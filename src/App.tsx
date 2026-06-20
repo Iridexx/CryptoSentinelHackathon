@@ -34,6 +34,7 @@ import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 import AgentTab from './components/AgentTab';
+import { fetchEligibleTokens } from './services/agentApi';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const PERPAGE_KEY = 'cryptosentinel_perpage';
@@ -235,6 +236,7 @@ export default function App() {
   const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
+  const [eligibleSymbols, setEligibleSymbols] = useState<Set<string>>(() => new Set());
   const [aiCoinStates, setAiCoinStates] = useState<Record<string, AiCoinState>>(() => {
     try {
       return JSON.parse(localStorage.getItem(AI_COIN_STATES_KEY) ?? '{}') as Record<string, AiCoinState>;
@@ -245,6 +247,21 @@ export default function App() {
 
   const handleChartTap = useCallback((coin: Coin) => {
     setChartCoin(coin);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchEligibleTokens()
+      .then((response) => {
+        if (cancelled) return;
+        setEligibleSymbols(new Set(response.tokens.map((token) => token.toUpperCase())));
+      })
+      .catch(() => {
+        if (!cancelled) setEligibleSymbols(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleDismissFavAlert = useCallback((coinId: string) => {
@@ -258,6 +275,7 @@ export default function App() {
   }, []);
 
   const handleToggleAiCoin = useCallback((coin: Coin) => {
+    if (!eligibleSymbols.has(coin.symbol.toUpperCase())) return;
     setAiCoinStates((prev) => {
       const current = prev[coin.id] ?? 'inactive';
       const nextState: AiCoinState = current === 'inactive' ? 'analysis' : 'inactive';
@@ -270,7 +288,7 @@ export default function App() {
       localStorage.setItem(AI_COIN_STATES_KEY, JSON.stringify(next));
       return next;
     });
-  }, []);
+  }, [eligibleSymbols]);
 
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
@@ -671,22 +689,25 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {displayCoins.map((coin) => (
-                    <CoinCard
-                      key={coin.id}
-                      coin={coin}
-                      isFavorite={isFavorite(coin.id)}
-                      onToggleFavorite={toggleFavorite}
-                      onAddAlert={handleAddAlert}
-                      onChartTap={handleChartTap}
-                      currency={currency}
-                      showVolume={sortBy === 'volume'}
-                      timeFrame={timeFrame}
-                      rankDelta={rankDeltas.get(coin.id)}
-                      aiState={aiCoinStates[coin.id] ?? 'inactive'}
-                      onToggleAi={handleToggleAiCoin}
-                    />
-                  ))}
+                  {displayCoins.map((coin) => {
+                    const isTradable = eligibleSymbols.has(coin.symbol.toUpperCase());
+                    return (
+                      <CoinCard
+                        key={coin.id}
+                        coin={coin}
+                        isFavorite={isFavorite(coin.id)}
+                        onToggleFavorite={toggleFavorite}
+                        onAddAlert={handleAddAlert}
+                        onChartTap={handleChartTap}
+                        currency={currency}
+                        showVolume={sortBy === 'volume'}
+                        timeFrame={timeFrame}
+                        rankDelta={rankDeltas.get(coin.id)}
+                        aiState={isTradable ? (aiCoinStates[coin.id] ?? 'inactive') : undefined}
+                        onToggleAi={isTradable ? handleToggleAiCoin : undefined}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -725,23 +746,26 @@ export default function App() {
                     ))}
                   </div>
                   <div className="space-y-2">
-                    {sortedFavoriteCoins.map((coin) => (
-                      <CoinCard
-                        key={coin.id}
-                        coin={coin}
-                        isFavorite={true}
-                        onToggleFavorite={toggleFavorite}
-                        onAddAlert={handleAddAlert}
-                        onChartTap={handleChartTap}
-                        currency={currency}
-                        showVolume={favoriteSortBy === 'volume'}
-                        timeFrame={favoriteTimeFrame}
-                        alertPending={pendingFavAlerts.get(coin.id)}
-                        onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
-                        aiState={aiCoinStates[coin.id] ?? 'inactive'}
-                        onToggleAi={handleToggleAiCoin}
-                      />
-                    ))}
+                    {sortedFavoriteCoins.map((coin) => {
+                      const isTradable = eligibleSymbols.has(coin.symbol.toUpperCase());
+                      return (
+                        <CoinCard
+                          key={coin.id}
+                          coin={coin}
+                          isFavorite={true}
+                          onToggleFavorite={toggleFavorite}
+                          onAddAlert={handleAddAlert}
+                          onChartTap={handleChartTap}
+                          currency={currency}
+                          showVolume={favoriteSortBy === 'volume'}
+                          timeFrame={favoriteTimeFrame}
+                          alertPending={pendingFavAlerts.get(coin.id)}
+                          onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
+                          aiState={isTradable ? (aiCoinStates[coin.id] ?? 'inactive') : undefined}
+                          onToggleAi={isTradable ? handleToggleAiCoin : undefined}
+                        />
+                      );
+                    })}
                   </div>
                 </>
               )}
