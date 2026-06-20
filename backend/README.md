@@ -213,13 +213,30 @@ the shell history:
 
 ```powershell
 twak wallet create --no-keychain
-twak wallet address --chain bsctestnet
+twak wallet address --chain bsc
 ```
 
-Fund the address returned by the second command with test BNB from the official
-[BNB Chain Testnet Faucet](https://www.bnbchain.org/en/testnet-faucet). Testnet
-BNB has no monetary value. Keep enough BNB above the configured 15% reserve and
-the `0.000005` BNB floor.
+Fund the address returned by the second command with enough BNB for mainnet gas.
+Keep enough BNB above the configured 15% reserve and the `0.000005` BNB floor.
+
+On Windows PowerShell, do not pass non-ASCII TWAK wallet passwords through
+`--password`, `TWAK_WALLET_PASSWORD`, or `twak wallet keychain save --password`
+directly. PowerShell/CLI argument encoding can alter special characters and
+cause `Wallet authentication failed`. Put the exact password in a local UTF-8
+text file outside the repository and use the Node wrapper:
+
+```powershell
+node scripts/twak-password-file.cjs --password-file C:\tmp\twak-password.txt -- wallet keychain save --password-from-file --json
+twak wallet address --chain bsc --json
+```
+
+For one-off commands without storing the password in TWAK keychain:
+
+```powershell
+node scripts/twak-password-file.cjs --password-file C:\tmp\twak-password.txt -- wallet address --chain bsc --json
+```
+
+Delete the password file after confirming the keychain works.
 
 ### Configure BSC
 
@@ -289,11 +306,11 @@ written to structured logs.
 
 ### Run a guarded spot smoke test
 
-First verify that TWAK returns the funded testnet address:
+First verify that TWAK returns the funded mainnet address:
 
 ```powershell
-twak wallet address --chain bsctestnet
-twak wallet balance --chain bsctestnet
+twak wallet address --chain bsc --json
+twak wallet balance --chain bsc --json
 ```
 
 Then run one small swap through CryptoSentinel's Step 4 layer:
@@ -344,6 +361,14 @@ If a swap fails, check the events in order:
 If `TWAK REST credentials are not configured` appears, `Settings` does not see
 both `TWAK_ACCESS_ID` and `TWAK_HMAC_SECRET`. Add them to `.env` with exactly
 those names and restart the shell/backend process.
+
+If migrating to a new TWAK wallet, persist the public execution wallet in
+RuntimeState:
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+.\backend\.venv\Scripts\python.exe .\backend\scripts\select_twak_wallet.py --address 0xDF27d02a536F1AaAF16a25D5E76DA50d716EAfeB
+```
 
 Competition registration is a separate BSC mainnet prerequisite, not a trading
 operation:

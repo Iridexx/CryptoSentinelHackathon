@@ -156,8 +156,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- scripts/ - script di avvio backend.
 |   |   |-- encrypt_wallet.py - creazione interattiva keystore Web3 cifrato senza input CLI.
 |   |   |-- register_competition.py - helper manuale esplicito per `twak compete register --json`, con password TWAK via prompt nascosto.
+|   |   |-- select_twak_wallet.py - helper admin locale per aggiungere/selezionare il nuovo wallet TWAK pubblico in RuntimeState.
 |   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
-|   |   |-- twak_rpc_route_probe.py - diagnostica quote-only TWAK REST ruotando manualmente le RPC BSC configurate.
+|   |   |-- twak_rpc_route_probe.py - diagnostica quote-only TWAK REST ruotando manualmente le RPC BSC configurate; dominio smartchain/smartchain-testnet derivato dalla rete.
 |   |   |-- pancakeswap_smoke_test.py - smoke test PancakeSwap diretto (quote-only di default; --execute swap reale, mainnet solo con --allow-mainnet).
 |   |   |-- run_backend.ps1 - avvio Windows PowerShell (dev/prod, legge host:port da Settings).
 |   |   `-- run_backend.sh  - avvio Linux/bash per VPS (dev/prod, stesso comportamento).
@@ -201,6 +202,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step7.md - report estensione app mobile Step 7.
 |       |-- report_step8.md - report dashboard web unificata Step 8.
 |       |-- report_step9.md - report testing e vincoli qualificazione Step 9.
+|       |-- report_twak_wallet_migration.md - report migrazione nuovo wallet TWAK, fix mainnet/domain e workaround password Windows.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
@@ -219,6 +221,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |-- scripts/ - script frontend/tooling.
 |   |-- start_dashboard.ps1 - avvio dashboard Vite su porta 5176 in finestra PowerShell visibile, senza avvio parallelo.
 |   |-- restart_dashboard.ps1 - riavvio dashboard: chiude il listener esistente su 5176 e poi avvia Vite.
+|   |-- twak-password-file.cjs - wrapper Node per leggere password TWAK da file UTF-8 ed evitare problemi encoding PowerShell/keychain.
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
@@ -321,6 +324,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 | ANTHROPIC_API_KEY | Chiave API Anthropic/Claude. |
 | TWAK_ACCESS_ID | Access ID Trust Wallet Agent Kit. |
 | TWAK_HMAC_SECRET | Segreto HMAC Trust Wallet Agent Kit. |
+| TWAK_WALLET_PASSWORD | Password wallet TWAK per ambienti headless; su Windows con caratteri non-ASCII preferire `scripts/twak-password-file.cjs`. |
 | WALLET_ENCRYPTED_PRIVATE_KEY_PATH | Path a materiale wallet cifrato; trattato come sensibile. |
 | WALLET_KEY_PASSPHRASE_ENV | Nome variabile/segreto che fornisce la passphrase wallet. |
 | FCM_CREDENTIALS_PATH | Path service account Firebase; trattato come sensibile. |
@@ -350,7 +354,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
 | Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
 | Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
-| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa e warm-up OHLCV consolidati; suite completa 119 passed / 2 failed HMAC TWAK pre-esistenti prima del consolidamento watchlist/warm-up. |
+| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV e migrazione nuovo wallet TWAK consolidati; suite completa 124 passed. |
 
 ## 5. DECISIONI ARCHITETTURALI
 

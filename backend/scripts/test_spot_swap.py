@@ -63,6 +63,7 @@ async def _run(args: argparse.Namespace) -> int:
         raise RuntimeError("Spot smoke test requires BSC testnet chain ID 97")
     if not settings.bsc_rpc_urls:
         raise RuntimeError("No BSC testnet RPC endpoints are configured")
+    domain = args.domain or ("smartchain" if settings.bsc_network == "mainnet" else "smartchain-testnet")
 
     password = getpass.getpass("TWAK wallet password: ")
     if not password:
@@ -130,8 +131,8 @@ async def _run(args: argparse.Namespace) -> int:
             from_asset=args.from_asset or NATIVE_EVM_ASSET,
             to_asset=args.to_asset,
             wallet_address=address,
-            from_domain=args.domain,
-            to_domain=args.domain,
+            from_domain=domain,
+            to_domain=domain,
             slippage_pct=args.slippage,
             gas_decision=decision,
         )
@@ -159,7 +160,7 @@ def main() -> int:
     parser.add_argument("amount", type=_decimal)
     parser.add_argument("from_token")
     parser.add_argument("to_token")
-    parser.add_argument("--domain", default="smartchain-testnet")
+    parser.add_argument("--domain", default=None)
     parser.add_argument("--from-asset")
     parser.add_argument("--to-asset", required=True)
     parser.add_argument("--from-decimals", type=int, default=18)

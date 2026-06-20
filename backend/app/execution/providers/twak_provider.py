@@ -132,6 +132,7 @@ class TWAKProvider(ExecutionProvider):
         )
 
     def status(self) -> ExecutionProviderStatus:
+        chain = "bsc" if self._settings.bsc_network == "mainnet" else "bsctestnet"
         return ExecutionProviderStatus(
             name=self.name,
             configured=self._client.configured,
@@ -142,6 +143,8 @@ class TWAKProvider(ExecutionProvider):
             details={
                 "approval_policy": self._settings.twak_approval_policy,
                 "allowed_spender_count": len(self._settings.twak_allowed_spenders),
-                "chain": self._settings.twak_chain,
+                "chain": chain,
+                "domain": self._default_domain(),
+                "testnet_only_execution": self._settings.bsc_network == "testnet",
             },
         )

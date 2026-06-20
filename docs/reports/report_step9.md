@@ -35,6 +35,7 @@
 - I 2 failed sono esattamente il debito HMAC TWAK pre-esistente in `backend/tests/unit/test_execution_layer.py`:
   - `test_twak_hmac_matches_documented_wire_format`
   - `test_twak_hmac_supports_current_sdk_wire_format`
+- Dopo la migrazione nuovo wallet TWAK, i test HMAC sono stati aggiornati al formato SDK attuale e la suite backend completa passa con `124 passed`.
 - Dopo il consolidamento watchlist AI:
   - `python -m py_compile backend/app/agent/watchlist.py backend/app/agent/service.py backend/app/api/routes/agent.py` completato con successo.
   - `npm run build` completato con successo.
@@ -53,7 +54,7 @@
 
 - Configurare una route heartbeat live Spot concreta prima della trading window se si vuole che il retry 20:00-23:30 UTC possa produrre un trade reale fuori dry-run.
 - Eseguire manualmente la registrazione competizione quando wallet, gas e timing gara sono confermati.
-- Il blocco TWAK 403 resta esterno e non risolto in Step 9, come da scope.
+- Il blocco TWAK 403 è stato risolto dopo Step 9 con migrazione a nuova API key + nuovo wallet TWAK + reinit; vedere `docs/reports/report_twak_wallet_migration.md`.
 - Eseguire un test end-to-end con backend riavviato: inserire admin token in app, selezionare token dalla scheda Agente > Coins, verificare persistenza dopo restart e osservare `slow_tick` su watchlist non vuota.
 
 ## 6. VERIFICHE TECNICHE
@@ -68,7 +69,7 @@
 | Competition registration helper | Predisposto, non eseguito |
 | Watchlist AI operativa mobile/backend | Py compile + frontend build passati; E2E runtime da verificare |
 | Warm-up OHLCV watchlist | Test unitario passato; popola cache Data Coverage con 288 candele 5m |
-| Full backend suite | 119 passed, 2 failed HMAC TWAK pre-esistenti |
+| Full backend suite | 124 passed dopo migrazione nuovo wallet TWAK |
 
 ## 7. STATO DELIVERABLE
 

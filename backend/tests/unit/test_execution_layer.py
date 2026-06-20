@@ -34,7 +34,7 @@ def _valid_settings_payload() -> dict[str, Any]:
     return {
         "eligible_tokens": [f"TOKEN_{index}" for index in range(149)],
         "bnb_gas_reserve_pct": 15,
-        "bnb_gas_reserve_min": 0.005,
+        "bnb_gas_reserve_min": 0.000005,
     }
 
 
@@ -87,7 +87,7 @@ def test_exact_approval_policy_rejects_unknown_and_excess_allowance() -> None:
 
 
 def test_gas_guard_preserves_percentage_and_floor_and_requires_profit() -> None:
-    guard = GasGuard(Decimal("15"), Decimal("0.005"))
+    guard = GasGuard(Decimal("15"), Decimal("0.000005"))
     allowed = guard.evaluate(
         balance_wei=10**18,
         gas_limit=21_000,
@@ -257,7 +257,7 @@ def _twak_settings(**overrides: Any) -> SimpleNamespace:
 
 
 def _allowed_gas_decision() -> Any:
-    return GasGuard(Decimal("15"), Decimal("0.005")).evaluate(
+    return GasGuard(Decimal("15"), Decimal("0.000005")).evaluate(
         balance_wei=10**18,
         gas_limit=21_000,
         gas_price_wei=1_000_000_000,
@@ -281,24 +281,7 @@ def test_twak_error_detail_redacts_sensitive_patterns() -> None:
     assert "[redacted-url]" in detail
 
 
-def test_twak_hmac_matches_documented_wire_format() -> None:
-    headers = _sign_amber_request(
-        "GET",
-        "/amber-api/v1/domains",
-        "",
-        "access-id",
-        "secret",
-        nonce="fixed-nonce",
-        request_date="2026-06-15T12:00:00Z",
-    )
-    plaintext = "GET/amber-api/v1/domainsaccess-idfixed-nonce2026-06-15T12:00:00Z"
-    expected = base64.b64encode(
-        hmac.new(b"secret", plaintext.encode(), hashlib.sha256).digest()
-    ).decode()
-    assert headers["Authorization"] == expected
-
-
-def test_twak_hmac_supports_current_sdk_wire_format() -> None:
+def test_twak_hmac_matches_current_sdk_wire_format() -> None:
     headers = _sign_amber_request(
         "GET",
         "/amber-api/v1/domains",
@@ -307,10 +290,32 @@ def test_twak_hmac_supports_current_sdk_wire_format() -> None:
         "secret",
         nonce="fixed-nonce",
         request_date="Sun, 15 Jun 2026 12:00:00 GMT",
-        profile="sdk",
     )
     plaintext = (
         "GET;/amber-api/v1/domains;;access-id;fixed-nonce;"
+        "Sun, 15 Jun 2026 12:00:00 GMT"
+    )
+    expected = base64.b64encode(
+        hmac.new(b"secret", plaintext.encode(), hashlib.sha256).digest()
+    ).decode()
+    assert headers["Authorization"] == f"HMAC-SHA256 Signature={expected}"
+    assert headers["X-TW-CREDENTIAL"] == "access-id"
+    assert headers["X-TW-NONCE"] == "fixed-nonce"
+    assert headers["X-TW-DATE"] == "Sun, 15 Jun 2026 12:00:00 GMT"
+
+
+def test_twak_hmac_sorts_query_params() -> None:
+    headers = _sign_amber_request(
+        "GET",
+        "/amber-api/v1/route",
+        "z=last&a=first",
+        "access-id",
+        "secret",
+        nonce="fixed-nonce",
+        request_date="Sun, 15 Jun 2026 12:00:00 GMT",
+    )
+    plaintext = (
+        "GET;/amber-api/v1/route;a=first&z=last;access-id;fixed-nonce;"
         "Sun, 15 Jun 2026 12:00:00 GMT"
     )
     expected = base64.b64encode(
@@ -373,7 +378,7 @@ async def test_twak_swap_requires_testnet_slippage_and_pancake_route() -> None:
 @pytest.mark.asyncio
 async def test_twak_swap_cannot_bypass_rejected_gas_guard() -> None:
     client = StubTwakClient(_twak_settings(), "PancakeSwap V2")
-    rejected = GasGuard(Decimal("15"), Decimal("0.005")).evaluate(
+    rejected = GasGuard(Decimal("15"), Decimal("0.000005")).evaluate(
         balance_wei=10**18,
         gas_limit=100_000,
         gas_price_wei=10_000_000_000,

@@ -55,21 +55,23 @@ class ExecutionService:
             settings.bsc_rpc_timeout_seconds,
             settings.tatum_rpc_api_key,
         )
-        self.twak = TwakClient(settings)
-        self.spot_registry = ExecutionProviderRegistry(settings)
-        self.perp_registry = PerpExecutionRegistry(settings)
+        self.twak = TwakClient(self.settings)
+        self.spot_registry = ExecutionProviderRegistry(self.settings)
+        self.perp_registry = PerpExecutionRegistry(self.settings)
         self.x402 = X402Client(
-            settings,
+            self.settings,
             self.twak,
             session_factory=lambda: get_session_factory()(),
-            user_id=str(settings.default_user_id),
+            user_id=str(self.settings.default_user_id),
         )
 
     def status(self) -> dict[str, Any]:
+        testnet_only = self.settings.bsc_network == "testnet"
         return {
             "network": self.settings.bsc_network,
+            "chain": "bsc" if self.settings.bsc_network == "mainnet" else "bsctestnet",
             "chain_id": self.settings.bsc_chain_id,
-            "testnet_only": True,
+            "testnet_only": testnet_only,
             "rpc_endpoint_count": len(self.settings.bsc_rpc_urls),
             "rpc_failover_configured": len(self.settings.bsc_rpc_urls) >= 2,
             "active_rpc_endpoint_index": get_active_rpc_index(self.settings),

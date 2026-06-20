@@ -548,7 +548,7 @@ L'utente passa il report per revisione. Solo dopo approvazione si procede.
 ## N. QUESTIONI APERTE + VERIFICHE TECNICHE DELEGATE
 
 ### Da chiarire con organizzatori (Telegram/DoraHacks)
-- ⏳ **403 swap TWAK** — BLOCCANTE per la gara. Problema diffuso (più partecipanti), in carico a Trust Wallet. L'esecuzione on-chain via TWAK è obbligatoria, quindi questo va risolto. Insistere sul Telegram.
+- ✅ **403 swap TWAK** — RISOLTO. Causa legata all'account/wallet specifico, non al piano Free. Soluzione verificata: nuova API key + nuovo wallet TWAK + reinizializzazione completa (`twak init` + `twak wallet create`). Quote-only mainnet confermato funzionante con il wallet `0xDF27d02a536F1AaAF16a25D5E76DA50d716EAfeB`.
 - ⏳ **Spot vs Perp nel ranking** — determina la priorità strategica dello Step 6. In attesa di risposta.
 - Valore esatto del **drawdown cap** della gara (default prudenziale -15% intanto)
 - Dettagli scoring (raw vs risk-adjusted)

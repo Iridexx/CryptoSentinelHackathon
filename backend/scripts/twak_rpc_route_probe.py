@@ -49,6 +49,10 @@ def _settings_for_single_rpc(settings: Settings, endpoint: str) -> Settings:
     return settings.model_copy(update={"bsc_rpc_urls": [endpoint]})
 
 
+def _default_domain(settings: Settings) -> str:
+    return "smartchain" if settings.bsc_network == "mainnet" else "smartchain-testnet"
+
+
 async def _probe_endpoint(settings: Settings, args: argparse.Namespace, *, index: int, endpoint: str) -> bool:
     endpoint_label = _safe_endpoint_label(endpoint)
     single_rpc_settings = _settings_for_single_rpc(settings, endpoint)
@@ -126,11 +130,13 @@ async def _run(args: argparse.Namespace) -> int:
     logger.info(
         "twak_rpc_probe_started",
         configured_rpc_count=len(settings.bsc_rpc_urls),
-        domain=args.domain,
+        domain=args.domain or _default_domain(settings),
         amount_atomic=int(args.amount * Decimal(10**args.from_decimals)),
     )
     any_success = False
     for index, endpoint in enumerate(settings.bsc_rpc_urls):
+        if args.domain is None:
+            args.domain = _default_domain(settings)
         success = await _probe_endpoint(settings, args, index=index, endpoint=endpoint)
         any_success = any_success or success
         if success and args.stop_on_success:
@@ -149,7 +155,7 @@ def main() -> int:
     parser.add_argument("--to-asset", required=True)
     parser.add_argument("--from-decimals", type=int, default=18)
     parser.add_argument("--slippage", type=_decimal, default=Decimal("0.5"))
-    parser.add_argument("--domain", default="smartchain-testnet")
+    parser.add_argument("--domain", default=None)
     parser.add_argument("--stop-on-success", action="store_true")
     args = parser.parse_args()
     try:

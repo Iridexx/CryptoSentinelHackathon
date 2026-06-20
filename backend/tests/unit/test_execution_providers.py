@@ -37,14 +37,14 @@ def _settings(**overrides: Any) -> Settings:
     payload: dict[str, Any] = {
         "eligible_tokens": [f"TOKEN_{index}" for index in range(149)],
         "bnb_gas_reserve_pct": 15,
-        "bnb_gas_reserve_min": 0.005,
+        "bnb_gas_reserve_min": 0.000005,
     }
     payload.update(overrides)
     return Settings.model_validate(payload)
 
 
 def _allowed_gas_decision() -> Any:
-    return GasGuard(Decimal("15"), Decimal("0.005")).evaluate(
+    return GasGuard(Decimal("15"), Decimal("0.000005")).evaluate(
         balance_wei=10**18,
         gas_limit=21_000,
         gas_price_wei=1_000_000_000,
@@ -54,7 +54,7 @@ def _allowed_gas_decision() -> Any:
 
 
 def _rejected_gas_decision() -> Any:
-    return GasGuard(Decimal("15"), Decimal("0.005")).evaluate(
+    return GasGuard(Decimal("15"), Decimal("0.000005")).evaluate(
         balance_wei=10**18,
         gas_limit=100_000,
         gas_price_wei=10_000_000_000,

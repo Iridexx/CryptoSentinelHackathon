@@ -305,7 +305,8 @@ class PancakeSwapProvider(ExecutionProvider):
             details={
                 "wbnb_address": self.wbnb_address,
                 "rpc_endpoint_count": len(self._settings.bsc_rpc_urls),
-                "testnet_only_execution": True,
+                "chain": "bsc" if self._settings.bsc_network == "mainnet" else "bsctestnet",
+                "testnet_only_execution": self._settings.bsc_network == "testnet",
             },
         )
 

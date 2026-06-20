@@ -39,5 +39,6 @@ def effective_execution_settings(settings: Settings) -> Settings:
         update={
             "bsc_network": network,
             "bsc_chain_id": BSC_CHAIN_IDS[network],
+            "twak_chain": "bsc" if network == "mainnet" else "bsctestnet",
         }
     )
