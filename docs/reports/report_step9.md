@@ -25,6 +25,7 @@
 - `GET /api/v1/agent/watchlist` espone eligible universe e token selezionati; `PUT /api/v1/agent/watchlist` aggiorna la selezione operativa senza esporre segreti.
 - La tab mobile Agente include la nuova vista `Coins` con token tradabili, token selezionati e ricerca. Il toggle AI sulle card usa la stessa watchlist backend: arancione significa token effettivamente passato all'agente.
 - `AgentService.slow_tick` usa la watchlist selezionata per costruire payload `ASSETUSDT` Spot/Perp e valutare i signal engine; con watchlist vuota resta idle/fail-closed.
+- Aggiunto warm-up OHLCV storico per la watchlist AI: all'avvio backend e quando vengono aggiunti token, il backend scarica subito klines 5m storiche Binance Spot/Futures e popola la cache letta da Data Coverage e signal engine. Le richieste sono serializzate con lock e cadenza minima per evitare burst sul rate limit.
 
 ## 3. COSA È STATO VERIFICATO
 
@@ -37,6 +38,9 @@
 - Dopo il consolidamento watchlist AI:
   - `python -m py_compile backend/app/agent/watchlist.py backend/app/agent/service.py backend/app/api/routes/agent.py` completato con successo.
   - `npm run build` completato con successo.
+- Dopo il warm-up storico:
+  - `python -m py_compile backend/app/agent/ohlcv_warmup.py backend/app/api/routes/agent.py backend/app/main.py backend/tests/unit/test_agent_step6.py` completato con successo.
+  - `backend\.venv\Scripts\python.exe -m pytest backend/tests/unit/test_agent_step6.py -q` completato con `21 passed`.
 
 ## 4. SCOSTAMENTI DAL PIANO
 
@@ -63,6 +67,7 @@
 | Dry-run Spot/Perp cycle | Passata |
 | Competition registration helper | Predisposto, non eseguito |
 | Watchlist AI operativa mobile/backend | Py compile + frontend build passati; E2E runtime da verificare |
+| Warm-up OHLCV watchlist | Test unitario passato; popola cache Data Coverage con 288 candele 5m |
 | Full backend suite | 119 passed, 2 failed HMAC TWAK pre-esistenti |
 
 ## 7. STATO DELIVERABLE

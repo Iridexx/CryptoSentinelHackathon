@@ -15,6 +15,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.loops import fast_loop as agent_fast_loop
 from backend.app.agent.loops import slow_loop as agent_slow_loop
+from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.api.routes import api_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
@@ -67,6 +68,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session,
             fcm_tokens_path=settings.fcm_token_store_path,
         )
+    try:
+        warmup = await warmup_selected_watchlist(settings)
+        logger.info(
+            "agent_startup_ohlcv_warmup_finished",
+            status=warmup.get("status"),
+            reason=warmup.get("reason"),
+            requested_assets=warmup.get("requested_assets", 0),
+            loaded=warmup.get("loaded", 0),
+            ready=warmup.get("ready", 0),
+        )
+    except Exception as exc:
+        logger.warning("agent_startup_ohlcv_warmup_failed", error=str(exc))
 
     heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
     price_checker_task = asyncio.create_task(price_checker_loop())

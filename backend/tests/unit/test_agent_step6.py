@@ -11,6 +11,7 @@ from uuid import UUID
 import pytest
 
 from backend.app.agent.brain import ClaudeMetaController
+from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.agent.risk import KillSwitchState, RiskManager, SignalIntent
 from backend.app.agent.service import AgentService
 from backend.app.agent.signals.common.indicators import Candle
@@ -18,6 +19,7 @@ from backend.app.agent.signals.perp import binance_klines
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineCacheEntry, clear_kline_cache
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
+from backend.app.agent.watchlist import set_selected_watchlist
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import SpotPosition
@@ -494,8 +496,11 @@ async def test_agent_service_does_not_run_risk_universe_on_skipped_signal(db) ->
     assert result["execution"]["reason"] == "insufficient_ohlcv_history"
 
 
-def test_agent_service_data_coverage_reports_cached_spot_candles() -> None:
+@pytest.mark.asyncio
+async def test_agent_service_data_coverage_reports_cached_spot_candles(db) -> None:
     clear_kline_cache()
+    cfg = settings(markets_enabled="spot", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)])
+    set_selected_watchlist(cfg, ["CAKE"])
     binance_klines._KLINE_CACHE[("spot", "CAKEUSDT", "5m")] = BinanceKlineCacheEntry(
         market="spot",
         symbol="CAKEUSDT",
@@ -504,7 +509,7 @@ def test_agent_service_data_coverage_reports_cached_spot_candles() -> None:
         updated_at=datetime.now(UTC),
     )
     service = AgentService(
-        settings(markets_enabled="spot", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)]),
+        cfg,
         spot_registry=SimpleNamespace(),
         perp_registry=SimpleNamespace(),
     )
@@ -521,10 +526,13 @@ def test_agent_service_data_coverage_reports_cached_spot_candles() -> None:
     assert cake["source"] == "Binance klines 5m"
 
 
-def test_agent_service_data_coverage_reports_cache_miss() -> None:
+@pytest.mark.asyncio
+async def test_agent_service_data_coverage_reports_cache_miss(db) -> None:
     clear_kline_cache()
+    cfg = settings(markets_enabled="spot", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)])
+    set_selected_watchlist(cfg, ["CAKE"])
     service = AgentService(
-        settings(markets_enabled="spot", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)]),
+        cfg,
         spot_registry=SimpleNamespace(),
         perp_registry=SimpleNamespace(),
     )
@@ -535,3 +543,43 @@ def test_agent_service_data_coverage_reports_cache_miss() -> None:
     assert cake["available_candles"] == 0
     assert cake["status"] == "insufficient"
     assert cake["updated_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_watchlist_warmup_populates_data_coverage_cache(db) -> None:
+    clear_kline_cache()
+    cfg = settings(markets_enabled="both", eligible_tokens=["CAKE"] + [f"TOKEN_{i}" for i in range(99)])
+    set_selected_watchlist(cfg, ["CAKE"])
+
+    class FakeFeed:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def fetch(self, **kwargs):
+            self.calls.append(kwargs)
+            payload = candles(288)
+            binance_klines._KLINE_CACHE[(kwargs["market"], kwargs["symbol"], kwargs["interval"])] = BinanceKlineCacheEntry(
+                market=kwargs["market"],
+                symbol=kwargs["symbol"],
+                interval=kwargs["interval"],
+                candles=payload,
+                updated_at=datetime.now(UTC),
+            )
+            return payload
+
+    feed = FakeFeed()
+    result = await warmup_selected_watchlist(cfg, feed=feed)
+    service = AgentService(
+        cfg,
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    coverage = service.data_coverage()
+    cake_items = [item for item in coverage["items"] if item["asset"] == "CAKE"]
+
+    assert result["loaded"] == 2
+    assert len(feed.calls) == 2
+    assert all(call["limit"] >= 288 for call in feed.calls)
+    assert {item["market"] for item in cake_items} == {"spot", "perp"}
+    assert all(item["available_candles"] == 288 for item in cake_items)
+    assert all(item["status"] == "ready" for item in cake_items)

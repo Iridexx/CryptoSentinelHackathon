@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.agent.risk import KillSwitchState
 from backend.app.agent.service import get_agent_service
 from backend.app.agent.watchlist import selected_watchlist, set_selected_watchlist
+from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SessionDep
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
@@ -82,15 +83,23 @@ async def set_agent_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep)
     """Persist the operational agent watchlist."""
 
     service = get_agent_service()
+    previous = set(selected_watchlist(service.settings))
     try:
         selected = set_selected_watchlist(service.settings, request.tokens)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    added = [token for token in selected if token not in previous]
+    warmup = await warmup_selected_watchlist(service.settings, assets=added) if added else {
+        "status": "skipped",
+        "reason": "no_new_tokens",
+        "items": [],
+    }
     return {
         "eligible_count": len(service.settings.eligible_tokens),
         "eligible_tokens": service.settings.eligible_tokens,
         "selected_count": len(selected),
         "selected_tokens": selected,
+        "warmup": warmup,
     }
 
 
