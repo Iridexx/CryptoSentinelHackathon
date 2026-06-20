@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agent.risk import KillSwitchState
 from backend.app.agent.service import get_agent_service
+from backend.app.agent.watchlist import selected_watchlist, set_selected_watchlist
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SessionDep
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
@@ -16,6 +17,10 @@ router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 
 class KillSwitchRequest(BaseModel):
     state: Literal["running", "soft_stop", "hard_stop", "degraded"]
+
+
+class AgentWatchlistRequest(BaseModel):
+    tokens: list[str] = Field(default_factory=list)
 
 
 class AgentEvaluateRequest(BaseModel):
@@ -55,6 +60,37 @@ async def agent_eligible_tokens(_: ReadAccessDep) -> dict:
     return {
         "count": len(service.settings.eligible_tokens),
         "tokens": service.settings.eligible_tokens,
+    }
+
+
+@router.get("/watchlist")
+async def agent_watchlist(_: ReadAccessDep) -> dict:
+    """Return the eligible universe and the operational agent watchlist."""
+
+    service = get_agent_service()
+    selected = selected_watchlist(service.settings)
+    return {
+        "eligible_count": len(service.settings.eligible_tokens),
+        "eligible_tokens": service.settings.eligible_tokens,
+        "selected_count": len(selected),
+        "selected_tokens": selected,
+    }
+
+
+@router.put("/watchlist")
+async def set_agent_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep) -> dict:
+    """Persist the operational agent watchlist."""
+
+    service = get_agent_service()
+    try:
+        selected = set_selected_watchlist(service.settings, request.tokens)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "eligible_count": len(service.settings.eligible_tokens),
+        "eligible_tokens": service.settings.eligible_tokens,
+        "selected_count": len(selected),
+        "selected_tokens": selected,
     }
 
 

@@ -20,7 +20,7 @@ import {
 } from '../services/agentApi';
 import { hapticLight } from '../utils/haptics';
 
-type AgentPane = 'spot' | 'perp' | 'global' | 'setup';
+type AgentPane = 'spot' | 'perp' | 'global' | 'coins' | 'setup';
 
 const fmtUsd = (value: string | number | null | undefined) => {
   const n = Number(value ?? 0);
@@ -88,6 +88,27 @@ const SegmentButton: FC<{ id: AgentPane; active: boolean; label: string; onClick
     }`}
   >
     {label}
+  </button>
+);
+
+const TokenToggle: FC<{
+  symbol: string;
+  selected: boolean;
+  disabled: boolean;
+  onToggle: (symbol: string) => void;
+}> = ({ symbol, selected, disabled, onToggle }) => (
+  <button
+    type="button"
+    disabled={disabled}
+    onClick={() => { hapticLight(); onToggle(symbol); }}
+    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-45 ${
+      selected
+        ? 'border-accent-yellow/50 bg-accent-yellow/10 text-accent-yellow'
+        : 'border-dark-700 bg-dark-800 text-gray-300'
+    }`}
+  >
+    <span className="min-w-0 truncate text-sm font-semibold">{symbol}</span>
+    <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selected ? 'bg-accent-yellow' : 'bg-gray-600'}`} />
   </button>
 );
 
@@ -263,6 +284,79 @@ const GlobalPane: FC<{ data: GlobalView | null; status: AgentStatus | null }> = 
       ) : hasPortfolio && (
         <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
       )}
+    </div>
+  );
+};
+
+const CoinsPane: FC<{
+  eligibleTokens: string[];
+  selectedAiSymbols: Set<string>;
+  adminToken: string;
+  saving: boolean;
+  error: string;
+  onToggle: (symbol: string) => void;
+}> = ({ eligibleTokens, selectedAiSymbols, adminToken, saving, error, onToggle }) => {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toUpperCase();
+  const selectedTokens = eligibleTokens.filter((symbol) => selectedAiSymbols.has(symbol.toUpperCase()));
+  const filteredTokens = eligibleTokens.filter((symbol) => symbol.toUpperCase().includes(normalizedQuery));
+  const disabled = !adminToken || saving;
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-xl bg-dark-800 px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white">Agent coins</h3>
+            <p className="mt-0.5 truncate text-xs text-gray-500">Tradabili {eligibleTokens.length} - attive {selectedTokens.length}</p>
+          </div>
+          <span className="rounded-full bg-accent-yellow/15 px-2 py-1 text-xs font-semibold text-accent-yellow">
+            {selectedTokens.length}
+          </span>
+        </div>
+        {!adminToken && <p className="mt-3 rounded-lg bg-dark-900 px-3 py-2 text-xs text-gray-500">Inserisci admin token in Setup per modificare.</p>}
+        {error && <p className="mt-3 rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{error}</p>}
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Selezionate</h3>
+        {selectedTokens.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {selectedTokens.map((symbol) => (
+              <TokenToggle key={`selected-${symbol}`} symbol={symbol} selected disabled={disabled} onToggle={onToggle} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="Nessuna coin attiva" detail="Seleziona una coin tradabile per passarla all'agente." />
+        )}
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Tradabili</h3>
+          {saving && <span className="text-xs text-accent-yellow">Saving</span>}
+        </div>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search token"
+          className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          {filteredTokens.map((symbol) => (
+            <TokenToggle
+              key={symbol}
+              symbol={symbol}
+              selected={selectedAiSymbols.has(symbol.toUpperCase())}
+              disabled={disabled}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+        {filteredTokens.length === 0 && (
+          <EmptyState title="Nessun token trovato" detail="La ricerca filtra solo l'universo eligible." />
+        )}
+      </section>
     </div>
   );
 };
@@ -480,7 +574,25 @@ const SetupPane: FC<{
   );
 };
 
-const AgentTab: FC = () => {
+interface AgentTabProps {
+  adminToken: string;
+  onAdminToken: (value: string) => void;
+  eligibleTokens: string[];
+  selectedAiSymbols: Set<string>;
+  watchlistSaving: boolean;
+  watchlistError: string;
+  onToggleAiSymbol: (symbol: string) => void;
+}
+
+const AgentTab: FC<AgentTabProps> = ({
+  adminToken,
+  onAdminToken,
+  eligibleTokens,
+  selectedAiSymbols,
+  watchlistSaving,
+  watchlistError,
+  onToggleAiSymbol,
+}) => {
   const [pane, setPane] = useState<AgentPane>('spot');
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [spot, setSpot] = useState<SpotView | null>(null);
@@ -489,7 +601,6 @@ const AgentTab: FC = () => {
   const [settings, setSettings] = useState<AgentMobileSettings>(defaultSettings);
   const [wallet, setWallet] = useState<MobileWalletView | null>(null);
   const [validation, setValidation] = useState<CredentialValidationResponse | null>(null);
-  const [adminToken, setAdminToken] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -585,23 +696,37 @@ const AgentTab: FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid grid-cols-5 gap-1.5">
         <SegmentButton id="spot" label="Spot" active={pane === 'spot'} onClick={setPane} />
         <SegmentButton id="perp" label="Perp" active={pane === 'perp'} onClick={setPane} />
         <SegmentButton id="global" label="Global" active={pane === 'global'} onClick={setPane} />
+        <SegmentButton id="coins" label="Coins" active={pane === 'coins'} onClick={setPane} />
         <SegmentButton id="setup" label="Setup" active={pane === 'setup'} onClick={setPane} />
       </div>
 
       {error && <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{error}</p>}
+      {watchlistError && pane !== 'coins' && (
+        <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{watchlistError}</p>
+      )}
       {pane === 'spot' && <SpotPane data={spot} />}
       {pane === 'perp' && <PerpPane data={perp} />}
       {pane === 'global' && <GlobalPane data={global} status={status} />}
+      {pane === 'coins' && (
+        <CoinsPane
+          eligibleTokens={eligibleTokens}
+          selectedAiSymbols={selectedAiSymbols}
+          adminToken={adminToken}
+          saving={watchlistSaving}
+          error={watchlistError}
+          onToggle={onToggleAiSymbol}
+        />
+      )}
       {pane === 'setup' && (
         <SetupPane
           settings={settings}
           onSettings={setSettings}
           adminToken={adminToken}
-          onAdminToken={setAdminToken}
+          onAdminToken={onAdminToken}
           wallet={wallet}
           validation={validation}
           agentStatus={status}

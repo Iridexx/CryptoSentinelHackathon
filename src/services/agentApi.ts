@@ -19,6 +19,13 @@ export interface EligibleTokensResponse {
   tokens: string[];
 }
 
+export interface AgentWatchlistResponse {
+  eligible_count: number;
+  eligible_tokens: string[];
+  selected_count: number;
+  selected_tokens: string[];
+}
+
 export interface SpotPositionView {
   position_id: string;
   asset: string;
@@ -229,6 +236,18 @@ export function fetchAgentStatus(): Promise<AgentStatus> {
 
 export function fetchEligibleTokens(): Promise<EligibleTokensResponse> {
   return request<EligibleTokensResponse>('/api/v1/agent/eligible-tokens');
+}
+
+export function fetchAgentWatchlist(): Promise<AgentWatchlistResponse> {
+  return request<AgentWatchlistResponse>('/api/v1/agent/watchlist');
+}
+
+export function updateAgentWatchlist(tokens: string[], adminToken: string): Promise<AgentWatchlistResponse> {
+  return request<AgentWatchlistResponse>('/api/v1/agent/watchlist', {
+    method: 'PUT',
+    body: { tokens },
+    token: adminToken,
+  });
 }
 
 export function fetchSpotView(): Promise<SpotView> {

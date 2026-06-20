@@ -34,8 +34,8 @@ import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 import AgentTab from './components/AgentTab';
-import { fetchEligibleTokens } from './services/agentApi';
-import { toEligibleSymbolSet } from './utils/eligibleTokens';
+import { fetchAgentWatchlist, updateAgentWatchlist } from './services/agentApi';
+import { FALLBACK_ELIGIBLE_SYMBOLS, toEligibleSymbolSet } from './utils/eligibleTokens';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
 const PERPAGE_KEY = 'cryptosentinel_perpage';
@@ -43,11 +43,9 @@ const SLIDER_RANGE_KEY = 'cryptosentinel_alert_slider_range';
 const FAV_UP_KEY = 'cs_fav_up_pct';
 const FAV_DOWN_KEY = 'cs_fav_down_pct';
 const RANK_ANIM_KEY = 'cs_rank_anim_topn';
-const AI_COIN_STATES_KEY = 'cs_ai_coin_states';
 
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
-type AiCoinState = 'inactive' | 'analysis' | 'long' | 'short';
 
 function sortCoins(coins: Coin[], sortBy: SortBy, sortDesc: boolean): Coin[] {
   const sorted = [...coins];
@@ -237,14 +235,12 @@ export default function App() {
   const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
-  const [eligibleSymbols, setEligibleSymbols] = useState<Set<string>>(() => toEligibleSymbolSet());
-  const [aiCoinStates, setAiCoinStates] = useState<Record<string, AiCoinState>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(AI_COIN_STATES_KEY) ?? '{}') as Record<string, AiCoinState>;
-    } catch {
-      return {};
-    }
-  });
+  const [adminToken, setAdminToken] = useState('');
+  const [eligibleTokens, setEligibleTokens] = useState<string[]>(() => FALLBACK_ELIGIBLE_SYMBOLS);
+  const [selectedAiSymbols, setSelectedAiSymbols] = useState<Set<string>>(() => new Set());
+  const [aiWatchlistSaving, setAiWatchlistSaving] = useState(false);
+  const [aiWatchlistError, setAiWatchlistError] = useState('');
+  const eligibleSymbols = useMemo(() => toEligibleSymbolSet(eligibleTokens), [eligibleTokens]);
 
   const handleChartTap = useCallback((coin: Coin) => {
     setChartCoin(coin);
@@ -252,13 +248,17 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchEligibleTokens()
+    fetchAgentWatchlist()
       .then((response) => {
         if (cancelled) return;
-        setEligibleSymbols(toEligibleSymbolSet(response.tokens.length > 0 ? response.tokens : undefined));
+        setEligibleTokens(response.eligible_tokens.length > 0 ? response.eligible_tokens : FALLBACK_ELIGIBLE_SYMBOLS);
+        setSelectedAiSymbols(toEligibleSymbolSet(response.selected_tokens));
       })
       .catch(() => {
-        if (!cancelled) setEligibleSymbols(toEligibleSymbolSet());
+        if (!cancelled) {
+          setEligibleTokens(FALLBACK_ELIGIBLE_SYMBOLS);
+          setSelectedAiSymbols(new Set());
+        }
       });
     return () => {
       cancelled = true;
@@ -275,21 +275,36 @@ export default function App() {
     setSelectedFavAlert(null);
   }, []);
 
+  const handleToggleAiSymbol = useCallback(async (symbol: string) => {
+    const normalized = symbol.toUpperCase();
+    if (!eligibleSymbols.has(normalized)) return;
+    if (!adminToken) {
+      setAiWatchlistError('Admin token richiesto nella tab Agente.');
+      setTab('agent');
+      return;
+    }
+    const previous = new Set(selectedAiSymbols);
+    const next = new Set(selectedAiSymbols);
+    if (next.has(normalized)) next.delete(normalized);
+    else next.add(normalized);
+    setSelectedAiSymbols(next);
+    setAiWatchlistSaving(true);
+    setAiWatchlistError('');
+    try {
+      const response = await updateAgentWatchlist(Array.from(next), adminToken);
+      setEligibleTokens(response.eligible_tokens.length > 0 ? response.eligible_tokens : FALLBACK_ELIGIBLE_SYMBOLS);
+      setSelectedAiSymbols(toEligibleSymbolSet(response.selected_tokens));
+    } catch (err) {
+      setSelectedAiSymbols(previous);
+      setAiWatchlistError(err instanceof Error ? err.message : 'Watchlist update failed');
+    } finally {
+      setAiWatchlistSaving(false);
+    }
+  }, [adminToken, eligibleSymbols, selectedAiSymbols]);
+
   const handleToggleAiCoin = useCallback((coin: Coin) => {
-    if (!eligibleSymbols.has(coin.symbol.toUpperCase())) return;
-    setAiCoinStates((prev) => {
-      const current = prev[coin.id] ?? 'inactive';
-      const nextState: AiCoinState = current === 'inactive' ? 'analysis' : 'inactive';
-      const next = { ...prev };
-      if (nextState === 'inactive') {
-        delete next[coin.id];
-      } else {
-        next[coin.id] = nextState;
-      }
-      localStorage.setItem(AI_COIN_STATES_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, [eligibleSymbols]);
+    void handleToggleAiSymbol(coin.symbol);
+  }, [handleToggleAiSymbol]);
 
   const { currency, changeCurrency } = useCurrency();
   const { coins, loading, error, lastUpdated, refresh } = useCryptoData(refreshInterval, perPage, page, currency);
@@ -704,7 +719,7 @@ export default function App() {
                         showVolume={sortBy === 'volume'}
                         timeFrame={timeFrame}
                         rankDelta={rankDeltas.get(coin.id)}
-                        aiState={isTradable ? (aiCoinStates[coin.id] ?? 'inactive') : undefined}
+                        aiState={isTradable ? (selectedAiSymbols.has(coin.symbol.toUpperCase()) ? 'analysis' : 'inactive') : undefined}
                         onToggleAi={isTradable ? handleToggleAiCoin : undefined}
                       />
                     );
@@ -762,7 +777,7 @@ export default function App() {
                           timeFrame={favoriteTimeFrame}
                           alertPending={pendingFavAlerts.get(coin.id)}
                           onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
-                          aiState={isTradable ? (aiCoinStates[coin.id] ?? 'inactive') : undefined}
+                          aiState={isTradable ? (selectedAiSymbols.has(coin.symbol.toUpperCase()) ? 'analysis' : 'inactive') : undefined}
                           onToggleAi={isTradable ? handleToggleAiCoin : undefined}
                         />
                       );
@@ -778,7 +793,15 @@ export default function App() {
           )}
 
           {tab === 'agent' && (
-            <AgentTab />
+            <AgentTab
+              adminToken={adminToken}
+              onAdminToken={setAdminToken}
+              eligibleTokens={eligibleTokens}
+              selectedAiSymbols={selectedAiSymbols}
+              watchlistSaving={aiWatchlistSaving}
+              watchlistError={aiWatchlistError}
+              onToggleAiSymbol={handleToggleAiSymbol}
+            />
           )}
 
           {tab === 'settings' && (

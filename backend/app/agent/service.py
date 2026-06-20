@@ -15,6 +15,7 @@ from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, S
 from backend.app.agent.signals.perp.binance_klines import BinanceMarket, get_kline_cache_entry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
+from backend.app.agent.watchlist import selected_watchlist
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 from backend.app.execution.models import ExecutionStatus
@@ -70,6 +71,7 @@ class AgentService:
             "degraded_reasons": sorted(self.risk.degraded_reasons),
             "eligible_token_count": len(self.settings.eligible_tokens),
             "eligible_symbol_count": len(self.risk.eligible_symbols),
+            "watchlist_count": len(selected_watchlist(self.settings)),
             "heartbeat": heartbeat.as_dict(),
         }
 
@@ -79,7 +81,8 @@ class AgentService:
         markets = _active_markets(self.settings.markets_enabled)
         items = []
         now = datetime.now(UTC)
-        for asset in self.settings.eligible_tokens:
+        selected_assets = selected_watchlist(self.settings)
+        for asset in selected_assets:
             if "spot" in markets:
                 items.append(
                     _coverage_item(
@@ -114,6 +117,7 @@ class AgentService:
         return {
             "generated_at": now.isoformat(),
             "active_markets": sorted(markets),
+            "selected_assets": selected_assets,
             "items": items,
         }
 
@@ -147,10 +151,20 @@ class AgentService:
 
         heartbeat.beat("agent_slow_tick")
         trade_heartbeat = await self._daily_trade_heartbeat(session, now=now)
+        selected_assets = selected_watchlist(self.settings)
+        markets = _active_markets(self.settings.markets_enabled)
+        scanner_results = []
+        for asset in selected_assets:
+            if "spot" in markets:
+                scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
+            if "perp" in markets:
+                scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
         return {
             "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",
-            "reason": "no_watchlist_scanner_configured",
+            "reason": "watchlist_empty" if not selected_assets else "watchlist_scanned",
             "markets_enabled": self.settings.markets_enabled,
+            "watchlist": selected_assets,
+            "scanner_results": [_scanner_summary(result) for result in scanner_results],
             "daily_trade_heartbeat": trade_heartbeat,
         }
 
@@ -446,6 +460,31 @@ def _active_markets(value: str) -> set[str]:
     if normalized in {"perp", "perpetual"}:
         return {"perp"}
     return {"spot", "perp"}
+
+
+def _scanner_payload(asset: str, market: str) -> dict:
+    symbol = f"{asset.upper()}USDT"
+    return {
+        "signal_id": f"scan_{market}_{asset.upper()}_{uuid4().hex[:12]}",
+        "market": market,
+        "asset": asset.upper(),
+        "symbol": symbol,
+        "quote_asset": "USDT",
+    }
+
+
+def _scanner_summary(result: dict) -> dict:
+    signal = result.get("signal") or {}
+    risk = result.get("risk") or {}
+    execution = result.get("execution") or {}
+    return {
+        "asset": signal.get("asset"),
+        "market": signal.get("market"),
+        "action": signal.get("action"),
+        "reason": signal.get("reason") or risk.get("reason") or execution.get("reason"),
+        "risk_allowed": risk.get("allowed"),
+        "execution_status": execution.get("status"),
+    }
 
 
 def _coverage_item(
