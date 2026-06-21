@@ -57,13 +57,13 @@ def settings(**overrides):
         anthropic_api_key=None,
         anthropic_model="claude-test",
         anthropic_max_tokens=512,
-        risk_capital_per_trade_pct=6.0,
-        risk_max_open_positions=3,
+        risk_capital_per_trade_pct=4.0,
+        risk_max_open_positions=5,
         risk_max_total_exposure_pct=30.0,
         risk_daily_loss_limit_pct=-8.0,
         risk_max_drawdown_pct=-15.0,
         risk_min_pool_liquidity_usd=50000.0,
-        dry_run_capital_usd=500.0,
+        dry_run_capital_usd=200.0,
         min_trade_size_usd=7.0,
         min_portfolio_value_usd=5.0,
         test_scaling_pct=10.0,
@@ -314,16 +314,16 @@ def test_risk_engine_size_cap() -> None:
     assert decision.size_quote == Decimal("30.00")
 
 
-def test_risk_engine_uses_500_dry_run_capital_for_natural_size() -> None:
+def test_risk_engine_uses_200_dry_run_capital_for_natural_size() -> None:
     decision = RiskManager(settings()).evaluate(
-        _intent(quote_equity=Decimal("500"), price=Decimal("100"), stop_loss=Decimal("95")),
+        _intent(quote_equity=Decimal("200"), price=Decimal("100"), stop_loss=Decimal("95")),
         portfolio=None,
         open_spot_positions=[],
         open_perp_positions=[],
     )
 
     assert decision.allowed is True
-    assert decision.size_quote == Decimal("30.00")
+    assert decision.size_quote == Decimal("8.00")
 
 
 def test_risk_engine_blocks_below_minimum_trade_size() -> None:
@@ -336,7 +336,7 @@ def test_risk_engine_blocks_below_minimum_trade_size() -> None:
 
     assert decision.allowed is False
     assert decision.reason == "below_minimum_trade_size"
-    assert decision.size_quote == Decimal("6.00")
+    assert decision.size_quote == Decimal("4.00")
 
 
 @pytest.mark.asyncio
