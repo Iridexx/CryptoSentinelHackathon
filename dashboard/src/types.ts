@@ -87,6 +87,7 @@ export type GlobalView = {
   initial_equity_usd: string;
   pnl_total_usd: string;
   pnl_total_pct: number;
+  unrealized_pnl_usd: string;
   drawdown_pct: string;
   max_drawdown_pct: string;
   sharpe_status?: string;
@@ -337,4 +338,17 @@ export type MarketListResponse = {
   provider: string;
   currency: string;
   items: MarketAsset[];
+};
+
+export type NotificationPreferences = {
+  spot_trades: boolean;
+  perp_trades: boolean;
+  risk_alerts: boolean;
+  daily_summary: boolean;
+  critical: boolean;
+};
+
+export type NotificationPreferencesResponse = {
+  preferences: NotificationPreferences;
+  source: 'default' | 'persisted';
 };

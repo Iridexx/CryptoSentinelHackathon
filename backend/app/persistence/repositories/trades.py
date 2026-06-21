@@ -70,6 +70,17 @@ class SpotTradeRepository:
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
+    async def count_today(self, user_id: str, now: datetime) -> int:
+        """Conta trade spot dell'utente nel giorno corrente (da mezzanotte UTC)."""
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(SpotTrade)
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.timestamp_utc >= start)
+        )
+        return int(result.scalar_one())
+
 
 class PerpTradeRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -100,3 +111,14 @@ class PerpTradeRepository:
         stmt = stmt.order_by(PerpTrade.timestamp_utc.desc()).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_today(self, user_id: str, now: datetime) -> int:
+        """Conta trade perp dell'utente nel giorno corrente (da mezzanotte UTC)."""
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(PerpTrade)
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.timestamp_utc >= start)
+        )
+        return int(result.scalar_one())

@@ -14,6 +14,8 @@ import type {
   KillSwitchState,
   LogResponse,
   MarketListResponse,
+  NotificationPreferences,
+  NotificationPreferencesResponse,
   OperationalStats,
   PerpView,
   SettingsResponse,
@@ -191,4 +193,15 @@ export function validateOnboarding(session: DashboardSession) {
 
 export function fetchMarkets(session: DashboardSession, limit = 50) {
   return requestJson<MarketListResponse>(session, `/api/v1/market-data/markets?currency=usd&limit=${limit}&page=1`);
+}
+
+export function fetchNotificationPrefs(session: DashboardSession) {
+  return requestJson<NotificationPreferencesResponse>(session, '/api/v1/notifications/preferences');
+}
+
+export function saveNotificationPrefs(session: DashboardSession, prefs: NotificationPreferences) {
+  return requestJson<NotificationPreferencesResponse>(session, '/api/v1/notifications/preferences', 'admin', {
+    method: 'PUT',
+    body: JSON.stringify(prefs),
+  });
 }

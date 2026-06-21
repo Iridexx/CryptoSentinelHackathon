@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, time
 from decimal import Decimal
 from functools import lru_cache
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
-from backend.app.agent.signals.perp.binance_klines import BinanceMarket, get_kline_cache_entry
+from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
 from backend.app.agent.watchlist import selected_watchlist
@@ -22,6 +23,7 @@ from backend.app.execution.models import ExecutionStatus
 from backend.app.execution.perp_base import PerpOrder
 from backend.app.execution.perp_registry import PerpExecutionRegistry, get_perp_execution_registry
 from backend.app.execution.registry import ExecutionProviderRegistry, get_execution_provider_registry
+from backend.app.notifications.agent_notifier import get_agent_notifier
 from backend.app.persistence.database import get_session_factory
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
@@ -30,6 +32,7 @@ from backend.app.persistence.repositories.decisions import AgentDecisionReposito
 from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.positions import PerpPositionRepository, SpotPositionRepository
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
+from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 
 logger = get_logger("agent.service")
 
@@ -133,11 +136,15 @@ class AgentService:
         return await self._handle_signal(signal, session)
 
     async def fast_tick(self, session: AsyncSession) -> dict:
-        """Manage open positions; Step 6 records heartbeat and stays fail-closed."""
+        """Manage open positions; refresh live prices and check SL/TP."""
 
         heartbeat.beat("agent_fast_tick")
-        spot_positions = await SpotPositionRepository(session).open_for_user(str(self.settings.default_user_id))
-        perp_positions = await PerpPositionRepository(session).open_for_user(str(self.settings.default_user_id))
+        user_id = str(self.settings.default_user_id)
+        spot_positions = await SpotPositionRepository(session).open_for_user(user_id)
+        perp_positions = await PerpPositionRepository(session).open_for_user(user_id)
+        if spot_positions or perp_positions:
+            await self._refresh_position_prices(session, spot_positions, perp_positions)
+        await self._check_risk_notifications(session, spot_positions, perp_positions)
         return {
             "status": "ok",
             "open_spot_positions": len(spot_positions),
@@ -145,11 +152,68 @@ class AgentService:
             "kill_switch": self.risk.kill_switch.value,
         }
 
+    async def _refresh_position_prices(
+        self,
+        session: AsyncSession,
+        spot_positions: list,
+        perp_positions: list,
+    ) -> None:
+        """Fetch live Binance prices and update current_price + pnl_unrealized for open positions."""
+        feed = BinanceKlineFeed()
+        now = datetime.now(UTC)
+
+        perp_assets: set[str] = {p.asset for p in perp_positions}
+        spot_assets: set[str] = {p.asset for p in spot_positions}
+
+        perp_prices: dict[str, Decimal] = {}
+        for asset in perp_assets:
+            try:
+                candles = await feed.fetch(symbol=f"{asset}USDT", interval="1m", limit=1, market="futures")
+                if candles:
+                    perp_prices[asset] = Decimal(str(candles[-1].close))
+            except Exception:
+                pass
+
+        spot_prices: dict[str, Decimal] = {}
+        for asset in spot_assets:
+            try:
+                candles = await feed.fetch(symbol=f"{asset}USDT", interval="1m", limit=1, market="spot")
+                if candles:
+                    spot_prices[asset] = Decimal(str(candles[-1].close))
+            except Exception:
+                pass
+
+        updated = False
+        for pos in perp_positions:
+            price = perp_prices.get(pos.asset)
+            if price is None:
+                continue
+            pnl = (price - pos.entry_price) * pos.size if pos.side == "long" else (pos.entry_price - price) * pos.size
+            pos.current_price = price
+            pos.pnl_unrealized = pnl
+            pos.updated_at = now
+            session.add(pos)
+            updated = True
+
+        for pos in spot_positions:
+            price = spot_prices.get(pos.asset)
+            if price is None:
+                continue
+            pos.current_price = price
+            pos.pnl_unrealized = (price - pos.entry_price) * pos.size
+            pos.updated_at = now
+            session.add(pos)
+            updated = True
+
+        if updated:
+            await session.commit()
+
     async def slow_tick(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
         """Slow scanner tick plus the hard daily Spot trade heartbeat."""
 
         heartbeat.beat("agent_slow_tick")
-        trade_heartbeat = await self._daily_trade_heartbeat(session, now=now)
+        _now = now or datetime.now(UTC)
+        trade_heartbeat = await self._daily_trade_heartbeat(session, now=_now)
         selected_assets = selected_watchlist(self.settings)
         markets = _active_markets(self.settings.markets_enabled)
         scanner_results = []
@@ -158,6 +222,7 @@ class AgentService:
                 scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
             if "perp" in markets:
                 scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
+        await self._maybe_send_daily_summary(session, _now)
         return {
             "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",
             "reason": "watchlist_empty" if not selected_assets else "watchlist_scanned",
@@ -240,10 +305,15 @@ class AgentService:
     async def _execute_or_simulate(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> dict:
         size_quote = risk_decision.size_quote * brain_decision.size_multiplier
         if self.settings.execution_mode == "dry_run":
-            return await self._simulate_trade(session, signal, size_quote)
-        if signal.get("market") == "spot":
-            return await self._execute_spot(signal, size_quote)
-        return await self._execute_perp(signal, size_quote)
+            execution = await self._simulate_trade(session, signal, size_quote)
+        elif signal.get("market") == "spot":
+            execution = await self._execute_spot(signal, size_quote)
+        else:
+            execution = await self._execute_perp(signal, size_quote)
+
+        if execution.get("trade_id") and execution.get("status") in {"prepared", "confirmed"}:
+            asyncio.create_task(self._notify_trade_opened(signal, risk_decision, execution))
+        return execution
 
     async def _simulate_trade(self, session: AsyncSession, signal: dict, size_quote: Decimal) -> dict:
         now = datetime.now(UTC)
@@ -435,6 +505,91 @@ class AgentService:
             "execution": execution,
             "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
         }
+
+    # ------------------------------------------------------------------
+    # Integrazione notifiche agente
+    # ------------------------------------------------------------------
+
+    async def _notify_trade_opened(self, signal: dict, risk_decision, execution: dict) -> None:
+        """Fire-and-forget notifica apertura trade; mai blocca l'agente."""
+        try:
+            notifier = get_agent_notifier()
+            market = str(signal.get("market", "spot"))
+            await notifier.notify_trade_opened(
+                user_id=str(self.settings.default_user_id),
+                trade_id=execution["trade_id"],
+                asset=str(signal.get("asset", "")),
+                market=market,
+                direction=str(signal.get("side") or signal.get("action") or "buy"),
+                entry_price=Decimal(str(signal.get("price", "0"))),
+                size_usd=risk_decision.size_quote,
+                stop_loss=_optional_decimal(signal.get("stop_loss")),
+                is_dry_run=self.settings.execution_mode == "dry_run",
+            )
+        except Exception:
+            pass  # le notifiche non bloccano mai l'agente
+
+    async def _check_risk_notifications(self, session: AsyncSession, spot_positions: list, perp_positions: list) -> None:
+        """Controlla condizioni di rischio e invia push se necessario."""
+        try:
+            user_id = str(self.settings.default_user_id)
+            portfolio = await PnlRepository(session).get_portfolio(user_id)
+            if portfolio is None:
+                return
+            notifier = get_agent_notifier()
+
+            # Kill switch attivo
+            if self.risk.kill_switch != KillSwitchState.RUNNING:
+                await notifier.notify_risk_alert(
+                    user_id, "kill_switch",
+                    f"Kill switch: {self.risk.kill_switch.value}"
+                )
+                return
+
+            # Drawdown
+            drawdown = float(getattr(portfolio, "drawdown_pct", 0) or 0)
+            if drawdown >= self.settings.risk_notify_drawdown_pct:
+                await notifier.notify_risk_alert(
+                    user_id, "drawdown",
+                    f"Drawdown {drawdown:.1f}% supera soglia {self.settings.risk_notify_drawdown_pct:.0f}%"
+                )
+
+            # Portfolio floor
+            equity = float(getattr(portfolio, "total_equity_usd", 1) or 1)
+            if equity < 1.0:
+                await notifier.notify_risk_alert(user_id, "portfolio_floor", "Equity < $1.00")
+        except Exception:
+            pass  # le notifiche non bloccano mai l'agente
+
+    async def _maybe_send_daily_summary(self, session: AsyncSession, now: datetime) -> None:
+        """Invia riepilogo giornaliero una volta al giorno all'ora configurata."""
+        try:
+            target_h = self.settings.agent_summary_hour_utc
+            target_m = self.settings.agent_summary_minute_utc
+            if now.hour != target_h or now.minute != target_m:
+                return
+            user_id = str(self.settings.default_user_id)
+            # Anti-spam: verifica se già inviato oggi
+            today_key = f"summary_sent_{now.date().isoformat()}"
+            if get_runtime_value(user_id, today_key):
+                return
+
+            portfolio = await PnlRepository(session).get_portfolio(user_id)
+            spot_today = await SpotTradeRepository(session).count_today(user_id, now)
+            perp_today = await PerpTradeRepository(session).count_today(user_id, now)
+
+            notifier = get_agent_notifier()
+            daily_pnl = Decimal(str(getattr(portfolio, "daily_pnl_usd", "0") or "0")) if portfolio else Decimal("0")
+            await notifier.notify_daily_summary(
+                user_id=user_id,
+                spot_trades=spot_today,
+                perp_trades=perp_today,
+                daily_pnl_usd=daily_pnl,
+                win_rate_pct=0.0,
+            )
+            set_runtime_value(user_id, today_key, "1")
+        except Exception:
+            pass  # le notifiche non bloccano mai l'agente
 
 
 def _intent_from_signal(signal: dict, *, portfolio_total: Decimal) -> SignalIntent:

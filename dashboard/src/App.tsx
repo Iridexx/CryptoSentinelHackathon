@@ -14,12 +14,14 @@ import {
   fetchLive,
   fetchLogs,
   fetchMarkets,
+  fetchNotificationPrefs,
   fetchOperationalStats,
   fetchPerp,
   fetchReady,
   fetchSettings,
   fetchSpot,
   fetchTradeDetail,
+  saveNotificationPrefs,
   saveSettings,
   setKillSwitch,
   setExecutionNetwork,
@@ -33,6 +35,8 @@ import {
 import type {
   AgentDecisionResponse,
   AgentSettings,
+  NotificationPreferences,
+  NotificationPreferencesResponse,
   AgentStatus,
   AssetBreakdownResponse,
   CredentialCheck,
@@ -138,6 +142,7 @@ export default function App() {
   const [markets, setMarkets] = useState<LoadState<MarketAsset[]>>(emptyState([]));
   const [notice, setNotice] = useState('');
   const [walletDraft, setWalletDraft] = useState('');
+  const [notifPrefs, setNotifPrefs] = useState<LoadState<NotificationPreferencesResponse>>(emptyState());
 
   const canRead = Boolean(session.readToken);
   const canAdmin = Boolean(session.adminToken);
@@ -154,7 +159,7 @@ export default function App() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void refreshCore();
+      void refreshCore(true);
     }, AUTO_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [session.baseUrl, session.readToken]);
@@ -171,22 +176,31 @@ export default function App() {
     }
   }
 
-  async function refreshCore() {
+  async function silentLoad<T>(setter: (value: LoadState<T>) => void, task: () => Promise<T>) {
+    try {
+      setter({ data: await task(), loading: false, error: null });
+    } catch { /* keep existing data on background refresh error */ }
+  }
+
+  async function refreshCore(silent = false) {
+    function fetch<T>(setter: (v: LoadState<T>) => void, task: () => Promise<T>) {
+      return silent ? silentLoad(setter, task) : load(setter, task);
+    }
     await Promise.all([
-      load(setLive, () => fetchLive(session)),
-      canRead ? load(setSpot, () => fetchSpot(session)) : Promise.resolve(null),
-      canRead ? load(setPerp, () => fetchPerp(session)) : Promise.resolve(null),
-      canRead ? load(setGlobal, () => fetchGlobal(session)) : Promise.resolve(null),
-      canRead ? load(setEquity, () => fetchEquityCurve(session, 'global', '24h')) : Promise.resolve(null),
-      canRead ? load(setDecisions, () => fetchAgentDecisions(session)) : Promise.resolve(null),
-      canRead ? load(setAssetBreakdown, () => fetchAssetBreakdown(session, 'spot')) : Promise.resolve(null),
-      canRead ? load(setOperationalStats, () => fetchOperationalStats(session)) : Promise.resolve(null),
-      canRead ? load(setAgent, () => fetchAgentStatus(session)) : Promise.resolve(null),
-      canRead ? load(setReady, () => fetchReady(session)) : Promise.resolve(null),
-      canRead ? load(setHeartbeat, () => fetchHeartbeat(session)) : Promise.resolve(null),
-      canRead ? load(setExecution, () => fetchExecutionStatus(session)) : Promise.resolve(null),
-      canRead ? load(setWallets, () => fetchExecutionWallets(session)) : Promise.resolve(null),
-      canRead ? load(setCoverage, () => fetchDataCoverage(session)) : Promise.resolve(null),
+      fetch(setLive, () => fetchLive(session)),
+      canRead ? fetch(setSpot, () => fetchSpot(session)) : Promise.resolve(null),
+      canRead ? fetch(setPerp, () => fetchPerp(session)) : Promise.resolve(null),
+      canRead ? fetch(setGlobal, () => fetchGlobal(session)) : Promise.resolve(null),
+      canRead ? fetch(setEquity, () => fetchEquityCurve(session, 'global', '24h')) : Promise.resolve(null),
+      canRead ? fetch(setDecisions, () => fetchAgentDecisions(session)) : Promise.resolve(null),
+      canRead ? fetch(setAssetBreakdown, () => fetchAssetBreakdown(session, 'spot')) : Promise.resolve(null),
+      canRead ? fetch(setOperationalStats, () => fetchOperationalStats(session)) : Promise.resolve(null),
+      canRead ? fetch(setAgent, () => fetchAgentStatus(session)) : Promise.resolve(null),
+      canRead ? fetch(setReady, () => fetchReady(session)) : Promise.resolve(null),
+      canRead ? fetch(setHeartbeat, () => fetchHeartbeat(session)) : Promise.resolve(null),
+      canRead ? fetch(setExecution, () => fetchExecutionStatus(session)) : Promise.resolve(null),
+      canRead ? fetch(setWallets, () => fetchExecutionWallets(session)) : Promise.resolve(null),
+      canRead ? fetch(setCoverage, () => fetchDataCoverage(session)) : Promise.resolve(null),
     ]);
   }
 
@@ -244,6 +258,23 @@ export default function App() {
     if (!canRead) return;
     const response = await load(setMarkets, () => fetchMarkets(session, 100).then((payload) => payload.items));
     if (response) setNotice('Market snapshot updated');
+  }
+
+  async function refreshNotifPrefs() {
+    if (!canRead) return;
+    await load(setNotifPrefs, () => fetchNotificationPrefs(session));
+  }
+
+  async function toggleNotifPref(key: keyof NotificationPreferences) {
+    if (!canAdmin) {
+      setNotice('Admin token required');
+      return;
+    }
+    const current = notifPrefs.data?.preferences;
+    if (!current) return;
+    const updated: NotificationPreferences = { ...current, [key]: !current[key] };
+    const response = await load(setNotifPrefs, () => saveNotificationPrefs(session, updated));
+    if (response) setNotice(`Notification preference "${key}" updated`);
   }
 
   async function updateSpotProvider(provider: string) {
@@ -400,7 +431,7 @@ export default function App() {
               value={session.adminToken}
               onChange={(event) => setSession((current) => ({ ...current, adminToken: event.target.value }))}
             />
-            <button onClick={() => void refreshCore()}>Refresh</button>
+            <button onClick={() => void refreshCore(true)}>Refresh</button>
           </div>
         </header>
 
@@ -450,13 +481,21 @@ export default function App() {
         )}
         {tab === 'logs' && <LogsPanel logs={logs} onRefresh={() => void refreshLogs()} canAdmin={canAdmin} />}
         {tab === 'settings' && (
-          <SettingsPanel
-            settings={settings}
-            draft={settingsDraft}
-            setDraft={setSettingsDraft}
-            onLoad={() => void refreshSettings()}
-            onSave={() => void submitSettings()}
-          />
+          <div className="grid">
+            <SettingsPanel
+              settings={settings}
+              draft={settingsDraft}
+              setDraft={setSettingsDraft}
+              onLoad={() => void refreshSettings()}
+              onSave={() => void submitSettings()}
+            />
+            <NotificationPrefsPanel
+              notifPrefs={notifPrefs}
+              canAdmin={canAdmin}
+              onLoad={() => void refreshNotifPrefs()}
+              onToggle={(key) => void toggleNotifPref(key)}
+            />
+          </div>
         )}
         {tab === 'onboarding' && (
           <OnboardingPanel checks={checks} onValidate={() => void runOnboarding()} canAdmin={canAdmin} />
@@ -502,6 +541,7 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
           <div className="metric-grid">
             <Metric label="Equity" value={money(data.total_equity_usd)} />
             <Metric label="PnL" value={money(data.pnl_total_usd)} tone={Number(data.pnl_total_usd) >= 0 ? 'good' : 'bad'} />
+            <Metric label="Aperto" value={money(data.unrealized_pnl_usd)} tone={Number(data.unrealized_pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="Daily" value={money(data.daily_pnl_usd)} />
             <Metric label="Trades" value={String(data.trades_today)} />
             <Metric label="Drawdown" value={`${data.drawdown_pct}%`} tone="warn" />
@@ -542,15 +582,22 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
             <Empty title="No open Spot positions" detail="The agent has no active Spot exposure." />
           ) : (
             <Table
-              columns={['Asset', 'Size', 'Entry', 'Current', 'PnL', 'Status']}
-              rows={data.open_positions.map((item) => [
-                item.asset,
-                item.size,
-                fmtPrice(item.entry_price),
-                fmtPrice(item.current_price),
-                money(item.pnl_unrealized),
-                item.status,
-              ])}
+              columns={['Asset', 'Size', 'Entry', 'Current', 'Invested', 'Value', 'PnL', 'Status']}
+              rows={data.open_positions.map((item) => {
+                const invested = Number(item.entry_price) * Number(item.size);
+                const value = invested + Number(item.pnl_unrealized);
+                const pnl = Number(item.pnl_unrealized);
+                return [
+                  item.asset,
+                  item.size,
+                  fmtPrice(item.entry_price),
+                  fmtPrice(item.current_price),
+                  money(String(invested)),
+                  <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
+                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
+                  item.status,
+                ];
+              })}
             />
           )}
           {expanded &&
@@ -615,15 +662,25 @@ function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expa
             <Empty title="No open Perp positions" detail="The agent has no active Perp exposure." />
           ) : (
             <Table
-              columns={['Asset', 'Side', 'Leverage', 'Entry', 'PnL', 'Status']}
-              rows={data.open_positions.map((item) => [
-                item.asset,
-                item.side,
-                item.leverage ? `${item.leverage}x` : '-',
-                fmtPrice(item.entry_price),
-                money(item.pnl_unrealized),
-                item.status,
-              ])}
+              columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'Invested', 'Value', 'PnL', '%', 'Status']}
+              rows={data.open_positions.map((item) => {
+                const invested = Number(item.entry_price) * Number(item.size);
+                const value = invested + Number(item.pnl_unrealized);
+                const pnl = Number(item.pnl_unrealized);
+                const pct = item.pnl_pct ?? '0.00';
+                return [
+                  item.asset,
+                  item.side,
+                  item.leverage ? `${item.leverage}x` : '-',
+                  fmtPrice(item.entry_price),
+                  fmtPrice(item.current_price),
+                  money(String(invested)),
+                  <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
+                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
+                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
+                  item.status,
+                ];
+              })}
             />
           )}
           {expanded &&
@@ -1216,6 +1273,53 @@ function MarketsPanel({
   );
 }
 
+const NOTIF_PREF_LABELS: Record<keyof NotificationPreferences, string> = {
+  spot_trades: 'Spot Trades',
+  perp_trades: 'Perp Trades',
+  risk_alerts: 'Risk Alerts',
+  daily_summary: 'Daily Summary',
+  critical: 'Critical Events',
+};
+
+function NotificationPrefsPanel({
+  notifPrefs,
+  canAdmin,
+  onLoad,
+  onToggle,
+}: {
+  notifPrefs: LoadState<NotificationPreferencesResponse>;
+  canAdmin: boolean;
+  onLoad: () => void;
+  onToggle: (key: keyof NotificationPreferences) => void;
+}) {
+  const prefs = notifPrefs.data?.preferences ?? null;
+  const source = notifPrefs.data?.source ?? null;
+  return (
+    <Panel title="Notification Preferences" action={<button onClick={onLoad}>Load</button>}>
+      {!canAdmin && <p className="muted">Admin token required to change preferences.</p>}
+      <StateBlock state={notifPrefs} empty="Load to see notification preferences" />
+      {source && <p className="muted" style={{ marginBottom: '0.5rem' }}>Source: <strong>{source}</strong></p>}
+      {prefs && (
+        <div>
+          {(Object.keys(NOTIF_PREF_LABELS) as Array<keyof NotificationPreferences>).map((key) => (
+            <div key={key} className="status-row">
+              <span>{NOTIF_PREF_LABELS[key]}</span>
+              <button
+                className={prefs[key] ? 'ok-text' : 'muted'}
+                onClick={() => canAdmin && onToggle(key)}
+                disabled={!canAdmin}
+                style={{ cursor: canAdmin ? 'pointer' : 'default', background: 'none', border: 'none', fontWeight: 600 }}
+              >
+                {prefs[key] ? 'ON' : 'OFF'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function ExportPanel({ payload }: { payload: unknown }) {
   const serialized = JSON.stringify(payload, null, 2);
   return (
@@ -1263,7 +1367,7 @@ function Empty({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function Table({ columns, rows }: { columns: string[]; rows: string[][] }) {
+function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   return (
     <div className="table-wrap">
       <table>

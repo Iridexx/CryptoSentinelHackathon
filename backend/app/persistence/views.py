@@ -94,6 +94,7 @@ class ViewService:
         trades = await trade_repo.list_for_user(user_id, limit=100)
         closed = [t for t in trades if t.status == "confirmed"]
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
+        history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
         return PerpView(
             open_positions=[
                 PerpPositionView(
@@ -135,7 +136,7 @@ class ViewService:
                     block_timestamp_utc=t.block_timestamp_utc.isoformat() if t.block_timestamp_utc else None,
                     is_simulated=_is_perp_dry_run(t),
                 )
-                for t in trades
+                for t in history_trades
             ],
             realized_pnl_usd=Decimal("0"),
             unrealized_pnl_usd=unrealized,
@@ -152,12 +153,18 @@ class ViewService:
         open_spot = await spot_pos.open_for_user(user_id)
         open_perp = await perp_pos.open_for_user(user_id)
 
+        unrealized = (
+            sum((p.pnl_unrealized for p in open_spot), Decimal("0"))
+            + sum((p.pnl_unrealized for p in open_perp), Decimal("0"))
+        )
+
         if portfolio is None:
             return GlobalView(
                 total_equity_usd=Decimal("0"),
                 initial_equity_usd=Decimal("0"),
                 pnl_total_usd=Decimal("0"),
                 pnl_total_pct=0.0,
+                unrealized_pnl_usd=unrealized,
                 drawdown_pct=Decimal("0"),
                 max_drawdown_pct=Decimal("0"),
                 sharpe_status="insufficient_data",
@@ -184,6 +191,7 @@ class ViewService:
             initial_equity_usd=portfolio.initial_equity_usd,
             pnl_total_usd=pnl_total,
             pnl_total_pct=round(pnl_pct, 2),
+            unrealized_pnl_usd=unrealized,
             drawdown_pct=portfolio.drawdown_pct,
             max_drawdown_pct=portfolio.max_drawdown_pct,
             sharpe_status=sharpe["status"],

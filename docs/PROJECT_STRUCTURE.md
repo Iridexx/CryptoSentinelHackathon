@@ -109,6 +109,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- alert_store.py - persistenza DB configurazione, stato checker e badge preferiti pendenti (DB-backed da Step 5; interfaccia pubblica invariata).
 |   |   |   |-- price_checker.py - controllo prezzi ogni 60s; raggruppa i token per device_id e invia a ogni device solo i suoi alert; supporta soglie one-shot e crossing con riarmo percentuale (fallback globale per token legacy senza device_id).
 |   |   |   |-- alert_store.py - store per-device (DeviceAlertConfig per device_id; AlertConfig legacy come fallback). get_alert_store(device_id) con cache per device.
+|   |   |   |-- agent_notifier.py - AgentNotifier: notifiche push tipizzate per trade spot/perp (idempotenti via set trade_id in RuntimeState), allarmi rischio (anti-spam, stesso alert_type+detail non re-notifica), riepilogo giornaliero e eventi critici agente; singleton get_agent_notifier(); legge/scrive preferenze utente in RuntimeState.
 |   |   |   |-- service.py - orchestration registry + FCM client.
 |   |   |   `-- fcm/ - integrazione Firebase Cloud Messaging.
 |   |   |       |-- client.py - wrapper Firebase Admin SDK, delivery e skipped se non configurato.
@@ -148,6 +149,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- schemas/ - schemi API.
 |   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti, incluse opzioni crossing/riarmo per alert prezzo.
 |   |   |   |-- notifications.py - device token, notification request/response e status.
+|   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
 |   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary con balance asset non-zero.

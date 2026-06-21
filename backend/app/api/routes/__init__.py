@@ -10,6 +10,7 @@ from backend.app.api.routes import (
     health,
     market_data,
     mobile_agent,
+    notification_prefs,
     notifications,
     observability,
     status,
@@ -22,6 +23,7 @@ api_router.include_router(status.router)
 api_router.include_router(admin.router)
 api_router.include_router(agent.router)
 api_router.include_router(notifications.router)
+api_router.include_router(notification_prefs.router)
 api_router.include_router(alerts.router)
 api_router.include_router(market_data.router)
 api_router.include_router(execution.router)

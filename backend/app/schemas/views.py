@@ -106,6 +106,7 @@ class GlobalView(BaseModel):
     initial_equity_usd: Decimal
     pnl_total_usd: Decimal
     pnl_total_pct: float
+    unrealized_pnl_usd: Decimal
     drawdown_pct: Decimal
     max_drawdown_pct: Decimal
     sharpe_status: str = "insufficient_data"

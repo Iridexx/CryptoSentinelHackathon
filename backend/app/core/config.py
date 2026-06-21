@@ -150,6 +150,14 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "project_id": "fcm_project_id",
         "critical_topic": "fcm_critical_topic",
         "token_store_path": "fcm_token_store_path",
+        "notify_dry_run_trades": "notify_dry_run_trades",
+        "spot_topic": "fcm_spot_topic",
+        "perp_topic": "fcm_perp_topic",
+        "risk_topic": "fcm_risk_topic",
+        "summary_topic": "fcm_summary_topic",
+        "summary_hour_utc": "agent_summary_hour_utc",
+        "summary_minute_utc": "agent_summary_minute_utc",
+        "risk_notify_drawdown_pct": "risk_notify_drawdown_pct",
     },
     "risk": {
         "capital_per_trade_pct": "risk_capital_per_trade_pct",
@@ -414,6 +422,14 @@ class Settings(BaseSettings):
     fcm_credentials_path: str | None = Field(default=None, alias="FCM_CREDENTIALS_PATH")
     fcm_critical_topic: str | None = Field(default=None, alias="FCM_CRITICAL_TOPIC")
     fcm_token_store_path: str = Field(default="backend/storage/fcm_tokens.json", alias="FCM_TOKEN_STORE_PATH")
+    notify_dry_run_trades: bool = Field(default=False, alias="NOTIFY_DRY_RUN_TRADES")
+    fcm_spot_topic: str = Field(default="cryptosentinel-spot", alias="FCM_SPOT_TOPIC")
+    fcm_perp_topic: str = Field(default="cryptosentinel-perp", alias="FCM_PERP_TOPIC")
+    fcm_risk_topic: str = Field(default="cryptosentinel-risk", alias="FCM_RISK_TOPIC")
+    fcm_summary_topic: str = Field(default="cryptosentinel-summary", alias="FCM_SUMMARY_TOPIC")
+    agent_summary_hour_utc: int = Field(default=23, alias="AGENT_SUMMARY_HOUR_UTC")
+    agent_summary_minute_utc: int = Field(default=55, alias="AGENT_SUMMARY_MINUTE_UTC")
+    risk_notify_drawdown_pct: float = Field(default=10.0, alias="RISK_NOTIFY_DRAWDOWN_PCT")
 
     agent_mode: str = Field(default="conservative", alias="AGENT_MODE")
     markets_enabled: str = Field(default="both", alias="MARKETS_ENABLED")
