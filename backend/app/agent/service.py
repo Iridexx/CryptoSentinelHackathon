@@ -26,6 +26,7 @@ from backend.app.execution.registry import ExecutionProviderRegistry, get_execut
 from backend.app.notifications.agent_notifier import get_agent_notifier
 from backend.app.persistence.database import get_session_factory
 from backend.app.persistence.models.decisions import AgentDecision
+from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
@@ -142,8 +143,10 @@ class AgentService:
         user_id = str(self.settings.default_user_id)
         spot_positions = await SpotPositionRepository(session).open_for_user(user_id)
         perp_positions = await PerpPositionRepository(session).open_for_user(user_id)
+        now = datetime.now(UTC)
         if spot_positions or perp_positions:
             await self._refresh_position_prices(session, spot_positions, perp_positions)
+        await self._update_portfolio_state(session, spot_positions, perp_positions, now)
         await self._check_risk_notifications(session, spot_positions, perp_positions)
         return {
             "status": "ok",
@@ -208,6 +211,84 @@ class AgentService:
         if updated:
             await session.commit()
 
+    async def _update_portfolio_state(
+        self,
+        session: AsyncSession,
+        spot_positions: list,
+        perp_positions: list,
+        now: datetime,
+    ) -> None:
+        """Ricalcola equity, drawdown ed esposizione e aggiorna PortfolioState."""
+        user_id = str(self.settings.default_user_id)
+        pnl_repo = PnlRepository(session)
+        portfolio = await pnl_repo.get_portfolio(user_id)
+        if portfolio is None:
+            return
+
+        unrealized = sum((p.pnl_unrealized for p in spot_positions), Decimal("0")) + sum(
+            (p.pnl_unrealized for p in perp_positions), Decimal("0")
+        )
+        total = portfolio.initial_equity_usd + unrealized
+
+        spot_exposure = sum((p.entry_price * p.size for p in spot_positions), Decimal("0"))
+        perp_exposure = sum((p.entry_price * p.size for p in perp_positions), Decimal("0"))
+        raw_exposure_pct = (spot_exposure + perp_exposure) / total * 100 if total > 0 else Decimal("0")
+        exposure_pct = raw_exposure_pct.quantize(Decimal("0.01"))
+
+        peak = max(portfolio.peak_equity_usd, total)
+        drawdown = (peak - total) / peak * 100 if peak > 0 else Decimal("0")
+        drawdown_pct = drawdown.quantize(Decimal("0.01"))
+        max_drawdown_pct = max(portfolio.max_drawdown_pct, drawdown_pct)
+
+        spot_count = await SpotTradeRepository(session).count_today(user_id, now)
+        perp_count = await PerpTradeRepository(session).count_today(user_id, now)
+
+        await pnl_repo.upsert_portfolio(
+            user_id,
+            total_equity_usd=total,
+            peak_equity_usd=peak,
+            drawdown_pct=drawdown_pct,
+            max_drawdown_pct=max_drawdown_pct,
+            exposure_pct=exposure_pct,
+            daily_pnl_usd=unrealized,
+            agent_status=self.risk.kill_switch.value,
+            trades_today=spot_count + perp_count,
+        )
+
+    async def _snapshot_portfolio_hourly(self, session: AsyncSession, now: datetime) -> None:
+        """Crea un PnlSnapshot ogni ora se non già presente per l'ora corrente."""
+        user_id = str(self.settings.default_user_id)
+        pnl_repo = PnlRepository(session)
+        portfolio = await pnl_repo.get_portfolio(user_id)
+        if portfolio is None:
+            return
+
+        recent = await pnl_repo.recent_for_user(user_id, limit=1)
+        if recent:
+            last_ts = recent[0].timestamp_utc
+            if last_ts.year == now.year and last_ts.month == now.month and last_ts.day == now.day and last_ts.hour == now.hour:
+                return
+
+        open_spot = await SpotPositionRepository(session).open_for_user(user_id)
+        open_perp = await PerpPositionRepository(session).open_for_user(user_id)
+        spot_equity = sum((p.entry_price * p.size for p in open_spot), Decimal("0"))
+        perp_equity = sum((p.entry_price * p.size for p in open_perp), Decimal("0"))
+
+        snapshot = PnlSnapshot(
+            user_id=user_id,
+            timestamp_utc=now.replace(minute=0, second=0, microsecond=0),
+            total_equity_usd=portfolio.total_equity_usd,
+            spot_equity_usd=spot_equity,
+            perp_equity_usd=perp_equity,
+            cash_usd=Decimal("0"),
+            drawdown_pct=portfolio.drawdown_pct,
+            exposure_pct=portfolio.exposure_pct,
+            daily_pnl_usd=portfolio.daily_pnl_usd,
+            open_spot_positions=len(open_spot),
+            open_perp_positions=len(open_perp),
+        )
+        await pnl_repo.save_snapshot(snapshot)
+
     async def slow_tick(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
         """Slow scanner tick plus the hard daily Spot trade heartbeat."""
 
@@ -222,6 +303,7 @@ class AgentService:
                 scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
             if "perp" in markets:
                 scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
+        await self._snapshot_portfolio_hourly(session, _now)
         await self._maybe_send_daily_summary(session, _now)
         return {
             "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",

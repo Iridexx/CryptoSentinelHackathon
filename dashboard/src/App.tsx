@@ -741,11 +741,48 @@ function AnalyticsPanel({
   onTradeDetail: (tradeId: string) => Promise<TradeDetail>;
 }) {
   const [detail, setDetail] = useState<LoadState<TradeDetail>>(emptyState());
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterAsset, setFilterAsset] = useState('');
+  const [filterMarket, setFilterMarket] = useState('');
+  const [filterAction, setFilterAction] = useState('');
+  const [filterExecution, setFilterExecution] = useState('');
+
   async function openDetail(tradeId?: string | null) {
     if (!tradeId) return;
     await loadDetail(setDetail, () => onTradeDetail(tradeId));
   }
+
+  const allItems = decisions.data?.items ?? [];
+
+  const uniqueAssets = useMemo(() => [...new Set(allItems.map(i => i.asset ?? '').filter(Boolean))].sort(), [allItems]);
+  const uniqueMarkets = useMemo(() => [...new Set(allItems.map(i => i.market))].sort(), [allItems]);
+  const uniqueActions = useMemo(() => [...new Set(allItems.map(i => i.action))].sort(), [allItems]);
+  const uniqueExecutions = useMemo(() => [...new Set(allItems.map(i => i.execution_result ?? '').filter(Boolean))].sort(), [allItems]);
+
+  const filtered = useMemo(() => {
+    const q = filterSearch.toLowerCase();
+    return allItems.filter(item => {
+      if (filterAsset && (item.asset ?? '') !== filterAsset) return false;
+      if (filterMarket && item.market !== filterMarket) return false;
+      if (filterAction && item.action !== filterAction) return false;
+      if (filterExecution && (item.execution_result ?? '') !== filterExecution) return false;
+      if (q) {
+        return (
+          (item.asset ?? '').toLowerCase().includes(q) ||
+          item.market.toLowerCase().includes(q) ||
+          item.action.toLowerCase().includes(q) ||
+          (item.execution_result ?? '').toLowerCase().includes(q) ||
+          (item.reasoning ?? '').toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [allItems, filterSearch, filterAsset, filterMarket, filterAction, filterExecution]);
+
+  const hasActiveFilter = filterSearch || filterAsset || filterMarket || filterAction || filterExecution;
+
   return (
+    <div>
     <div className="grid overview-grid">
       <Panel title="Equity Curve" className="wide">
         <StateBlock state={equity} empty="No equity curve data" />
@@ -797,41 +834,76 @@ function AnalyticsPanel({
           <Empty title="No asset activity" detail="Breakdown starts after the first non-archived trade or position." />
         ) : null}
       </Panel>
+    </div>
 
-      <Panel title="Decision Log" className="wide">
+    <Panel title="Decision Log" className="wide">
         <StateBlock state={decisions} empty="No agent decisions loaded" />
-        {decisions.data && decisions.data.items.length > 0 ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Asset</th>
-                  <th>Market</th>
-                  <th>Quality</th>
-                  <th>Action</th>
-                  <th>Execution</th>
-                  <th>Reasoning</th>
-                </tr>
-              </thead>
-              <tbody>
-                {decisions.data.items.map((item) => (
-                  <tr key={item.decision_id} onClick={() => void openDetail(item.trade_id)}>
-                    <td>{shortDate(item.timestamp_utc)}</td>
-                    <td>{item.asset ?? '--'}</td>
-                    <td>{item.market}</td>
-                    <td>{item.signal_quality}</td>
-                    <td>{item.action}</td>
-                    <td>{item.execution_result ?? '--'}</td>
-                    <td className="reasoning-cell">{item.reasoning ?? '--'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : decisions.data ? (
-          <Empty title="No decisions" detail="Agent reasoning will appear after the first evaluation." />
-        ) : null}
+        {decisions.data && (
+          <>
+            <div className="decision-filters">
+              <input
+                type="search"
+                placeholder="Cerca…"
+                value={filterSearch}
+                onChange={e => setFilterSearch(e.target.value)}
+              />
+              <select value={filterAsset} onChange={e => setFilterAsset(e.target.value)}>
+                <option value="">Tutti gli asset</option>
+                {uniqueAssets.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <select value={filterMarket} onChange={e => setFilterMarket(e.target.value)}>
+                <option value="">Tutti i mercati</option>
+                {uniqueMarkets.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <select value={filterAction} onChange={e => setFilterAction(e.target.value)}>
+                <option value="">Tutte le azioni</option>
+                {uniqueActions.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <select value={filterExecution} onChange={e => setFilterExecution(e.target.value)}>
+                <option value="">Tutti i risultati</option>
+                {uniqueExecutions.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+              {hasActiveFilter && (
+                <button onClick={() => { setFilterSearch(''); setFilterAsset(''); setFilterMarket(''); setFilterAction(''); setFilterExecution(''); }}>
+                  Reset
+                </button>
+              )}
+              <span className="muted">{filtered.length} / {allItems.length}</span>
+            </div>
+            {filtered.length > 0 ? (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Asset</th>
+                      <th>Market</th>
+                      <th>Quality</th>
+                      <th>Action</th>
+                      <th>Execution</th>
+                      <th>Reasoning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((item) => (
+                      <tr key={item.decision_id} onClick={() => void openDetail(item.trade_id)}>
+                        <td>{shortDate(item.timestamp_utc)}</td>
+                        <td>{item.asset ?? '--'}</td>
+                        <td>{item.market}</td>
+                        <td>{item.signal_quality}</td>
+                        <td>{item.action}</td>
+                        <td>{item.execution_result ?? '--'}</td>
+                        <td className="reasoning-cell">{item.reasoning ?? '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <Empty title="Nessun risultato" detail={hasActiveFilter ? 'Nessuna decisione corrisponde ai filtri selezionati.' : 'Agent reasoning will appear after the first evaluation.'} />
+            )}
+          </>
+        )}
         {detail.data && <TradeDetailCard detail={detail.data} />}
         {detail.error && <p className="error-text">{detail.error}</p>}
       </Panel>

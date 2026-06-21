@@ -179,6 +179,7 @@ class ViewService:
                 pnl_history=[],
             )
 
+        # total_equity_usd viene aggiornato da fast_tick; pnl_total = delta dall'equity iniziale
         pnl_total = portfolio.total_equity_usd - portfolio.initial_equity_usd
         sharpe = _daily_sharpe(snapshots)
         pnl_pct = (

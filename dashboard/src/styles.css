@@ -682,3 +682,50 @@ button.danger {
   background: #382d18;
   color: #d4bd70;
 }
+
+.decision-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.decision-filters input[type="search"],
+.decision-filters select {
+  background: #161b15;
+  border: 1px solid #30362f;
+  border-radius: 6px;
+  color: #c8d5c6;
+  font-size: 13px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+.decision-filters input[type="search"] {
+  flex: 1;
+  min-width: 140px;
+}
+
+.decision-filters select {
+  cursor: pointer;
+}
+
+.decision-filters input[type="search"]:focus,
+.decision-filters select:focus {
+  border-color: #5a7a54;
+}
+
+.decision-filters button {
+  background: #20261e;
+  border: 1px solid #30362f;
+  border-radius: 6px;
+  color: #c8d5c6;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.decision-filters button:hover {
+  background: #2a332a;
+}
