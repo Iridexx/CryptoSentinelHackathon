@@ -268,14 +268,16 @@ const TradeHistoryList: FC<{
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-white">{label}</span>
+              <span className={`font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
+                {t.pnl_pct ?? '--'}%
+              </span>
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-1 text-sm text-gray-400 items-start">
+            <div className="mt-2 grid grid-cols-3 gap-1 text-sm text-gray-400">
               <span>In {fmtPrice(t.entry_price ?? t.price)}</span>
               <span>Out {fmtPrice(t.current_or_exit_price ?? t.price)}</span>
-              <div className={`text-right leading-snug ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
-                <div className="font-bold">{t.pnl_pct ?? '--'}%</div>
-                <div className="font-bold">{isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}</div>
-              </div>
+              <span className={`text-right font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
+                {isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}
+              </span>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
               <span className="uppercase tracking-wide">{t.status}</span>
