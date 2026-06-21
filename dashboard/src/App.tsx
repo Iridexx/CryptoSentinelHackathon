@@ -546,8 +546,8 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
               rows={data.open_positions.map((item) => [
                 item.asset,
                 item.size,
-                money(item.entry_price),
-                money(item.current_price),
+                fmtPrice(item.entry_price),
+                fmtPrice(item.current_price),
                 money(item.pnl_unrealized),
                 item.status,
               ])}
@@ -577,8 +577,8 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
                         <td>{item.asset}</td>
                         <td>{item.side}</td>
                         <td>{item.amount}</td>
-                        <td>{money(item.entry_price ?? item.price)}</td>
-                        <td>{money(item.current_or_exit_price ?? item.price)}</td>
+                        <td>{fmtPrice(item.entry_price ?? item.price)}</td>
+                        <td>{fmtPrice(item.current_or_exit_price ?? item.price)}</td>
                         <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
                           {item.pnl_usd ?? '+0.00'} / {item.pnl_pct ?? '+0.00'}%
                         </td>
@@ -620,7 +620,7 @@ function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expa
                 item.asset,
                 item.side,
                 item.leverage ? `${item.leverage}x` : '-',
-                money(item.entry_price),
+                fmtPrice(item.entry_price),
                 money(item.pnl_unrealized),
                 item.status,
               ])}
@@ -650,8 +650,8 @@ function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expa
                         <td>{item.asset}</td>
                         <td>{item.side}</td>
                         <td>{item.leverage ? `${item.leverage}x` : '-'}</td>
-                        <td>{money(item.entry_price ?? item.price)}</td>
-                        <td>{money(item.current_or_exit_price ?? item.price)}</td>
+                        <td>{fmtPrice(item.entry_price ?? item.price)}</td>
+                        <td>{fmtPrice(item.current_or_exit_price ?? item.price)}</td>
                         <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
                           {item.pnl_usd ?? '+0.00'} / {item.pnl_pct ?? '+0.00'}%
                         </td>
@@ -795,8 +795,8 @@ function TradeDetailCard({ detail }: { detail: TradeDetail }) {
       </div>
       <div className="metric-grid">
         <Metric label="Direction" value={detail.direction} />
-        <Metric label="Entry" value={money(detail.entry_price)} />
-        <Metric label="Now/Exit" value={money(detail.current_or_exit_price)} />
+        <Metric label="Entry" value={fmtPrice(detail.entry_price)} />
+        <Metric label="Now/Exit" value={fmtPrice(detail.current_or_exit_price)} />
         <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
         <Metric label="Exposure" value={money(detail.exposure_usd)} />
         <Metric label="Size" value={detail.size} />
@@ -1206,7 +1206,7 @@ function MarketsPanel({
           rows={markets.data.map((item) => [
             item.name,
             item.symbol,
-            item.current_price == null ? '--' : money(item.current_price),
+            item.current_price == null ? '--' : fmtPrice(item.current_price),
             item.price_change_percentage_24h == null ? '--' : `${item.price_change_percentage_24h.toFixed(2)}%`,
             item.total_volume == null ? '--' : compact(item.total_volume),
           ])}
@@ -1309,6 +1309,17 @@ function money(value: string | number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(numeric);
+}
+
+function fmtPrice(value: string | number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || value == null || value === '') return '$--';
+  if (n === 0) return '$0';
+  if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  // Sub-$1: keep up to 8 significant digits, strip trailing zeros
+  const sig = parseFloat(n.toPrecision(8));
+  return `$${sig.toString()}`;
 }
 
 function compact(value: number) {

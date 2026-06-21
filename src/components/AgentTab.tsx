@@ -35,6 +35,16 @@ const fmtUsd = (value: string | number | null | undefined) => {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const fmtPrice = (value: string | number | null | undefined): string => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || value == null || value === '') return '$--';
+  if (n === 0) return '$0';
+  if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  const sig = parseFloat(n.toPrecision(8));
+  return `$${sig.toString()}`;
+};
+
 const fmtPct = (value: string | number | null | undefined) => {
   const n = Number(value ?? 0);
   return `${n.toFixed(2)}%`;
@@ -204,8 +214,8 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 </p>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
-                <span>Entry {fmtUsd(position.entry_price)}</span>
-                <span>Now {fmtUsd(position.current_price)}</span>
+                <span>Entry {fmtPrice(position.entry_price)}</span>
+                <span>Now {fmtPrice(position.current_price)}</span>
                 <span>{position.status}</span>
               </div>
             </div>
@@ -226,7 +236,7 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 </span>
               </div>
               <div className="mt-1 flex items-center justify-between gap-2 text-gray-500">
-                <span>{fmtUsd(trade.entry_price ?? trade.price)} {'to'} {fmtUsd(trade.current_or_exit_price ?? trade.price)}</span>
+                <span>{fmtPrice(trade.entry_price ?? trade.price)} {'to'} {fmtPrice(trade.current_or_exit_price ?? trade.price)}</span>
                 <span>{trade.status}</span>
               </div>
             </button>
@@ -265,7 +275,7 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
                 <span>PnL {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%</span>
-                <span>Liq {position.liquidation_price ? fmtUsd(position.liquidation_price) : '-'}</span>
+                <span>Liq {position.liquidation_price ? fmtPrice(position.liquidation_price) : '-'}</span>
                 <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
                 <span>{position.status}</span>
               </div>
@@ -287,7 +297,7 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
                 </span>
               </div>
               <div className="mt-1 flex items-center justify-between gap-2 text-gray-500">
-                <span>{fmtUsd(trade.entry_price ?? trade.price)} {'to'} {fmtUsd(trade.current_or_exit_price ?? trade.price)}</span>
+                <span>{fmtPrice(trade.entry_price ?? trade.price)} {'to'} {fmtPrice(trade.current_or_exit_price ?? trade.price)}</span>
                 <span>{trade.status}</span>
               </div>
             </button>
@@ -675,8 +685,8 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Stat label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
         <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
-        <Stat label="Entry" value={fmtUsd(detail.entry_price)} />
-        <Stat label="Now/Exit" value={fmtUsd(detail.current_or_exit_price)} />
+        <Stat label="Entry" value={fmtPrice(detail.entry_price)} />
+        <Stat label="Now/Exit" value={fmtPrice(detail.current_or_exit_price)} />
         <Stat label="Size" value={detail.size} />
         <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
       </div>
