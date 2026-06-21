@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter
@@ -170,9 +171,12 @@ async def _bsc_balances(settings: SettingsDep) -> tuple[list[WalletAssetBalance]
         settings.tatum_rpc_api_key,
     )
     try:
-        raw_balance = await client.call("eth_getBalance", [settings.wallet_address, "latest"])
+        raw_balance = await asyncio.wait_for(
+            client.call("eth_getBalance", [settings.wallet_address, "latest"]),
+            timeout=4.0,
+        )
         balance_wei = int(str(raw_balance), 16)
-    except (RpcUnavailableError, ValueError, TypeError):
+    except (RpcUnavailableError, ValueError, TypeError, asyncio.TimeoutError):
         return [], "unavailable"
 
     if balance_wei <= 0:

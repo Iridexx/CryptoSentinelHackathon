@@ -32,6 +32,9 @@ async def init_db(database_url: str, *, echo: bool = False) -> None:
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
 
     async with _engine.begin() as conn:
+        # WAL mode: allows concurrent reads alongside writes, prevents "database is locked"
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA busy_timeout=5000"))
         await conn.run_sync(Base.metadata.create_all)
 
     logger.info("database_initialised", url=_redact_url(database_url))

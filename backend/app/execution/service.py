@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from decimal import Decimal
 from typing import Any
@@ -205,7 +206,10 @@ class ExecutionService:
         if not self.settings.bsc_rpc_urls:
             return None, "rpc_not_configured"
         try:
-            raw_balance = await self.rpc.call("eth_getBalance", [address, "latest"])
+            raw_balance = await asyncio.wait_for(
+                self.rpc.call("eth_getBalance", [address, "latest"]),
+                timeout=4.0,
+            )
             balance_wei = int(str(raw_balance), 16)
         except Exception:
             return None, "unavailable"
