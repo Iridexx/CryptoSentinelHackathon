@@ -55,4 +55,19 @@ if ($Dev) {
 }
 
 Set-Location $ProjectRoot
-& python @UvicornArgs
+
+# Su Windows, Ctrl+C in terminali embedded non viene sempre propagato al
+# processo figlio. Registriamo un handler esplicito che termina Python.
+$global:BackendProc = $null
+[Console]::TreatControlCAsInput = $false
+
+try {
+    $global:BackendProc = Start-Process -FilePath python -ArgumentList $UvicornArgs `
+        -NoNewWindow -PassThru
+    $global:BackendProc.WaitForExit()
+} finally {
+    if ($global:BackendProc -and -not $global:BackendProc.HasExited) {
+        Write-Host "`nInterruzione backend (PID $($global:BackendProc.Id))..."
+        $global:BackendProc.Kill($true)   # $true = includi processi figli (reload workers)
+    }
+}
