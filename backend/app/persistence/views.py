@@ -44,6 +44,7 @@ class ViewService:
         trades = await trade_repo.list_for_user(user_id, limit=100)
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
+        realized = sum((t.pnl_usd for t in trades if t.pnl_usd is not None), Decimal("0"))
         return SpotView(
             open_positions=[
                 SpotPositionView(
@@ -69,8 +70,8 @@ class ViewService:
                     side=t.side,
                     amount=t.amount,
                     price=t.price,
-                    pnl_usd="+0.00",
-                    pnl_pct="+0.00",
+                    pnl_usd=_fmt_pnl(t.pnl_usd),
+                    pnl_pct=_pnl_pct_str(t.pnl_usd, t.price, t.amount),
                     entry_price=t.price,
                     current_or_exit_price=t.price,
                     status=t.status,
@@ -81,7 +82,7 @@ class ViewService:
                 )
                 for t in trades
             ],
-            realized_pnl_usd=Decimal("0"),
+            realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
             win_rate_pct=win["win_rate_pct"],
             trade_count=len(trades),
@@ -94,6 +95,7 @@ class ViewService:
         trades = await trade_repo.list_for_user(user_id, limit=100)
         closed = [t for t in trades if t.status == "confirmed"]
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
+        realized = sum((t.pnl_usd for t in trades if t.pnl_usd is not None), Decimal("0"))
         history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
         return PerpView(
             open_positions=[
@@ -125,8 +127,8 @@ class ViewService:
                     direction=t.direction,
                     size=t.size,
                     price=t.price,
-                    pnl_usd="+0.00",
-                    pnl_pct="+0.00",
+                    pnl_usd=_fmt_pnl(t.pnl_usd),
+                    pnl_pct=_pnl_pct_str(t.pnl_usd, t.price, t.size),
                     entry_price=t.price,
                     current_or_exit_price=t.price,
                     leverage=t.leverage,
@@ -138,7 +140,7 @@ class ViewService:
                 )
                 for t in history_trades
             ],
-            realized_pnl_usd=Decimal("0"),
+            realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
             win_rate_pct=round(len(closed) / len(trades) * 100, 1) if trades else 0.0,
             trade_count=len(trades),
@@ -213,6 +215,20 @@ class ViewService:
                 for s in reversed(snapshots)
             ],
         )
+
+
+def _fmt_pnl(pnl: Decimal | None) -> str:
+    if pnl is None:
+        return "+0.00"
+    sign = "+" if pnl >= 0 else ""
+    return f"{sign}{pnl:.2f}"
+
+
+def _pnl_pct_str(pnl: Decimal | None, price: Decimal, size: Decimal) -> str:
+    if pnl is None or price <= 0 or size <= 0:
+        return "+0.00"
+    exposure = price * size
+    return _format_signed_pct(pnl / exposure * 100)
 
 
 def _format_signed_pct(value: Decimal) -> str:

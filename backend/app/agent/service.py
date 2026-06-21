@@ -146,8 +146,11 @@ class AgentService:
         now = datetime.now(UTC)
         if spot_positions or perp_positions:
             await self._refresh_position_prices(session, spot_positions, perp_positions)
-        await self._update_portfolio_state(session, spot_positions, perp_positions, now)
-        await self._check_risk_notifications(session, spot_positions, perp_positions)
+            await self._check_sl_tp(session, spot_positions, perp_positions, now)
+        open_spot = [p for p in spot_positions if p.status == "open"]
+        open_perp = [p for p in perp_positions if p.status == "open"]
+        await self._update_portfolio_state(session, open_spot, open_perp, now)
+        await self._check_risk_notifications(session, open_spot, open_perp)
         return {
             "status": "ok",
             "open_spot_positions": len(spot_positions),
@@ -210,6 +213,162 @@ class AgentService:
 
         if updated:
             await session.commit()
+
+    async def _close_spot_position(
+        self,
+        session: AsyncSession,
+        pos: SpotPosition,
+        exit_price: Decimal,
+        reason: str,
+        now: datetime,
+    ) -> Decimal:
+        """Chiude una posizione spot: aggiorna status, crea trade di chiusura con pnl_usd."""
+        pnl = (exit_price - pos.entry_price) * pos.size
+        pos.status = "closed"
+        pos.current_price = exit_price
+        pos.pnl_unrealized = pnl
+        pos.updated_at = now
+        session.add(pos)
+        close_trade = SpotTrade(
+            trade_id=f"cls_{pos.position_id}_{uuid4().hex[:8]}",
+            user_id=pos.user_id,
+            asset=pos.asset,
+            side="sell",
+            amount=pos.size,
+            price=exit_price,
+            amount_quote=exit_price * pos.size,
+            status="confirmed",
+            provider="agent",
+            timestamp_utc=now,
+            notes=f"auto_close:{reason}",
+            pnl_usd=pnl,
+        )
+        await SpotTradeRepository(session).save(close_trade)
+        logger.info("spot_position_closed", asset=pos.asset, reason=reason, pnl_usd=float(pnl))
+        return pnl
+
+    async def _close_perp_position(
+        self,
+        session: AsyncSession,
+        pos: PerpPosition,
+        exit_price: Decimal,
+        reason: str,
+        now: datetime,
+        *,
+        partial: bool = False,
+    ) -> Decimal:
+        """Chiude (totalmente o al 50% per TP1) una posizione perp; crea trade di chiusura con pnl_usd."""
+        is_long = pos.side == "long"
+        pnl_per_unit = (exit_price - pos.entry_price) if is_long else (pos.entry_price - exit_price)
+
+        if partial:
+            close_size = (pos.size / Decimal("2")).quantize(Decimal("0.000001"))
+            pnl = pnl_per_unit * close_size
+            pos.size = pos.size - close_size
+            pos.tp1_reached = True
+            pos.pnl_unrealized = pnl_per_unit * pos.size
+        else:
+            close_size = pos.size
+            pnl = pnl_per_unit * close_size
+            pos.status = "closed"
+            pos.pnl_unrealized = pnl
+
+        pos.current_price = exit_price
+        pos.updated_at = now
+        session.add(pos)
+        close_trade = PerpTrade(
+            trade_id=f"cls_{pos.position_id}_{uuid4().hex[:8]}",
+            user_id=pos.user_id,
+            asset=pos.asset,
+            side=pos.side,
+            direction="close",
+            size=close_size,
+            price=exit_price,
+            leverage=pos.leverage,
+            status="confirmed",
+            venue=pos.venue or "agent",
+            timestamp_utc=now,
+            notes=f"auto_close:{reason}{'_partial' if partial else ''}",
+            pnl_usd=pnl,
+        )
+        await PerpTradeRepository(session).save(close_trade)
+        logger.info("perp_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
+        return pnl
+
+    async def _check_sl_tp(
+        self,
+        session: AsyncSession,
+        spot_positions: list,
+        perp_positions: list,
+        now: datetime,
+    ) -> None:
+        """Controlla SL/TP per ogni posizione aperta e chiude quelle che le hanno raggiunte."""
+        user_id = str(self.settings.default_user_id)
+        notifier = get_agent_notifier()
+
+        for pos in spot_positions:
+            if pos.status != "open":
+                continue
+            price = pos.current_price
+            reason: str | None = None
+            if pos.stop_loss and price <= pos.stop_loss:
+                reason = "stop_loss"
+            elif pos.take_profit_2 and price >= pos.take_profit_2:
+                reason = "take_profit_2"
+            elif pos.take_profit_1 and price >= pos.take_profit_1:
+                reason = "take_profit_1"
+            if reason:
+                pnl = await self._close_spot_position(session, pos, price, reason, now)
+                exposure = pos.entry_price * pos.size
+                pnl_pct = pnl / exposure * 100 if exposure > 0 else Decimal("0")
+                asyncio.create_task(
+                    notifier.notify_trade_closed(
+                        user_id=user_id,
+                        trade_id=f"cls_{pos.position_id}",
+                        asset=pos.asset,
+                        market="spot",
+                        pnl_usd=pnl,
+                        pnl_pct=pnl_pct,
+                        close_reason=reason,
+                    )
+                )
+
+        for pos in perp_positions:
+            if pos.status != "open":
+                continue
+            price = pos.current_price
+            is_long = pos.side == "long"
+            reason = None
+            partial = False
+
+            if pos.stop_loss:
+                if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
+                    reason = "stop_loss"
+
+            if reason is None and pos.tp1_reached and pos.take_profit_2:
+                if (is_long and price >= pos.take_profit_2) or (not is_long and price <= pos.take_profit_2):
+                    reason = "take_profit_2"
+
+            if reason is None and not pos.tp1_reached and pos.take_profit_1:
+                if (is_long and price >= pos.take_profit_1) or (not is_long and price <= pos.take_profit_1):
+                    reason = "take_profit_1"
+                    partial = True
+
+            if reason:
+                pnl = await self._close_perp_position(session, pos, price, reason, now, partial=partial)
+                exposure = pos.entry_price * pos.size * pos.leverage
+                pnl_pct = pnl / exposure * 100 if exposure > 0 else Decimal("0")
+                asyncio.create_task(
+                    notifier.notify_trade_closed(
+                        user_id=user_id,
+                        trade_id=f"cls_{pos.position_id}",
+                        asset=pos.asset,
+                        market="perp",
+                        pnl_usd=pnl,
+                        pnl_pct=pnl_pct,
+                        close_reason=reason,
+                    )
+                )
 
     async def _update_portfolio_state(
         self,

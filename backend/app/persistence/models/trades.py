@@ -34,6 +34,7 @@ class SpotTrade(Base):
     block_timestamp_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     signal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
 
 
 class PerpTrade(Base):
@@ -62,3 +63,4 @@ class PerpTrade(Base):
     venue: Mapped[str | None] = mapped_column(String(64), nullable=True)
     signal_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pnl_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)

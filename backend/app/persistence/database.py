@@ -36,8 +36,22 @@ async def init_db(database_url: str, *, echo: bool = False) -> None:
         await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.execute(text("PRAGMA busy_timeout=5000"))
         await conn.run_sync(Base.metadata.create_all)
+        await _apply_column_migrations(conn)
 
     logger.info("database_initialised", url=_redact_url(database_url))
+
+
+async def _apply_column_migrations(conn) -> None:
+    """ADD COLUMN migrations for existing tables — idempotent (errors silently ignored)."""
+    new_columns = [
+        ("spot_trades", "pnl_usd", "NUMERIC(20,8)"),
+        ("perp_trades", "pnl_usd", "NUMERIC(20,8)"),
+    ]
+    for table, column, col_type in new_columns:
+        try:
+            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+        except Exception:
+            pass  # column already exists
 
 
 async def close_db() -> None:
