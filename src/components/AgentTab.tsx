@@ -266,18 +266,18 @@ const TradeHistoryList: FC<{
             onClick={() => onTrade(t.trade_id)}
             className={`h-auto w-full rounded-xl border-0 px-4 py-3 text-left text-sm ${isClose ? 'bg-dark-700' : 'bg-dark-800'}`}
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-white">{label}</span>
-              <span className={`font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
-                {t.pnl_pct ?? '--'}%
-              </span>
-            </div>
-            <div className="mt-2 grid grid-cols-3 gap-1 text-sm text-gray-400">
-              <span>In {fmtPrice(t.entry_price ?? t.price)}</span>
-              <span>Out {fmtPrice(t.current_or_exit_price ?? t.price)}</span>
-              <span className={`text-right font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
-                {isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}
-              </span>
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-white">{label}</div>
+                <div className="mt-2 flex gap-3 text-sm text-gray-400">
+                  <span>In {fmtPrice(t.entry_price ?? t.price)}</span>
+                  <span>Out {fmtPrice(t.current_or_exit_price ?? t.price)}</span>
+                </div>
+              </div>
+              <div className={`flex-shrink-0 text-right font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
+                <div>{t.pnl_pct ?? '--'}%</div>
+                <div>{isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}</div>
+              </div>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
               <span className="uppercase tracking-wide">{t.status}</span>
