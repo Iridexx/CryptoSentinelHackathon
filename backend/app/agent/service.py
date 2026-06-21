@@ -36,7 +36,6 @@ logger = get_logger("agent.service")
 DAILY_TRADE_CHECK_TIME_UTC = time(20, 0, tzinfo=UTC)
 DAILY_TRADE_RETRY_UNTIL_UTC = time(23, 30, tzinfo=UTC)
 HEARTBEAT_TRADE_ASSET = "ETH"
-HEARTBEAT_TRADE_QUOTE_USD = Decimal("1")
 HEARTBEAT_TRADE_PRICE_USD = Decimal("1")
 
 
@@ -171,7 +170,9 @@ class AgentService:
     async def _handle_signal(self, signal: dict, session: AsyncSession) -> dict:
         if signal.get("action") == "skip":
             risk_decision = RiskDecision(False, f"signal_skipped:{signal.get('reason') or 'skip'}")
-            brain_decision = await self._brain_decision(signal, risk_decision)
+            brain_decision = self.brain._local_fallback(
+                signal, risk_decision.__dict__, reason_prefix="no_signal_skip"
+            )
             decision = await self._record_decision(session, signal, risk_decision, brain_decision)
             return {
                 "signal": signal,
@@ -183,6 +184,8 @@ class AgentService:
 
         user_id = str(self.settings.default_user_id)
         portfolio = await PnlRepository(session).get_portfolio(user_id)
+        if portfolio is None and self.settings.execution_mode == "dry_run":
+            portfolio = await _initialise_dry_run_portfolio(session, self.settings)
         spot_positions = await SpotPositionRepository(session).open_for_user(user_id)
         perp_positions = await PerpPositionRepository(session).open_for_user(user_id)
         intent = _intent_from_signal(signal, portfolio_total=Decimal(str(getattr(portfolio, "total_equity_usd", 0) or 0)))
@@ -398,11 +401,12 @@ class AgentService:
             "quality": 0.86,
             "confidence": 0.86,
             "price": HEARTBEAT_TRADE_PRICE_USD,
-            "quote_equity": max(Decimal(str(self.settings.min_portfolio_value_usd)) * Decimal("10"), HEARTBEAT_TRADE_QUOTE_USD),
+            "quote_equity": Decimal(str(self.settings.dry_run_capital_usd)),
             "heartbeat_trade": True,
         }
+        heartbeat_trade_quote_usd = max(Decimal(str(self.settings.min_trade_size_usd)), Decimal("1"))
         if self.settings.execution_mode == "dry_run":
-            execution = await self._simulate_trade(session, signal, HEARTBEAT_TRADE_QUOTE_USD)
+            execution = await self._simulate_trade(session, signal, heartbeat_trade_quote_usd)
             return {
                 "status": "executed",
                 "mode": "dry_run",
@@ -422,7 +426,7 @@ class AgentService:
             }
         execution = await self._execute_spot(
             {**signal, "from_asset": from_asset, "to_asset": to_asset, "amount_in_atomic": amount_in_atomic},
-            HEARTBEAT_TRADE_QUOTE_USD,
+            heartbeat_trade_quote_usd,
         )
         return {
             "status": "executed" if execution.get("status") in {"prepared", "confirmed"} else "blocked",
@@ -451,6 +455,17 @@ def _optional_decimal(value) -> Decimal | None:
         return None
     parsed = Decimal(str(value))
     return parsed if parsed > 0 else None
+
+
+async def _initialise_dry_run_portfolio(session: AsyncSession, settings: Settings):
+    capital = Decimal(str(settings.dry_run_capital_usd))
+    return await PnlRepository(session).upsert_portfolio(
+        str(settings.default_user_id),
+        total_equity_usd=capital,
+        initial_equity_usd=capital,
+        peak_equity_usd=capital,
+        agent_status="idle",
+    )
 
 
 def _active_markets(value: str) -> set[str]:
