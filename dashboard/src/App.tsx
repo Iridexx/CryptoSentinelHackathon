@@ -569,7 +569,6 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
 
 function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expanded?: boolean }) {
   const data = spot.data;
-  const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
     <Panel title="Spot Ranking View" className={expanded ? 'wide' : ''}>
       <StateBlock state={spot} empty="No Spot data loaded" />
@@ -605,44 +604,12 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
               })}
             />
           )}
-          {expanded &&
-            (data.history.length === 0 ? (
-              <Empty title="No Spot trades today" detail="Trade history will appear after the first confirmed Spot order." />
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Asset</th>
-                      <th>Side</th>
-                      <th>Amount</th>
-                      <th>Entry</th>
-                      <th>Now/Exit</th>
-                      <th>PnL</th>
-                      <th>Status</th>
-                      <th>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.history.map((item) => (
-                      <tr key={item.trade_id} onClick={() => setOpenTrade(openTrade === item.trade_id ? null : item.trade_id)}>
-                        <td>{item.asset}</td>
-                        <td>{item.side}</td>
-                        <td>{item.amount}</td>
-                        <td>{fmtPrice(item.entry_price ?? item.price)}</td>
-                        <td>{fmtPrice(item.current_or_exit_price ?? item.price)}</td>
-                        <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
-                          {item.pnl_usd ?? '+0.00'} / {item.pnl_pct ?? '+0.00'}%
-                        </td>
-                        <td>{item.status}</td>
-                        <td>{shortDate(item.timestamp_utc)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {openTrade && <TradeDetailInline tradeId={openTrade} />}
-              </div>
-            ))}
+          {expanded && (
+            <div className="history-section">
+              <div className="section-head">Trade History</div>
+              <TradeHistoryTable trades={data.history} market="spot" />
+            </div>
+          )}
         </>
       )}
     </Panel>
@@ -651,7 +618,6 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
 
 function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expanded?: boolean }) {
   const data = perp.data;
-  const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
     <Panel title="Perp Futures View" className={expanded ? 'wide' : ''}>
       <StateBlock state={perp} empty="No Perp data loaded" />
@@ -688,44 +654,12 @@ function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expa
               })}
             />
           )}
-          {expanded &&
-            (data.history.length === 0 ? (
-              <Empty title="No Perp trades today" detail="Trade history will appear after the first confirmed Perp order." />
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Asset</th>
-                      <th>Side</th>
-                      <th>Leverage</th>
-                      <th>Entry</th>
-                      <th>Now/Exit</th>
-                      <th>PnL</th>
-                      <th>Status</th>
-                      <th>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.history.map((item) => (
-                      <tr key={item.trade_id} onClick={() => setOpenTrade(openTrade === item.trade_id ? null : item.trade_id)}>
-                        <td>{item.asset}</td>
-                        <td>{item.side}</td>
-                        <td>{item.leverage ? `${item.leverage}x` : '-'}</td>
-                        <td>{fmtPrice(item.entry_price ?? item.price)}</td>
-                        <td>{fmtPrice(item.current_or_exit_price ?? item.price)}</td>
-                        <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
-                          {item.pnl_usd ?? '+0.00'} / {item.pnl_pct ?? '+0.00'}%
-                        </td>
-                        <td>{item.status}</td>
-                        <td>{shortDate(item.timestamp_utc)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {openTrade && <TradeDetailInline tradeId={openTrade} />}
-              </div>
-            ))}
+          {expanded && (
+            <div className="history-section">
+              <div className="section-head">Trade History</div>
+              <TradeHistoryTable trades={data.history} market="perp" />
+            </div>
+          )}
         </>
       )}
     </Panel>
@@ -1766,6 +1700,129 @@ function Metric({ label, value, tone = '' }: { label: string; value: string; ton
     <div className={`metric ${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+const HISTORY_PAGE = 10;
+
+type SpotHistoryItem = SpotView['history'][number];
+type PerpHistoryItem = PerpView['history'][number];
+
+function TradeHistoryTable({
+  trades,
+  market,
+}: {
+  trades: SpotHistoryItem[] | PerpHistoryItem[];
+  market: 'spot' | 'perp';
+}) {
+  const [search, setSearch] = useState('');
+  const [filterSide, setFilterSide] = useState('all');
+  const [filterDir, setFilterDir] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [page, setPage] = useState(0);
+  const [openTrade, setOpenTrade] = useState<string | null>(null);
+
+  const sides = useMemo(() => ['all', ...Array.from(new Set(trades.map((t) => t.side)))], [trades]);
+  const dirs = useMemo(
+    () => (market === 'perp' ? ['all', ...Array.from(new Set((trades as PerpHistoryItem[]).map((t) => t.direction)))] : []),
+    [trades, market],
+  );
+  const statuses = useMemo(() => ['all', ...Array.from(new Set(trades.map((t) => t.status)))], [trades]);
+
+  const filtered = useMemo(() => {
+    return (trades as (SpotHistoryItem & PerpHistoryItem)[]).filter((t) => {
+      if (search && !t.asset.toLowerCase().includes(search.toLowerCase())) return false;
+      if (filterSide !== 'all' && t.side !== filterSide) return false;
+      if (market === 'perp' && filterDir !== 'all' && t.direction !== filterDir) return false;
+      if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+      return true;
+    });
+  }, [trades, search, filterSide, filterDir, filterStatus, market]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE));
+  const pg = Math.min(page, totalPages - 1);
+  const pageItems = filtered.slice(pg * HISTORY_PAGE, (pg + 1) * HISTORY_PAGE);
+  const resetPage = () => setPage(0);
+
+  if (trades.length === 0)
+    return <Empty title="No trade history" detail="History will appear after the first confirmed order." />;
+
+  return (
+    <div className="trade-history-wrap">
+      <div className="trade-history-controls">
+        <div className="trade-history-filters">
+          <input
+            className="trade-history-search"
+            placeholder="Asset…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); resetPage(); }}
+          />
+          <select value={filterSide} onChange={(e) => { setFilterSide(e.target.value); resetPage(); }}>
+            {sides.map((s) => <option key={s} value={s}>{s === 'all' ? 'All sides' : s}</option>)}
+          </select>
+          {market === 'perp' && (
+            <select value={filterDir} onChange={(e) => { setFilterDir(e.target.value); resetPage(); }}>
+              {dirs.map((d) => <option key={d} value={d}>{d === 'all' ? 'All dirs' : d}</option>)}
+            </select>
+          )}
+          <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); resetPage(); }}>
+            {statuses.map((s) => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s}</option>)}
+          </select>
+        </div>
+        <div className="trade-history-pager">
+          <button className="pager-btn" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={pg === 0}>‹</button>
+          <span className="pager-info">{pg + 1}/{totalPages} <span className="pager-total">({filtered.length})</span></span>
+          <button className="pager-btn" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={pg >= totalPages - 1}>›</button>
+        </div>
+      </div>
+      <div className="trade-history-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Asset</th>
+              <th>Side</th>
+              {market === 'perp' && <th>Dir</th>}
+              {market === 'perp' && <th>Lev</th>}
+              <th>{market === 'spot' ? 'Amount' : 'Size'}</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>PnL $</th>
+              <th>PnL %</th>
+              <th>Status</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageItems.map((t) => {
+              const pnl = Number(t.pnl_usd ?? 0);
+              const isGood = pnl >= 0;
+              const isClose = market === 'perp' ? t.direction === 'close' : t.side === 'sell';
+              return (
+                <tr
+                  key={t.trade_id}
+                  className={isClose ? 'tr-close' : ''}
+                  onClick={() => setOpenTrade(openTrade === t.trade_id ? null : t.trade_id)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <td><strong>{t.asset}</strong></td>
+                  <td>{t.side}</td>
+                  {market === 'perp' && <td>{t.direction}</td>}
+                  {market === 'perp' && <td>{t.leverage ? `${t.leverage}x` : '-'}</td>}
+                  <td className="num">{market === 'spot' ? String(t.amount ?? '-') : String(t.size ?? '-')}</td>
+                  <td className="num">{fmtPrice(t.entry_price ?? t.price)}</td>
+                  <td className="num">{fmtPrice(t.current_or_exit_price ?? t.price)}</td>
+                  <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_usd ?? '--'}</td>
+                  <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_pct ?? '--'}%</td>
+                  <td><span className="status-badge">{t.status}</span></td>
+                  <td className="date-cell">{shortDate(t.timestamp_utc)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {openTrade && <TradeDetailInline tradeId={openTrade} />}
     </div>
   );
 }

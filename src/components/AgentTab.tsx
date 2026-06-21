@@ -187,6 +187,126 @@ const SelectInput: FC<{
   </label>
 );
 
+const MOBILE_PAGE = 8;
+
+type SpotHistoryRow = NonNullable<SpotView['history']>[number];
+type PerpHistoryRow = NonNullable<PerpView['history']>[number];
+
+const TradeHistoryList: FC<{
+  trades: SpotHistoryRow[] | PerpHistoryRow[];
+  market: 'spot' | 'perp';
+  onTrade: (id: string) => void;
+}> = ({ trades, market, onTrade }) => {
+  const [search, setSearch] = useState('');
+  const [filterSide, setFilterSide] = useState('all');
+  const [filterDir, setFilterDir] = useState('all');
+  const [page, setPage] = useState(0);
+
+  const sides = useMemo(() => ['all', ...Array.from(new Set(trades.map((t) => t.side)))], [trades]);
+  const dirs = useMemo(
+    () => (market === 'perp' ? ['all', ...Array.from(new Set((trades as PerpHistoryRow[]).map((t) => t.direction)))] : []),
+    [trades, market],
+  );
+
+  const filtered = useMemo(() => {
+    return (trades as (SpotHistoryRow & PerpHistoryRow)[]).filter((t) => {
+      if (search && !t.asset.toLowerCase().includes(search.toLowerCase())) return false;
+      if (filterSide !== 'all' && t.side !== filterSide) return false;
+      if (market === 'perp' && filterDir !== 'all' && t.direction !== filterDir) return false;
+      return true;
+    });
+  }, [trades, search, filterSide, filterDir, market]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / MOBILE_PAGE));
+  const pg = Math.min(page, totalPages - 1);
+  const pageItems = filtered.slice(pg * MOBILE_PAGE, (pg + 1) * MOBILE_PAGE);
+  const resetPage = () => setPage(0);
+
+  if (trades.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {/* filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <input
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); resetPage(); }}
+          placeholder="Asset…"
+          className="w-20 flex-shrink-0 rounded-lg border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-white outline-none"
+        />
+        <select
+          value={filterSide}
+          onChange={(e) => { setFilterSide(e.target.value); resetPage(); }}
+          className="flex-1 min-w-0 rounded-lg border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-white outline-none"
+        >
+          {sides.map((s) => <option key={s} value={s}>{s === 'all' ? 'All sides' : s}</option>)}
+        </select>
+        {market === 'perp' && (
+          <select
+            value={filterDir}
+            onChange={(e) => { setFilterDir(e.target.value); resetPage(); }}
+            className="flex-1 min-w-0 rounded-lg border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-white outline-none"
+          >
+            {dirs.map((d) => <option key={d} value={d}>{d === 'all' ? 'Open+Close' : d}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* trade cards */}
+      {pageItems.map((t) => {
+        const pnl = Number(t.pnl_usd ?? 0);
+        const isGood = pnl >= 0;
+        const isClose = market === 'perp' ? t.direction === 'close' : t.side === 'sell';
+        const label = market === 'perp'
+          ? `${t.asset} ${t.side} ${t.leverage ? t.leverage + 'x' : ''} · ${t.direction}`
+          : `${t.asset} ${t.side}`;
+        return (
+          <button
+            key={t.trade_id}
+            onClick={() => onTrade(t.trade_id)}
+            className={`h-auto w-full rounded-xl border-0 px-3 py-3 text-left text-xs ${isClose ? 'bg-dark-700' : 'bg-dark-800'}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-white">{label}</span>
+              <span className={isGood ? 'text-accent-green font-bold' : 'text-accent-red font-bold'}>
+                {t.pnl_pct ?? '--'}%
+              </span>
+            </div>
+            <div className="mt-1.5 grid grid-cols-3 gap-1 text-gray-400">
+              <span>In {fmtPrice(t.entry_price ?? t.price)}</span>
+              <span>Out {fmtPrice(t.current_or_exit_price ?? t.price)}</span>
+              <span className={isGood ? 'text-accent-green' : 'text-accent-red'}>
+                {isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-gray-500">
+              <span className="uppercase tracking-wide" style={{ fontSize: '10px' }}>{t.status}</span>
+              <span style={{ fontSize: '10px' }}>
+                {new Date(t.timestamp_utc).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+
+      {/* pager */}
+      <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+        <button
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          disabled={pg === 0}
+          className="px-3 py-1 rounded-lg bg-dark-800 border border-dark-600 disabled:opacity-30"
+        >‹ Prev</button>
+        <span>{pg + 1}/{totalPages} ({filtered.length} trade)</span>
+        <button
+          onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+          disabled={pg >= totalPages - 1}
+          className="px-3 py-1 rounded-lg bg-dark-800 border border-dark-600 disabled:opacity-30"
+        >Next ›</button>
+      </div>
+    </div>
+  );
+};
+
 const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }> = ({ data, onTrade }) => {
   const hasPositions = (data?.open_positions.length ?? 0) > 0;
   const hasHistory = (data?.history.length ?? 0) > 0;
@@ -227,20 +347,7 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
       {hasHistory ? (
         <div className="space-y-2">
           <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot history</h3>
-          {data!.history.slice(0, 5).map((trade) => (
-            <button key={trade.trade_id} onClick={() => onTrade(trade.trade_id)} className="h-auto w-full rounded-lg border-0 bg-dark-800 px-3 py-2 text-left text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-white">{trade.asset} {trade.side}</span>
-                <span className={Number(trade.pnl_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>
-                  {trade.pnl_pct ?? '+0.00'}%
-                </span>
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-gray-500">
-                <span>{fmtPrice(trade.entry_price ?? trade.price)} {'to'} {fmtPrice(trade.current_or_exit_price ?? trade.price)}</span>
-                <span>{trade.status}</span>
-              </div>
-            </button>
-          ))}
+          <TradeHistoryList trades={data!.history} market="spot" onTrade={onTrade} />
         </div>
       ) : hasActivity && (
         <EmptyState title="Nessun trade oggi" detail="Lo storico si popola quando l'agente prepara o chiude operazioni spot." />
@@ -288,20 +395,7 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
       {hasHistory ? (
         <div className="space-y-2">
           <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Perp history</h3>
-          {data!.history.slice(0, 5).map((trade) => (
-            <button key={trade.trade_id} onClick={() => onTrade(trade.trade_id)} className="h-auto w-full rounded-lg border-0 bg-dark-800 px-3 py-2 text-left text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-white">{trade.asset} {trade.side} {trade.leverage}x</span>
-                <span className={Number(trade.pnl_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>
-                  {trade.pnl_pct ?? '+0.00'}%
-                </span>
-              </div>
-              <div className="mt-1 flex items-center justify-between gap-2 text-gray-500">
-                <span>{fmtPrice(trade.entry_price ?? trade.price)} {'to'} {fmtPrice(trade.current_or_exit_price ?? trade.price)}</span>
-                <span>{trade.status}</span>
-              </div>
-            </button>
-          ))}
+          <TradeHistoryList trades={data!.history} market="perp" onTrade={onTrade} />
         </div>
       ) : hasActivity && (
         <EmptyState title="Nessun trade perp" detail="Lo storico perp si popola dopo le prime operazioni." />
