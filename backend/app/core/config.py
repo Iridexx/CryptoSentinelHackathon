@@ -165,6 +165,8 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "bnb_gas_reserve_min": "bnb_gas_reserve_min",
         "min_portfolio_value_usd": "min_portfolio_value_usd",
         "minimum_trades_per_day": "minimum_trades_per_day",
+        "dry_run_capital_usd": "dry_run_capital_usd",
+        "min_trade_size_usd": "min_trade_size_usd",
     },
     "spot": {
         "confidence_threshold": "spot_confidence_threshold",
@@ -326,8 +328,8 @@ class Settings(BaseSettings):
     cmc_requests_per_minute: int = Field(default=120, alias="CMC_REQUESTS_PER_MINUTE")
 
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
-    anthropic_model: str = Field(default="claude-sonnet-4-5", alias="ANTHROPIC_MODEL")
-    anthropic_max_tokens: int = Field(default=4096, alias="ANTHROPIC_MAX_TOKENS")
+    anthropic_model: str = Field(default="claude-haiku-4-5-20251001", alias="ANTHROPIC_MODEL")
+    anthropic_max_tokens: int = Field(default=1024, alias="ANTHROPIC_MAX_TOKENS")
     anthropic_daily_cost_limit_usd: float = Field(default=10.0, alias="ANTHROPIC_DAILY_COST_LIMIT_USD")
 
     bsc_network: str = Field(default="testnet", alias="BSC_NETWORK")
@@ -424,6 +426,8 @@ class Settings(BaseSettings):
     bnb_gas_reserve_min: float | None = Field(default=None, alias="BNB_GAS_RESERVE_MIN")
     min_portfolio_value_usd: float = Field(default=5.0, alias="MIN_PORTFOLIO_VALUE_USD")
     minimum_trades_per_day: int = Field(default=1, alias="MINIMUM_TRADES_PER_DAY")
+    dry_run_capital_usd: float = Field(default=500.0, alias="DRY_RUN_CAPITAL_USD")
+    min_trade_size_usd: float = Field(default=7.0, alias="MIN_TRADE_SIZE_USD")
     risk_capital_per_trade_pct: float = Field(default=6.0, alias="RISK_CAPITAL_PER_TRADE_PCT")
     risk_max_open_positions: int = Field(default=3, alias="RISK_MAX_OPEN_POSITIONS")
     risk_max_total_exposure_pct: float = Field(default=30.0, alias="RISK_MAX_TOTAL_EXPOSURE_PCT")

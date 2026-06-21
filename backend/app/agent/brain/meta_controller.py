@@ -24,6 +24,14 @@ class ClaudeMetaController:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
+        if self.settings.anthropic_api_key:
+            logger.info(
+                "claude_meta_controller_ready",
+                model=self.settings.anthropic_model,
+                max_tokens=self.settings.anthropic_max_tokens,
+            )
+        else:
+            logger.warning("claude_meta_controller_no_api_key", fallback="local_deterministic")
 
     async def decide(self, *, signal: dict[str, Any], risk: dict[str, Any]) -> BrainDecision:
         if not self.settings.anthropic_api_key:
@@ -40,10 +48,17 @@ class ClaudeMetaController:
                     },
                     json=payload,
                 )
+            if not response.is_success:
+                logger.warning(
+                    "claude_meta_controller_http_error",
+                    status_code=response.status_code,
+                    model=self.settings.anthropic_model,
+                    body=response.text[:300],
+                )
             response.raise_for_status()
             return self._parse_response(response.json())
         except Exception as exc:
-            logger.warning("claude_meta_controller_failed", error=str(exc))
+            logger.warning("claude_meta_controller_failed", error=str(exc), model=self.settings.anthropic_model)
             if self.settings.execution_mode == "dry_run":
                 return self._local_fallback(signal, risk, reason_prefix="claude_unavailable_dry_run")
             raise MetaControllerError("claude_meta_controller_unavailable") from exc
