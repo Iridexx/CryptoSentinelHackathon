@@ -53,12 +53,13 @@ import type {
   TradeDetail,
 } from './types';
 
-type Tab = 'overview' | 'spot' | 'global' | 'analytics' | 'health' | 'wallet' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
+type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'analytics' | 'health' | 'wallet' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
 type LoadState<T> = { data: T | null; loading: boolean; error: string | null };
 
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'spot', label: 'Spot' },
+  { id: 'perp', label: 'Perp' },
   { id: 'global', label: 'Global' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'health', label: 'Health' },
@@ -413,11 +414,13 @@ export default function App() {
           <div className="grid overview-grid">
             <GlobalPanel global={global} />
             <SpotPanel spot={spot} />
+            <PerpPanel perp={perp} />
             <HealthPanel live={live} ready={ready} heartbeat={heartbeat} execution={execution} coverage={coverage} />
             <KillSwitchPanel agent={agent} onSet={(state) => void updateKillSwitch(state)} canAdmin={canAdmin} />
           </div>
         )}
         {tab === 'spot' && <SpotPanel spot={spot} expanded />}
+        {tab === 'perp' && <PerpPanel perp={perp} expanded />}
         {tab === 'global' && <GlobalPanel global={global} expanded />}
         {tab === 'analytics' && (
           <AnalyticsPanel
@@ -574,6 +577,79 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
                         <td>{item.asset}</td>
                         <td>{item.side}</td>
                         <td>{item.amount}</td>
+                        <td>{money(item.entry_price ?? item.price)}</td>
+                        <td>{money(item.current_or_exit_price ?? item.price)}</td>
+                        <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
+                          {item.pnl_usd ?? '+0.00'} / {item.pnl_pct ?? '+0.00'}%
+                        </td>
+                        <td>{item.status}</td>
+                        <td>{shortDate(item.timestamp_utc)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {openTrade && <TradeDetailInline tradeId={openTrade} />}
+              </div>
+            ))}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expanded?: boolean }) {
+  const data = perp.data;
+  const [openTrade, setOpenTrade] = useState<string | null>(null);
+  return (
+    <Panel title="Perp Futures View" className={expanded ? 'wide' : ''}>
+      <StateBlock state={perp} empty="No Perp data loaded" />
+      {data && (
+        <>
+          <div className="metric-grid">
+            <Metric label="Realized" value={money(data.realized_pnl_usd)} />
+            <Metric label="Unrealized" value={money(data.unrealized_pnl_usd)} />
+            <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(2)}%`} />
+            <Metric label="Trades" value={String(data.trade_count)} />
+          </div>
+          {data.open_positions.length === 0 ? (
+            <Empty title="No open Perp positions" detail="The agent has no active Perp exposure." />
+          ) : (
+            <Table
+              columns={['Asset', 'Side', 'Leverage', 'Entry', 'PnL', 'Status']}
+              rows={data.open_positions.map((item) => [
+                item.asset,
+                item.side,
+                item.leverage ? `${item.leverage}x` : '-',
+                money(item.entry_price),
+                money(item.pnl_unrealized),
+                item.status,
+              ])}
+            />
+          )}
+          {expanded &&
+            (data.history.length === 0 ? (
+              <Empty title="No Perp trades today" detail="Trade history will appear after the first confirmed Perp order." />
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Asset</th>
+                      <th>Side</th>
+                      <th>Leverage</th>
+                      <th>Entry</th>
+                      <th>Now/Exit</th>
+                      <th>PnL</th>
+                      <th>Status</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.history.map((item) => (
+                      <tr key={item.trade_id} onClick={() => setOpenTrade(openTrade === item.trade_id ? null : item.trade_id)}>
+                        <td>{item.asset}</td>
+                        <td>{item.side}</td>
+                        <td>{item.leverage ? `${item.leverage}x` : '-'}</td>
                         <td>{money(item.entry_price ?? item.price)}</td>
                         <td>{money(item.current_or_exit_price ?? item.price)}</td>
                         <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
