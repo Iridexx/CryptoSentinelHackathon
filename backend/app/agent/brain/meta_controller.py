@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -150,10 +151,20 @@ class ClaudeMetaController:
         text = ""
         if content and isinstance(content[0], dict):
             text = str(content[0].get("text", ""))
+        # Strip markdown code fences (```json ... ``` or ``` ... ```)
+        stripped = re.sub(r"```(?:json)?\s*", "", text).strip()
         try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError as exc:
-            raise MetaControllerError("claude_returned_non_json") from exc
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            # Last resort: find first {...} block in the text
+            match = re.search(r"\{.*\}", stripped, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group())
+                except json.JSONDecodeError as exc:
+                    raise MetaControllerError("claude_returned_non_json") from exc
+            else:
+                raise MetaControllerError("claude_returned_non_json")
         action = str(parsed.get("action", "block")).lower()
         if action not in {"approve", "reduce", "block", "skip"}:
             action = "block"
