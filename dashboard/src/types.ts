@@ -90,6 +90,7 @@ export type GlobalView = {
   initial_equity_usd: string;
   pnl_total_usd: string;
   pnl_total_pct: number;
+  realized_pnl_usd: string;
   unrealized_pnl_usd: string;
   drawdown_pct: string;
   max_drawdown_pct: string;

@@ -544,6 +544,7 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
           <div className="metric-grid">
             <Metric label="Equity" value={money(data.total_equity_usd)} />
             <Metric label="PnL" value={money(data.pnl_total_usd)} tone={Number(data.pnl_total_usd) >= 0 ? 'good' : 'bad'} />
+            <Metric label="Realizzato" value={money(data.realized_pnl_usd)} tone={Number(data.realized_pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="Aperto" value={money(data.unrealized_pnl_usd)} tone={Number(data.unrealized_pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="Daily" value={money(data.daily_pnl_usd)} />
             <Metric label="Trades" value={String(data.trades_today)} />

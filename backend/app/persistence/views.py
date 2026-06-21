@@ -150,6 +150,8 @@ class ViewService:
         pnl_repo = PnlRepository(self._session)
         spot_pos = SpotPositionRepository(self._session)
         perp_pos = PerpPositionRepository(self._session)
+        spot_trade_repo = SpotTradeRepository(self._session)
+        perp_trade_repo = PerpTradeRepository(self._session)
         portfolio = await pnl_repo.get_portfolio(user_id)
         snapshots = await pnl_repo.recent_for_user(user_id, limit=168)
         open_spot = await spot_pos.open_for_user(user_id)
@@ -159,13 +161,17 @@ class ViewService:
             sum((p.pnl_unrealized for p in open_spot), Decimal("0"))
             + sum((p.pnl_unrealized for p in open_perp), Decimal("0"))
         )
+        realized_spot = await spot_trade_repo.sum_realized_pnl(user_id)
+        realized_perp = await perp_trade_repo.sum_realized_pnl(user_id)
+        realized = realized_spot + realized_perp
 
         if portfolio is None:
             return GlobalView(
                 total_equity_usd=Decimal("0"),
                 initial_equity_usd=Decimal("0"),
-                pnl_total_usd=Decimal("0"),
+                pnl_total_usd=realized + unrealized,
                 pnl_total_pct=0.0,
+                realized_pnl_usd=realized,
                 unrealized_pnl_usd=unrealized,
                 drawdown_pct=Decimal("0"),
                 max_drawdown_pct=Decimal("0"),
@@ -181,8 +187,10 @@ class ViewService:
                 pnl_history=[],
             )
 
-        # total_equity_usd viene aggiornato da fast_tick; pnl_total = delta dall'equity iniziale
-        pnl_total = portfolio.total_equity_usd - portfolio.initial_equity_usd
+        # Calcola total_equity direttamente dalla fonte, non dal DB cache
+        # (evita sfasature tra fast_tick aggiornamenti e letture API)
+        total_equity = portfolio.initial_equity_usd + realized + unrealized
+        pnl_total = realized + unrealized
         sharpe = _daily_sharpe(snapshots)
         pnl_pct = (
             float(pnl_total / portfolio.initial_equity_usd * 100)
@@ -190,10 +198,11 @@ class ViewService:
             else 0.0
         )
         return GlobalView(
-            total_equity_usd=portfolio.total_equity_usd,
+            total_equity_usd=total_equity,
             initial_equity_usd=portfolio.initial_equity_usd,
             pnl_total_usd=pnl_total,
             pnl_total_pct=round(pnl_pct, 2),
+            realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
             drawdown_pct=portfolio.drawdown_pct,
             max_drawdown_pct=portfolio.max_drawdown_pct,
