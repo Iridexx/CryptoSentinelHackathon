@@ -585,11 +585,12 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
             <Empty title="No open Spot positions" detail="The agent has no active Spot exposure." />
           ) : (
             <Table
-              columns={['Asset', 'Size', 'Entry', 'Current', 'Invested', 'Value', 'PnL', 'Status']}
+              columns={['Asset', 'Size', 'Entry', 'Price Now', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
               rows={data.open_positions.map((item) => {
                 const invested = Number(item.entry_price) * Number(item.size);
                 const value = invested + Number(item.pnl_unrealized);
                 const pnl = Number(item.pnl_unrealized);
+                const pct = item.pnl_pct ?? '+0.00';
                 return [
                   item.asset,
                   item.size,
@@ -598,6 +599,7 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
                   money(String(invested)),
                   <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
                   <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
+                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
                   item.status,
                 ];
               })}

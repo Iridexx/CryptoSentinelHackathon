@@ -40,7 +40,7 @@ logger = get_logger("agent.service")
 DAILY_TRADE_CHECK_TIME_UTC = time(20, 0, tzinfo=UTC)
 DAILY_TRADE_RETRY_UNTIL_UTC = time(23, 30, tzinfo=UTC)
 HEARTBEAT_TRADE_ASSET = "ETH"
-HEARTBEAT_TRADE_PRICE_USD = Decimal("1")
+HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 
 
 class AgentService:
@@ -704,6 +704,14 @@ class AgentService:
                 "reason": self.risk.kill_switch.value,
                 "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
             }
+        heartbeat_price = HEARTBEAT_TRADE_PRICE_USD_FALLBACK
+        try:
+            feed = BinanceKlineFeed()
+            candles = await feed.fetch(symbol=f"{HEARTBEAT_TRADE_ASSET}USDT", interval="1m", limit=1, market="spot")
+            if candles:
+                heartbeat_price = Decimal(str(candles[-1].close))
+        except Exception:
+            pass
         signal = {
             "signal_id": f"heartbeat_{now.date().isoformat()}",
             "market": "spot",
@@ -711,7 +719,7 @@ class AgentService:
             "action": "enter_long",
             "quality": 0.86,
             "confidence": 0.86,
-            "price": HEARTBEAT_TRADE_PRICE_USD,
+            "price": heartbeat_price,
             "quote_equity": Decimal(str(self.settings.dry_run_capital_usd)),
             "heartbeat_trade": True,
         }
