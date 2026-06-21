@@ -8,6 +8,9 @@ export type SpotPosition = {
   current_price: string;
   pnl_unrealized: string;
   pnl_pct?: string | null;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
   status: string;
   opened_at: string;
 };

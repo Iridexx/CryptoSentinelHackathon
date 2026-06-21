@@ -729,3 +729,289 @@ button.danger {
 .decision-filters button:hover {
   background: #2a332a;
 }
+
+/* ── WALLET HOLDINGS ─────────────────────────────────────────── */
+.holdings-section {
+  margin-bottom: 8px;
+}
+
+.coin-card {
+  border: 1px solid #30362f;
+  border-radius: 10px;
+  background: #161a15;
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.coin-card.expanded {
+  border-color: #5a7a54;
+}
+
+.coin-header {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr 1fr 1fr 136px 24px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  min-height: auto;
+  transition: background 0.12s;
+}
+
+.coin-header:hover {
+  background: #1e241d;
+  border-color: transparent;
+}
+
+.coin-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.coin-meta {
+  display: grid;
+  gap: 3px;
+}
+
+.coin-meta strong {
+  font-size: 15px;
+}
+
+.coin-meta span {
+  color: #a7b0a4;
+  font-size: 12px;
+}
+
+.coin-stat-group {
+  display: grid;
+  gap: 3px;
+}
+
+.coin-stat-group strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.coin-stat-group span {
+  color: #a7b0a4;
+  font-size: 11px;
+}
+
+.coin-pnl-badge {
+  display: grid;
+  gap: 3px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.coin-pnl-badge.pos {
+  background: #162012;
+}
+
+.coin-pnl-badge.neg {
+  background: #201612;
+}
+
+.coin-pnl-badge.pos strong {
+  color: #9ed489;
+}
+
+.coin-pnl-badge.neg strong {
+  color: #ef8e76;
+}
+
+.coin-pnl-badge span {
+  color: #a7b0a4;
+  font-size: 11px;
+}
+
+.coin-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.coin-actions button {
+  flex: 1;
+  min-height: 30px;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.coin-chevron {
+  color: #a7b0a4;
+  font-size: 11px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* coin accordion detail */
+.coin-detail {
+  border-top: 1px solid #2a312a;
+  background: #131613;
+}
+
+.wallet-detail-info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid #20261e;
+}
+
+.wallet-detail-info > div {
+  display: grid;
+  gap: 4px;
+}
+
+.wallet-detail-info span {
+  color: #a7b0a4;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wallet-detail-info strong,
+.wallet-detail-info code {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* filter bar inside coin detail */
+.tx-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #20261e;
+}
+
+.tx-filter-bar input {
+  flex: 1;
+  min-width: 160px;
+  font-size: 13px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.tx-filter-bar select {
+  font-size: 13px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.tx-filter-bar button {
+  font-size: 12px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.tx-filter-bar .muted {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ── SEND/RECEIVE MODAL ──────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: grid;
+  place-items: center;
+  z-index: 200;
+}
+
+.modal-card {
+  background: #1b1f19;
+  border: 1px solid #4a5a48;
+  border-radius: 12px;
+  width: min(520px, 92vw);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-bottom: 1px solid #2a312a;
+}
+
+.modal-head strong {
+  font-size: 17px;
+}
+
+.modal-close {
+  min-height: auto;
+  padding: 4px 10px;
+  font-size: 14px;
+  border-color: transparent;
+  background: transparent;
+  color: #a7b0a4;
+}
+
+.modal-body {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.modal-body .muted {
+  margin: 0;
+  font-size: 14px;
+}
+
+.address-display {
+  display: block;
+  padding: 12px;
+  background: #111410;
+  border: 1px solid #333a31;
+  border-radius: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.send-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.send-info-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #2a312a;
+  border-radius: 8px;
+  background: #141814;
+}
+
+.send-info-grid span {
+  color: #a7b0a4;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.send-info-grid strong,
+.send-info-grid code {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

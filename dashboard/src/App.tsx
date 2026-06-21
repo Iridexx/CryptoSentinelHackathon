@@ -468,6 +468,7 @@ export default function App() {
         {tab === 'wallet' && (
           <WalletPanel
             wallets={wallets}
+            spot={spot}
             canAdmin={canAdmin}
             onSpotProvider={(provider) => void updateSpotProvider(provider)}
             onPerpProvider={(provider) => void updatePerpProvider(provider)}
@@ -1064,6 +1065,7 @@ function CoverageRow({ item }: { item: DataCoverageItem }) {
 
 function WalletPanel({
   wallets,
+  spot,
   canAdmin,
   onSpotProvider,
   onPerpProvider,
@@ -1075,6 +1077,7 @@ function WalletPanel({
   onAddWallet,
 }: {
   wallets: LoadState<ExecutionWalletsResponse>;
+  spot: LoadState<SpotView>;
   canAdmin: boolean;
   onSpotProvider: (provider: string) => void;
   onPerpProvider: (provider: string) => void;
@@ -1085,12 +1088,226 @@ function WalletPanel({
   onWallet: (address: string) => void;
   onAddWallet: () => void;
 }) {
+  const [expandedCoin, setExpandedCoin] = useState<string | null>(null);
+  const [txSearch, setTxSearch] = useState('');
+  const [txType, setTxType] = useState<'all' | 'buy' | 'sell'>('all');
+  const [modal, setModal] = useState<{ mode: 'send' | 'receive'; asset: string } | null>(null);
+
   const data = wallets.data;
+  const spotData = spot.data;
+  const activeWallet = data?.available_wallets?.find((w) => w.active) ?? data?.available_wallets?.[0];
+
+  function toggleCoin(asset: string) {
+    setExpandedCoin((prev) => (prev === asset ? null : asset));
+    setTxSearch('');
+    setTxType('all');
+  }
+
+  function coinColor(asset: string) {
+    const palette = ['#7fa66a', '#6a9ab0', '#b07a6a', '#b0a06a', '#8a6ab0', '#6ab09a', '#a06a8a'];
+    return palette[asset.charCodeAt(0) % palette.length];
+  }
+
+  function assetTrades(asset: string) {
+    if (!spotData) return [];
+    return spotData.history.filter(
+      (t) =>
+        t.asset === asset &&
+        (txType === 'all' || t.side === txType) &&
+        (txSearch === '' ||
+          t.trade_id.toLowerCase().includes(txSearch.toLowerCase()) ||
+          t.status.toLowerCase().includes(txSearch.toLowerCase())),
+    );
+  }
+
   return (
     <Panel title="Wallet" className="wide">
-      <StateBlock state={wallets} empty="No wallet execution snapshot loaded" />
+      <StateBlock state={wallets} empty="Nessun snapshot wallet caricato" />
+
+      {/* ── HOLDINGS ─────────────────────────────────────────────── */}
+      {data && (
+        <div className="holdings-section">
+          <div className="subhead">
+            <h3>Portfolio Holdings</h3>
+            <span>
+              {spotData ? `${spotData.open_positions.length} posizioni aperte` : 'caricamento…'}
+            </span>
+          </div>
+
+          {/* BNB card */}
+          {activeWallet?.balance_bnb && (
+            <div className={`coin-card${expandedCoin === 'BNB' ? ' expanded' : ''}`}>
+              <button className="coin-header" onClick={() => toggleCoin('BNB')}>
+                <span className="coin-avatar" style={{ background: '#f0b90b', color: '#10130f' }}>B</span>
+                <div className="coin-meta">
+                  <strong>BNB</strong>
+                  <span>BNB Smart Chain · gas token</span>
+                </div>
+                <div className="coin-stat-group">
+                  <strong>{parseFloat(activeWallet.balance_bnb).toFixed(4)} BNB</strong>
+                  <span>{activeWallet.balance_status}</span>
+                </div>
+                <div className="coin-stat-group">
+                  <strong className="muted">—</strong>
+                  <span>PnL</span>
+                </div>
+                <div className="coin-stat-group">
+                  <strong className="muted">—</strong>
+                  <span>Entry / Now</span>
+                </div>
+                <div className="coin-actions" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setModal({ mode: 'receive', asset: 'BNB' })}>↓ Ricevi</button>
+                  <button onClick={() => setModal({ mode: 'send', asset: 'BNB' })}>↑ Invia</button>
+                </div>
+                <span className="coin-chevron">{expandedCoin === 'BNB' ? '▲' : '▼'}</span>
+              </button>
+              {expandedCoin === 'BNB' && (
+                <div className="coin-detail">
+                  <div className="wallet-detail-info">
+                    <div><span>Indirizzo</span><code>{activeWallet.address}</code></div>
+                    <div><span>Network</span><strong>{data.network} · Chain {data.chain_id}</strong></div>
+                    <div><span>Bilancio</span><strong>{activeWallet.balance_bnb} BNB</strong></div>
+                  </div>
+                  <p className="hint" style={{ padding: '0 14px 14px' }}>Le transazioni BNB on-chain non sono tracciate in questo sistema.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Spot position cards */}
+          {spotData?.open_positions.map((pos) => {
+            const pnl = parseFloat(pos.pnl_unrealized);
+            const isPos = pnl >= 0;
+            const entry = parseFloat(pos.entry_price);
+            const current = parseFloat(pos.current_price);
+            const size = parseFloat(pos.size);
+            const invested = entry * size;
+            const value = current * size;
+            const isExp = expandedCoin === pos.asset;
+            const trades = isExp ? assetTrades(pos.asset) : [];
+            return (
+              <div key={pos.position_id} className={`coin-card${isExp ? ' expanded' : ''}`}>
+                <button className="coin-header" onClick={() => toggleCoin(pos.asset)}>
+                  <span className="coin-avatar" style={{ background: coinColor(pos.asset) }}>
+                    {pos.asset[0]}
+                  </span>
+                  <div className="coin-meta">
+                    <strong>{pos.asset}/USDT</strong>
+                    <span>Spot · {pos.status}</span>
+                  </div>
+                  <div className="coin-stat-group">
+                    <strong>{size.toFixed(6)}</strong>
+                    <span>Quantità</span>
+                  </div>
+                  <div className="coin-stat-group">
+                    <strong>${invested.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong>
+                    <span>Investito → ${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="coin-stat-group">
+                    <strong>${entry.toLocaleString()} → ${current.toLocaleString()}</strong>
+                    <span>Entry → Now</span>
+                  </div>
+                  <div className={`coin-pnl-badge${isPos ? ' pos' : ' neg'}`}>
+                    <strong>{isPos ? '+' : ''}{pnl.toFixed(2)} $</strong>
+                    <span>{pos.pnl_pct ?? '—'}</span>
+                  </div>
+                  <div className="coin-actions" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => setModal({ mode: 'receive', asset: pos.asset })}>↓ Ricevi</button>
+                    <button onClick={() => setModal({ mode: 'send', asset: pos.asset })}>↑ Invia</button>
+                  </div>
+                  <span className="coin-chevron">{isExp ? '▲' : '▼'}</span>
+                </button>
+
+                {isExp && (
+                  <div className="coin-detail">
+                    {/* position summary bar */}
+                    <div className="wallet-detail-info">
+                      <div><span>SL</span><strong>{pos.stop_loss ? `$${parseFloat(pos.stop_loss).toLocaleString()}` : '—'}</strong></div>
+                      <div><span>TP1</span><strong>{pos.take_profit_1 ? `$${parseFloat(pos.take_profit_1).toLocaleString()}` : '—'}</strong></div>
+                      <div><span>TP2</span><strong>{pos.take_profit_2 ? `$${parseFloat(pos.take_profit_2).toLocaleString()}` : '—'}</strong></div>
+                      <div><span>Aperta il</span><strong>{new Date(pos.opened_at).toLocaleString('it-IT')}</strong></div>
+                    </div>
+
+                    {/* filter bar */}
+                    <div className="tx-filter-bar">
+                      <input
+                        placeholder="Cerca per ID o stato…"
+                        value={txSearch}
+                        onChange={(e) => setTxSearch(e.target.value)}
+                      />
+                      <select value={txType} onChange={(e) => setTxType(e.target.value as 'all' | 'buy' | 'sell')}>
+                        <option value="all">Tutti i tipi</option>
+                        <option value="buy">Acquisto</option>
+                        <option value="sell">Vendita / Chiusura</option>
+                      </select>
+                      {(txSearch || txType !== 'all') && (
+                        <button onClick={() => { setTxSearch(''); setTxType('all'); }}>Reset</button>
+                      )}
+                      <span className="muted">{trades.length} transazioni</span>
+                    </div>
+
+                    {trades.length === 0 ? (
+                      <p className="muted" style={{ padding: '0 14px 14px' }}>Nessuna transazione trovata per {pos.asset}.</p>
+                    ) : (
+                      <div className="table-wrap" style={{ margin: '0 14px 14px' }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Data / Ora</th>
+                              <th>Tipo</th>
+                              <th>Quantità</th>
+                              <th>Prezzo</th>
+                              <th>Totale</th>
+                              <th>PnL</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {trades.map((t) => {
+                              const qty = parseFloat(t.amount ?? '0');
+                              const px = parseFloat(t.price ?? '0');
+                              const total = qty * px;
+                              const tPnl = t.pnl_usd && t.pnl_usd !== '+0.00' ? parseFloat(t.pnl_usd) : null;
+                              return (
+                                <tr key={t.trade_id}>
+                                  <td>{new Date(t.timestamp_utc).toLocaleString('it-IT')}</td>
+                                  <td>
+                                    <span className={t.side === 'buy' ? 'ok-text' : 'error-text'}>
+                                      {t.side.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td>{qty.toFixed(6)}</td>
+                                  <td>${px.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
+                                  <td>${total.toFixed(2)}</td>
+                                  <td className={tPnl == null ? '' : tPnl >= 0 ? 'ok-text' : 'error-text'}>
+                                    {tPnl == null ? '—' : `${tPnl >= 0 ? '+' : ''}${tPnl.toFixed(2)} $`}
+                                  </td>
+                                  <td>{t.status}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {spotData?.open_positions.length === 0 && !activeWallet?.balance_bnb && (
+            <Empty title="Nessun asset" detail="Nessuna posizione spot aperta e nessun bilancio BNB disponibile." />
+          )}
+        </div>
+      )}
+
+      {/* ── CONFIGURAZIONE ───────────────────────────────────────── */}
       {data && (
         <>
+          <div className="subhead" style={{ marginTop: 24 }}>
+            <h3>Configurazione Esecuzione</h3>
+          </div>
           <div className="provider-row">
             <label>
               <span>BSC chain</span>
@@ -1105,22 +1322,14 @@ function WalletPanel({
             </label>
             <label>
               <span>Spot provider</span>
-              <select
-                value={data.spot_active_provider}
-                disabled={!canAdmin}
-                onChange={(event) => onSpotProvider(event.target.value)}
-              >
+              <select value={data.spot_active_provider} disabled={!canAdmin} onChange={(event) => onSpotProvider(event.target.value)}>
                 <option value="twak">TWAK</option>
                 <option value="pancakeswap">PancakeSwap</option>
               </select>
             </label>
             <label>
               <span>Perp provider</span>
-              <select
-                value={data.perp_active_provider}
-                disabled={!canAdmin}
-                onChange={(event) => onPerpProvider(event.target.value)}
-              >
+              <select value={data.perp_active_provider} disabled={!canAdmin} onChange={(event) => onPerpProvider(event.target.value)}>
                 <option value="bnb_sdk">BNB SDK</option>
               </select>
             </label>
@@ -1129,85 +1338,108 @@ function WalletPanel({
               <strong>Chain {data.chain_id}</strong>
             </div>
           </div>
+
           <div className="wallet-select-row">
             <label>
-              <span>Active wallet</span>
-              <select
-                value={data.active_wallet_address || ''}
-                disabled={!canAdmin}
-                onChange={(event) => onWallet(event.target.value)}
-              >
-                {(data.available_wallets || []).map((wallet) => (
-                  <option key={wallet.address} value={wallet.address}>
-                    {shortAddress(wallet.address)}
-                  </option>
+              <span>Wallet attivo</span>
+              <select value={data.active_wallet_address || ''} disabled={!canAdmin} onChange={(event) => onWallet(event.target.value)}>
+                {(data.available_wallets || []).map((w) => (
+                  <option key={w.address} value={w.address}>{shortAddress(w.address)}</option>
                 ))}
               </select>
             </label>
             <input
-              aria-label="New wallet address"
-              placeholder="Add wallet address"
+              aria-label="Nuovo indirizzo wallet"
+              placeholder="Aggiungi indirizzo wallet"
               value={walletDraft}
               disabled={!canAdmin}
               onChange={(event) => onWalletDraft(event.target.value)}
             />
-            <button onClick={onAddWallet} disabled={!canAdmin || !walletDraft.trim()}>
-              Add
-            </button>
+            <button onClick={onAddWallet} disabled={!canAdmin || !walletDraft.trim()}>Aggiungi</button>
           </div>
-          {!canAdmin && <p className="hint">Admin token required for provider and RPC changes.</p>}
-          {(data.available_wallets || []).length > 0 && (
-            <div className="wallet-address-list">
-              {data.available_wallets.map((wallet) => (
-                <button
-                  className={`wallet-address-item ${wallet.active ? 'active' : ''}`}
-                  key={wallet.address}
-                  onClick={() => void navigator.clipboard.writeText(wallet.address)}
-                  title="Copy wallet address"
-                >
-                  <strong>{wallet.active ? 'Active' : 'Wallet'}</strong>
-                  <code>{wallet.address}</code>
-                  <span>{wallet.balance_bnb ?? '--'} BNB / {wallet.balance_status}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          {!canAdmin && <p className="hint">Token admin richiesto per modifiche provider e RPC.</p>}
+
           <div className="wallet-grid">
-            {data.wallets.map((wallet) => (
+            {data.wallets.map((w) => (
               <button
                 className="wallet-item"
-                key={`${wallet.market}-${wallet.provider}`}
-                onClick={() => wallet.address && void navigator.clipboard.writeText(wallet.address)}
-                title={wallet.address ? 'Copy wallet address' : 'Wallet address not configured'}
+                key={`${w.market}-${w.provider}`}
+                onClick={() => w.address && void navigator.clipboard.writeText(w.address)}
+                title={w.address ? 'Copia indirizzo' : 'Indirizzo non configurato'}
               >
                 <span className="wallet-title">
-                  <strong>{wallet.provider}</strong>
-                  {wallet.active && <em>active</em>}
+                  <strong>{w.provider}</strong>
+                  {w.active && <em>active</em>}
                 </span>
-                <span>{wallet.market.toUpperCase()} / {wallet.network}</span>
-                <code>{wallet.address || 'not configured'}</code>
-                <span className={wallet.configured ? 'ok-text' : 'warn-text'}>
-                  {wallet.configured ? 'configured' : 'missing'} / {wallet.balance_bnb ?? '--'} BNB
+                <span>{w.market.toUpperCase()} / {w.network}</span>
+                <code>{w.address || 'non configurato'}</code>
+                <span className={w.configured ? 'ok-text' : 'warn-text'}>
+                  {w.configured ? 'configurato' : 'mancante'} / {w.balance_bnb ?? '--'} BNB
                 </span>
               </button>
             ))}
           </div>
+
+          <div className="subhead" style={{ marginTop: 20 }}>
+            <h3>RPC Endpoints</h3>
+          </div>
           <div className="rpc-list">
-            {data.rpc_endpoints.map((endpoint) => (
-              <div className="rpc-item" key={endpoint.index}>
+            {data.rpc_endpoints.map((ep) => (
+              <div className="rpc-item" key={ep.index}>
                 <div>
-                  <strong>{endpoint.index + 1}. {endpoint.label}</strong>
-                  <span>{endpoint.status} / {endpoint.latency_ms == null ? '--' : `${endpoint.latency_ms}ms`}</span>
+                  <strong>{ep.index + 1}. {ep.label}</strong>
+                  <span>{ep.status} / {ep.latency_ms == null ? '--' : `${ep.latency_ms}ms`}</span>
                 </div>
-                {endpoint.active ? <span className="pill ok">active</span> : (
-                  <button onClick={() => onRpcEndpoint(endpoint.index)} disabled={!canAdmin}>
-                    Use
-                  </button>
+                {ep.active ? <span className="pill ok">active</span> : (
+                  <button onClick={() => onRpcEndpoint(ep.index)} disabled={!canAdmin}>Usa</button>
                 )}
               </div>
             ))}
           </div>
         </>
+      )}
+
+      {/* ── SEND / RECEIVE MODAL ─────────────────────────────────── */}
+      {modal && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <strong>{modal.mode === 'send' ? '↑ Invia' : '↓ Ricevi'} {modal.asset}</strong>
+              <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+            </div>
+            {modal.mode === 'receive' ? (
+              <div className="modal-body">
+                <p className="muted">Invia {modal.asset} a questo indirizzo wallet:</p>
+                <code className="address-display">{activeWallet?.address ?? 'Nessun wallet attivo'}</code>
+                {activeWallet?.address && (
+                  <div className="modal-actions">
+                    <button
+                      className="primary"
+                      onClick={() => { void navigator.clipboard.writeText(activeWallet.address); setModal(null); }}
+                    >
+                      Copia indirizzo
+                    </button>
+                    <button onClick={() => setModal(null)}>Chiudi</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="modal-body">
+                <p className="muted">I trasferimenti vengono eseguiti via CLI o provider di esecuzione configurato.</p>
+                <div className="send-info-grid">
+                  <div><span>Asset</span><strong>{modal.asset}</strong></div>
+                  <div><span>Wallet attivo</span><code>{activeWallet ? shortAddress(activeWallet.address) : '—'}</code></div>
+                  <div><span>Network</span><strong>{data?.network ?? '—'} · Chain {data?.chain_id}</strong></div>
+                  <div><span>Spot provider</span><strong>{data?.spot_active_provider ?? '—'}</strong></div>
+                </div>
+                <p className="hint">Usa il CLI <code>twak send</code> o la scheda Settings per eseguire trasferimenti manuali.</p>
+                <div className="modal-actions">
+                  <button onClick={() => setModal(null)}>Chiudi</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </Panel>
   );
