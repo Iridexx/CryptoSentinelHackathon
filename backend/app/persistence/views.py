@@ -71,8 +71,8 @@ class ViewService:
                     amount=t.amount,
                     price=t.price,
                     pnl_usd=_fmt_pnl(t.pnl_usd),
-                    pnl_pct=_pnl_pct_str(t.pnl_usd, t.price, t.amount),
-                    entry_price=t.price,
+                    pnl_pct=_pnl_pct_str(t.pnl_usd, _spot_trade_entry_price(t), t.amount),
+                    entry_price=_spot_trade_entry_price(t),
                     current_or_exit_price=t.price,
                     status=t.status,
                     tx_hash=t.tx_hash,
@@ -128,8 +128,8 @@ class ViewService:
                     size=t.size,
                     price=t.price,
                     pnl_usd=_fmt_pnl(t.pnl_usd),
-                    pnl_pct=_pnl_pct_str(t.pnl_usd, t.price, t.size),
-                    entry_price=t.price,
+                    pnl_pct=_pnl_pct_str(t.pnl_usd, _perp_trade_entry_price(t), t.size),
+                    entry_price=_perp_trade_entry_price(t),
                     current_or_exit_price=t.price,
                     leverage=t.leverage,
                     status=t.status,
@@ -240,6 +240,28 @@ def _position_pnl_pct(pnl: Decimal, entry_price: Decimal, size: Decimal) -> str:
     if exposure <= 0:
         return "+0.00"
     return _format_signed_pct(pnl / exposure * Decimal("100"))
+
+
+def _spot_trade_entry_price(t) -> Decimal:
+    """Ricava il prezzo di ingresso per trade di chiusura spot (sell) usando pnl_usd.
+    pnl = (exit - entry) * size  →  entry = exit - pnl / size
+    """
+    if t.side == "sell" and t.pnl_usd is not None and t.amount > Decimal("0"):
+        return t.price - t.pnl_usd / t.amount
+    return t.price
+
+
+def _perp_trade_entry_price(t) -> Decimal:
+    """Ricava il prezzo di ingresso per trade di chiusura perp (direction='close').
+    Long:  pnl = (exit - entry) * size  →  entry = exit - pnl / size
+    Short: pnl = (entry - exit) * size  →  entry = exit + pnl / size
+    """
+    if t.direction == "close" and t.pnl_usd is not None and t.size > Decimal("0"):
+        if t.side == "long":
+            return t.price - t.pnl_usd / t.size
+        else:
+            return t.price + t.pnl_usd / t.size
+    return t.price
 
 
 def _is_spot_dry_run(trade) -> bool:
