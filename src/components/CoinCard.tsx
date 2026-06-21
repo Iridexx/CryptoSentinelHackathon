@@ -32,7 +32,7 @@ function formatMarketCap(val: number | null | undefined, currency: Currency): st
 }
 
 type TimeFrame = '1h' | '24h' | '7d';
-type AiState = 'inactive' | 'analysis' | 'long' | 'short';
+type AiState = 'inactive' | 'analysis' | 'spot' | 'long' | 'short';
 
 interface Props {
   coin: Coin;
@@ -53,8 +53,9 @@ interface Props {
 const AI_STYLES: Record<AiState, { label: string; className: string; title: string }> = {
   inactive: { label: 'AI', className: 'border-gray-600 text-gray-500', title: 'Enable AI monitoring' },
   analysis: { label: 'AI', className: 'border-accent-yellow text-accent-yellow', title: 'Disable AI monitoring' },
-  long: { label: 'L', className: 'border-accent-green text-accent-green', title: 'AI long signal. Tap to disable monitoring.' },
-  short: { label: 'S', className: 'border-accent-red text-accent-red', title: 'AI short signal. Tap to disable monitoring.' },
+  spot:  { label: 'SP', className: 'border-accent-blue text-accent-blue',  title: 'Posizione spot aperta.' },
+  long:  { label: 'PL', className: 'border-accent-green text-accent-green', title: 'Perp long aperto.' },
+  short: { label: 'PS', className: 'border-accent-red text-accent-red',    title: 'Perp short aperto.' },
 };
 
 const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, onChartTap, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta, aiState, onToggleAi }) => {

@@ -34,7 +34,7 @@ import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 import AgentTab from './components/AgentTab';
-import { fetchAgentWatchlist, updateAgentWatchlist } from './services/agentApi';
+import { fetchAgentWatchlist, updateAgentWatchlist, fetchSpotView, fetchPerpView, type SpotPositionView, type PerpPositionView } from './services/agentApi';
 import { FALLBACK_ELIGIBLE_SYMBOLS, toEligibleSymbolSet } from './utils/eligibleTokens';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
@@ -242,6 +242,25 @@ export default function App() {
   const [aiWatchlistSaving, setAiWatchlistSaving] = useState(false);
   const [aiWatchlistError, setAiWatchlistError] = useState('');
   const eligibleSymbols = useMemo(() => toEligibleSymbolSet(eligibleTokens), [eligibleTokens]);
+  const [openSpotPositions, setOpenSpotPositions] = useState<SpotPositionView[]>([]);
+  const [openPerpPositions, setOpenPerpPositions] = useState<PerpPositionView[]>([]);
+
+  // Mappa symbol → aiState: spot (blu) > perp long (verde) > perp short (rosso) > analysis (giallo) > inactive
+  const aiStateMap = useMemo<Map<string, 'spot' | 'long' | 'short' | 'analysis' | 'inactive'>>(() => {
+    const map = new Map<string, 'spot' | 'long' | 'short' | 'analysis' | 'inactive'>();
+    for (const p of openSpotPositions) {
+      const sym = p.asset.replace(/USDT$/i, '').toUpperCase();
+      map.set(sym, 'spot');
+    }
+    for (const p of openPerpPositions) {
+      const sym = p.asset.replace(/USDT$/i, '').toUpperCase();
+      if (!map.has(sym)) map.set(sym, p.side === 'short' ? 'short' : 'long');
+    }
+    for (const sym of selectedAiSymbols) {
+      if (!map.has(sym)) map.set(sym, 'analysis');
+    }
+    return map;
+  }, [openSpotPositions, openPerpPositions, selectedAiSymbols]);
 
   const handleChartTap = useCallback((coin: Coin) => {
     setChartCoin(coin);
@@ -264,6 +283,23 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Fetch posizioni aperte ogni 45s per aggiornare le icone AI
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      Promise.all([fetchSpotView(), fetchPerpView()])
+        .then(([sv, pv]) => {
+          if (cancelled) return;
+          setOpenSpotPositions(sv.open_positions);
+          setOpenPerpPositions(pv.open_positions);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = window.setInterval(load, 45_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
   const handleDismissFavAlert = useCallback((coinId: string) => {
@@ -729,7 +765,7 @@ export default function App() {
                         showVolume={sortBy === 'volume'}
                         timeFrame={timeFrame}
                         rankDelta={rankDeltas.get(coin.id)}
-                        aiState={isTradable ? (selectedAiSymbols.has(coin.symbol.toUpperCase()) ? 'analysis' : 'inactive') : undefined}
+                        aiState={isTradable ? (aiStateMap.get(coin.symbol.toUpperCase()) ?? 'inactive') : undefined}
                         onToggleAi={isTradable ? handleToggleAiCoin : undefined}
                       />
                     );
@@ -787,7 +823,7 @@ export default function App() {
                           timeFrame={favoriteTimeFrame}
                           alertPending={pendingFavAlerts.get(coin.id)}
                           onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
-                          aiState={isTradable ? (selectedAiSymbols.has(coin.symbol.toUpperCase()) ? 'analysis' : 'inactive') : undefined}
+                          aiState={isTradable ? (aiStateMap.get(coin.symbol.toUpperCase()) ?? 'inactive') : undefined}
                           onToggleAi={isTradable ? handleToggleAiCoin : undefined}
                         />
                       );
