@@ -3,6 +3,7 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep
 from backend.app.execution.perp_registry import (
@@ -160,6 +161,28 @@ async def select_rpc_endpoint(
         return await service.select_rpc_endpoint(request.index)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class TokenSendRequest(BaseModel):
+    to_address: str
+    amount: str
+    token: str
+    wallet_password: str
+
+
+@router.post("/send")
+async def send_token(
+    request: TokenSendRequest,
+    service: ExecutionServiceDep,
+    _: AdminAccessDep,
+) -> dict[str, Any]:
+    """Invia token o BNB nativi a un indirizzo tramite TWAK CLI."""
+    return await service.send_token(
+        to_address=request.to_address,
+        amount=request.amount,
+        token=request.token,
+        wallet_password=request.wallet_password,
+    )
 
 
 @router.get("/competition/status")

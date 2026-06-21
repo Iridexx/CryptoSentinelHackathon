@@ -155,6 +155,18 @@ export function addExecutionWallet(session: DashboardSession, address: string) {
   });
 }
 
+export function sendToken(
+  session: DashboardSession,
+  payload: { to_address: string; amount: string; token: string; wallet_password: string },
+) {
+  return requestJson<{ status: string; tx_hash?: string; error?: string; detail?: unknown }>(
+    session,
+    '/api/v1/execution/send',
+    'admin',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
 export function fetchDataCoverage(session: DashboardSession) {
   return requestJson<DataCoverageResponse>(session, '/api/v1/agent/data-coverage');
 }

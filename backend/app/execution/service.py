@@ -177,6 +177,38 @@ class ExecutionService:
         self.perp_registry = PerpExecutionRegistry(self.settings)
         return await self.wallets()
 
+    async def send_token(
+        self,
+        *,
+        to_address: str,
+        amount: str,
+        token: str,
+        wallet_password: str,
+    ) -> dict:
+        """Invia token/BNB a un indirizzo via TWAK CLI. Richiede CLI configurata."""
+        from web3 import Web3
+        if not Web3.is_checksum_address(to_address) and not Web3.is_address(to_address):
+            return {"status": "error", "error": "Indirizzo destinazione non valido"}
+        try:
+            amount_decimal = float(amount)
+            if amount_decimal <= 0:
+                return {"status": "error", "error": "L'importo deve essere maggiore di zero"}
+        except ValueError:
+            return {"status": "error", "error": "Importo non valido"}
+        if not self.twak.configured:
+            return {"status": "error", "error": "TWAK CLI non configurata — imposta twak_cli_path nelle Settings"}
+        try:
+            result = await self.twak.send_token(
+                to_address=Web3.to_checksum_address(to_address),
+                amount=amount,
+                token=token,
+                wallet_password=wallet_password,
+            )
+            tx_hash = result.get("txHash") or result.get("tx_hash") or result.get("hash")
+            return {"status": "success", "tx_hash": tx_hash, "detail": result}
+        except Exception as exc:
+            return {"status": "error", "error": str(exc)}
+
     async def select_wallet(self, address: str) -> ExecutionWalletsResponse:
         """Persist the active public wallet address."""
 

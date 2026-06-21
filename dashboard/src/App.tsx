@@ -23,6 +23,7 @@ import {
   fetchTradeDetail,
   saveNotificationPrefs,
   saveSettings,
+  sendToken,
   setKillSwitch,
   setExecutionNetwork,
   setExecutionWallet,
@@ -478,6 +479,7 @@ export default function App() {
             onWalletDraft={setWalletDraft}
             onWallet={(address) => void updateExecutionWallet(address)}
             onAddWallet={() => void submitWalletAddress()}
+            onSend={(payload) => sendToken(session, payload)}
           />
         )}
         {tab === 'logs' && <LogsPanel logs={logs} onRefresh={() => void refreshLogs()} canAdmin={canAdmin} />}
@@ -1075,6 +1077,7 @@ function WalletPanel({
   onWalletDraft,
   onWallet,
   onAddWallet,
+  onSend,
 }: {
   wallets: LoadState<ExecutionWalletsResponse>;
   spot: LoadState<SpotView>;
@@ -1087,11 +1090,40 @@ function WalletPanel({
   onWalletDraft: (value: string) => void;
   onWallet: (address: string) => void;
   onAddWallet: () => void;
+  onSend: (payload: { to_address: string; amount: string; token: string; wallet_password: string }) => Promise<{ status: string; tx_hash?: string; error?: string }>;
 }) {
   const [expandedCoin, setExpandedCoin] = useState<string | null>(null);
   const [txSearch, setTxSearch] = useState('');
   const [txType, setTxType] = useState<'all' | 'buy' | 'sell'>('all');
   const [modal, setModal] = useState<{ mode: 'send' | 'receive'; asset: string } | null>(null);
+
+  // Send form state
+  const [sendTo, setSendTo] = useState('');
+  const [sendAmount, setSendAmount] = useState('');
+  const [sendPassword, setSendPassword] = useState('');
+  const [sendState, setSendState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [sendResult, setSendResult] = useState<{ tx_hash?: string; error?: string } | null>(null);
+
+  function openModal(mode: 'send' | 'receive', asset: string) {
+    setModal({ mode, asset });
+    setSendTo(''); setSendAmount(''); setSendPassword('');
+    setSendState('idle'); setSendResult(null);
+  }
+
+  async function execSend() {
+    if (!modal || !sendTo.trim() || !sendAmount.trim() || !sendPassword.trim()) return;
+    setSendState('sending');
+    try {
+      const res = await onSend({ to_address: sendTo.trim(), amount: sendAmount.trim(), token: modal.asset, wallet_password: sendPassword });
+      if (res.status === 'success') {
+        setSendState('success'); setSendResult({ tx_hash: res.tx_hash });
+      } else {
+        setSendState('error'); setSendResult({ error: res.error ?? 'Errore sconosciuto' });
+      }
+    } catch (e) {
+      setSendState('error'); setSendResult({ error: e instanceof Error ? e.message : 'Errore di rete' });
+    }
+  }
 
   const data = wallets.data;
   const spotData = spot.data;
@@ -1156,8 +1188,8 @@ function WalletPanel({
                   <span>Entry / Now</span>
                 </div>
                 <div className="coin-actions" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => setModal({ mode: 'receive', asset: 'BNB' })}>↓ Ricevi</button>
-                  <button onClick={() => setModal({ mode: 'send', asset: 'BNB' })}>↑ Invia</button>
+                  <button onClick={() => openModal('receive', 'BNB')}>↓ Ricevi</button>
+                  <button onClick={() => openModal('send', 'BNB')}>↑ Invia</button>
                 </div>
                 <span className="coin-chevron">{expandedCoin === 'BNB' ? '▲' : '▼'}</span>
               </button>
@@ -1212,8 +1244,8 @@ function WalletPanel({
                     <span>{pos.pnl_pct ?? '—'}</span>
                   </div>
                   <div className="coin-actions" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => setModal({ mode: 'receive', asset: pos.asset })}>↓ Ricevi</button>
-                    <button onClick={() => setModal({ mode: 'send', asset: pos.asset })}>↑ Invia</button>
+                    <button onClick={() => openModal('receive', pos.asset)}>↓ Ricevi</button>
+                    <button onClick={() => openModal('send', pos.asset)}>↑ Invia</button>
                   </div>
                   <span className="coin-chevron">{isExp ? '▲' : '▼'}</span>
                 </button>
@@ -1425,17 +1457,91 @@ function WalletPanel({
               </div>
             ) : (
               <div className="modal-body">
-                <p className="muted">I trasferimenti vengono eseguiti via CLI o provider di esecuzione configurato.</p>
-                <div className="send-info-grid">
-                  <div><span>Asset</span><strong>{modal.asset}</strong></div>
-                  <div><span>Wallet attivo</span><code>{activeWallet ? shortAddress(activeWallet.address) : '—'}</code></div>
-                  <div><span>Network</span><strong>{data?.network ?? '—'} · Chain {data?.chain_id}</strong></div>
-                  <div><span>Spot provider</span><strong>{data?.spot_active_provider ?? '—'}</strong></div>
-                </div>
-                <p className="hint">Usa il CLI <code>twak send</code> o la scheda Settings per eseguire trasferimenti manuali.</p>
-                <div className="modal-actions">
-                  <button onClick={() => setModal(null)}>Chiudi</button>
-                </div>
+                {sendState === 'success' ? (
+                  <>
+                    <div className="send-result ok">
+                      <strong>✓ Transazione inviata</strong>
+                      {sendResult?.tx_hash && (
+                        <code className="address-display">{sendResult.tx_hash}</code>
+                      )}
+                    </div>
+                    <div className="modal-actions">
+                      <button className="primary" onClick={() => setModal(null)}>Chiudi</button>
+                    </div>
+                  </>
+                ) : sendState === 'error' ? (
+                  <>
+                    <div className="send-result err">
+                      <strong>✗ Errore</strong>
+                      <span>{sendResult?.error}</span>
+                    </div>
+                    <div className="modal-actions">
+                      <button onClick={() => setSendState('idle')}>Riprova</button>
+                      <button onClick={() => setModal(null)}>Chiudi</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="send-info-grid">
+                      <div><span>Asset</span><strong>{modal.asset}</strong></div>
+                      <div><span>Da wallet</span><code>{activeWallet ? shortAddress(activeWallet.address) : '—'}</code></div>
+                      <div><span>Network</span><strong>{data?.network ?? '—'} · Chain {data?.chain_id}</strong></div>
+                      <div><span>Provider</span><strong>{data?.spot_active_provider ?? '—'}</strong></div>
+                    </div>
+                    <label className="send-field">
+                      <span>Indirizzo destinazione</span>
+                      <input
+                        placeholder="0x..."
+                        value={sendTo}
+                        onChange={(e) => setSendTo(e.target.value)}
+                        disabled={sendState === 'sending'}
+                      />
+                    </label>
+                    <label className="send-field">
+                      <span>Importo ({modal.asset})</span>
+                      <div className="send-amount-row">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0.00"
+                          value={sendAmount}
+                          onChange={(e) => setSendAmount(e.target.value)}
+                          disabled={sendState === 'sending'}
+                        />
+                        {modal.asset === 'BNB' && activeWallet?.balance_bnb && (
+                          <button
+                            onClick={() => setSendAmount(activeWallet.balance_bnb!)}
+                            disabled={sendState === 'sending'}
+                          >
+                            MAX
+                          </button>
+                        )}
+                      </div>
+                    </label>
+                    <label className="send-field">
+                      <span>Password wallet</span>
+                      <input
+                        type="password"
+                        placeholder="Password per sbloccare il wallet"
+                        value={sendPassword}
+                        onChange={(e) => setSendPassword(e.target.value)}
+                        disabled={sendState === 'sending'}
+                      />
+                    </label>
+                    <p className="hint">La password viene usata solo per firmare la transazione e non viene salvata.</p>
+                    <div className="modal-actions">
+                      <button onClick={() => setModal(null)} disabled={sendState === 'sending'}>Annulla</button>
+                      <button
+                        className="primary"
+                        onClick={() => void execSend()}
+                        disabled={sendState === 'sending' || !sendTo.trim() || !sendAmount.trim() || !sendPassword.trim()}
+                      >
+                        {sendState === 'sending' ? 'Invio in corso…' : `Conferma Invio ${modal.asset}`}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

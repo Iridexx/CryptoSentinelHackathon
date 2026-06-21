@@ -125,6 +125,33 @@ class TwakClient:
             )
         ).payload
 
+    async def send_token(
+        self,
+        *,
+        to_address: str,
+        amount: str,
+        token: str,
+        wallet_password: str,
+    ) -> dict[str, Any]:
+        """Invia token o BNB nativi a un indirizzo tramite TWAK CLI."""
+        result = await self._run(
+            [
+                "send",
+                "--to",
+                to_address,
+                "--amount",
+                amount,
+                "--token",
+                token,
+                "--chain",
+                self._settings.twak_chain,
+                "--yes",
+                "--json",
+            ],
+            wallet_password=wallet_password,
+        )
+        return result.payload
+
     async def execute_swap(
         self,
         *,

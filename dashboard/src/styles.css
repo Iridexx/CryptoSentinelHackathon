@@ -1015,3 +1015,63 @@ button.danger {
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* send form fields */
+.send-field {
+  display: grid;
+  gap: 6px;
+}
+
+.send-field span {
+  color: #a7b0a4;
+  font-size: 12px;
+}
+
+.send-field input {
+  width: 100%;
+}
+
+.send-amount-row {
+  display: flex;
+  gap: 8px;
+}
+
+.send-amount-row input {
+  flex: 1;
+}
+
+.send-amount-row button {
+  min-height: 36px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 12px;
+}
+
+/* send result */
+.send-result {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+}
+
+.send-result strong {
+  font-size: 16px;
+}
+
+.send-result.ok {
+  background: #162012;
+  border: 1px solid #3a5e32;
+  color: #9ed489;
+}
+
+.send-result.err {
+  background: #201612;
+  border: 1px solid #5e3232;
+  color: #ef8e76;
+}
+
+.send-result span {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
