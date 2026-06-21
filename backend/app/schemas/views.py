@@ -14,6 +14,7 @@ class SpotPositionView(BaseModel):
     entry_price: Decimal
     current_price: Decimal
     pnl_unrealized: Decimal
+    pnl_pct: str | None = None
     stop_loss: Decimal | None = None
     take_profit_1: Decimal | None = None
     take_profit_2: Decimal | None = None
@@ -27,10 +28,15 @@ class SpotTradeView(BaseModel):
     side: str
     amount: Decimal
     price: Decimal
+    pnl_usd: str | None = None
+    pnl_pct: str | None = None
+    entry_price: Decimal | None = None
+    current_or_exit_price: Decimal | None = None
     status: str
     tx_hash: str | None = None
     timestamp_utc: str
     block_timestamp_utc: str | None = None
+    is_simulated: bool = False
 
 
 class SpotView(BaseModel):
@@ -51,6 +57,7 @@ class PerpPositionView(BaseModel):
     current_price: Decimal
     leverage: int
     pnl_unrealized: Decimal
+    pnl_pct: str | None = None
     stop_loss: Decimal | None = None
     take_profit_1: Decimal | None = None
     take_profit_2: Decimal | None = None
@@ -67,11 +74,16 @@ class PerpTradeView(BaseModel):
     direction: str
     size: Decimal
     price: Decimal
+    pnl_usd: str | None = None
+    pnl_pct: str | None = None
+    entry_price: Decimal | None = None
+    current_or_exit_price: Decimal | None = None
     leverage: int
     status: str
     tx_hash: str | None = None
     timestamp_utc: str
     block_timestamp_utc: str | None = None
+    is_simulated: bool = False
 
 
 class PerpView(BaseModel):
@@ -96,6 +108,8 @@ class GlobalView(BaseModel):
     pnl_total_pct: float
     drawdown_pct: Decimal
     max_drawdown_pct: Decimal
+    sharpe_status: str = "insufficient_data"
+    sharpe_ratio: str | None = None
     drawdown_cap_pct: float
     exposure_pct: Decimal
     daily_pnl_usd: Decimal

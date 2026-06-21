@@ -33,6 +33,7 @@ export interface SpotPositionView {
   entry_price: string;
   current_price: string;
   pnl_unrealized: string;
+  pnl_pct?: string | null;
   stop_loss?: string | null;
   take_profit_1?: string | null;
   take_profit_2?: string | null;
@@ -46,6 +47,10 @@ export interface SpotTradeView {
   side: string;
   amount: string;
   price: string;
+  pnl_usd?: string | null;
+  pnl_pct?: string | null;
+  entry_price?: string | null;
+  current_or_exit_price?: string | null;
   status: string;
   tx_hash?: string | null;
   timestamp_utc: string;
@@ -69,6 +74,7 @@ export interface PerpPositionView {
   current_price: string;
   leverage: number;
   pnl_unrealized: string;
+  pnl_pct?: string | null;
   liquidation_price?: string | null;
   funding_rate?: string | null;
   status: string;
@@ -82,6 +88,10 @@ export interface PerpTradeView {
   direction: string;
   size: string;
   price: string;
+  pnl_usd?: string | null;
+  pnl_pct?: string | null;
+  entry_price?: string | null;
+  current_or_exit_price?: string | null;
   leverage: number;
   status: string;
   tx_hash?: string | null;
@@ -118,6 +128,66 @@ export interface GlobalView {
   open_spot_positions: number;
   open_perp_positions: number;
   pnl_history: PnlPoint[];
+}
+
+export interface EquityCurveResponse {
+  market: 'spot' | 'perp' | 'global';
+  range: '24h' | '7d' | 'all';
+  initial_equity_usd: string;
+  items: Array<{
+    timestamp_utc: string;
+    equity_usd: string;
+    pnl_usd: string;
+    pnl_pct: string;
+    drawdown_pct: string;
+  }>;
+}
+
+export interface AgentDecisionResponse {
+  items: Array<{
+    decision_id: string;
+    timestamp_utc: string;
+    asset?: string | null;
+    market: string;
+    action: string;
+    signal_quality: string;
+  }>;
+  limit: number;
+  offset: number;
+}
+
+export interface AssetBreakdownResponse {
+  market: 'spot' | 'perp';
+  items: Array<{
+    asset: string;
+    trade_count: number;
+    win_rate_pct: string;
+    pnl_usd: string;
+    pnl_pct: string;
+    allocation_pct: string;
+  }>;
+}
+
+export interface TradeDetail {
+  trade_id: string;
+  asset: string;
+  market: 'spot' | 'perp';
+  direction: string;
+  entry_price: string;
+  current_or_exit_price: string;
+  pnl_usd: string;
+  pnl_pct: string;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
+  trailing_stop?: string | null;
+  size: string;
+  leverage?: number | null;
+  exposure_usd: string;
+  opened_at: string;
+  closed_at?: string | null;
+  close_reason?: string | null;
+  is_simulated: boolean;
 }
 
 export interface AgentMobileSettings {
@@ -260,6 +330,22 @@ export function fetchPerpView(): Promise<PerpView> {
 
 export function fetchGlobalView(): Promise<GlobalView> {
   return request<GlobalView>('/api/v1/views/global');
+}
+
+export function fetchEquityCurve(): Promise<EquityCurveResponse> {
+  return request<EquityCurveResponse>('/api/v1/views/equity-curve?market=global&range=24h');
+}
+
+export function fetchAgentDecisions(): Promise<AgentDecisionResponse> {
+  return request<AgentDecisionResponse>('/api/v1/agent/decisions?limit=3');
+}
+
+export function fetchAssetBreakdown(): Promise<AssetBreakdownResponse> {
+  return request<AssetBreakdownResponse>('/api/v1/views/asset-breakdown?market=spot');
+}
+
+export function fetchTradeDetail(tradeId: string): Promise<TradeDetail> {
+  return request<TradeDetail>(`/api/v1/views/trade-detail/${encodeURIComponent(tradeId)}`);
 }
 
 export function fetchAgentSettings(): Promise<AgentSettingsResponse> {

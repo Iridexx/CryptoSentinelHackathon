@@ -131,6 +131,8 @@ class RiskManager:
 
         if risk_size <= Decimal("0"):
             return RiskDecision(False, "computed_size_zero")
+        if risk_size < Decimal(str(self.settings.min_trade_size_usd)):
+            return RiskDecision(False, "below_minimum_trade_size", size_quote=risk_size)
 
         return RiskDecision(
             True,

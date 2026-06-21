@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from decimal import Decimal
+from math import sqrt
+from statistics import mean, stdev
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +53,7 @@ class ViewService:
                     entry_price=p.entry_price,
                     current_price=p.current_price,
                     pnl_unrealized=p.pnl_unrealized,
+                    pnl_pct=_position_pnl_pct(p.pnl_unrealized, p.entry_price, p.size),
                     stop_loss=p.stop_loss,
                     take_profit_1=p.take_profit_1,
                     take_profit_2=p.take_profit_2,
@@ -65,10 +69,15 @@ class ViewService:
                     side=t.side,
                     amount=t.amount,
                     price=t.price,
+                    pnl_usd="+0.00",
+                    pnl_pct="+0.00",
+                    entry_price=t.price,
+                    current_or_exit_price=t.price,
                     status=t.status,
                     tx_hash=t.tx_hash,
                     timestamp_utc=t.timestamp_utc.isoformat(),
                     block_timestamp_utc=t.block_timestamp_utc.isoformat() if t.block_timestamp_utc else None,
+                    is_simulated=_is_spot_dry_run(t),
                 )
                 for t in trades
             ],
@@ -96,6 +105,7 @@ class ViewService:
                     current_price=p.current_price,
                     leverage=p.leverage,
                     pnl_unrealized=p.pnl_unrealized,
+                    pnl_pct=_position_pnl_pct(p.pnl_unrealized, p.entry_price, p.size),
                     stop_loss=p.stop_loss,
                     take_profit_1=p.take_profit_1,
                     take_profit_2=p.take_profit_2,
@@ -114,11 +124,16 @@ class ViewService:
                     direction=t.direction,
                     size=t.size,
                     price=t.price,
+                    pnl_usd="+0.00",
+                    pnl_pct="+0.00",
+                    entry_price=t.price,
+                    current_or_exit_price=t.price,
                     leverage=t.leverage,
                     status=t.status,
                     tx_hash=t.tx_hash,
                     timestamp_utc=t.timestamp_utc.isoformat(),
                     block_timestamp_utc=t.block_timestamp_utc.isoformat() if t.block_timestamp_utc else None,
+                    is_simulated=_is_perp_dry_run(t),
                 )
                 for t in trades
             ],
@@ -145,6 +160,8 @@ class ViewService:
                 pnl_total_pct=0.0,
                 drawdown_pct=Decimal("0"),
                 max_drawdown_pct=Decimal("0"),
+                sharpe_status="insufficient_data",
+                sharpe_ratio=None,
                 drawdown_cap_pct=self._drawdown_cap_pct,
                 exposure_pct=Decimal("0"),
                 daily_pnl_usd=Decimal("0"),
@@ -156,6 +173,7 @@ class ViewService:
             )
 
         pnl_total = portfolio.total_equity_usd - portfolio.initial_equity_usd
+        sharpe = _daily_sharpe(snapshots)
         pnl_pct = (
             float(pnl_total / portfolio.initial_equity_usd * 100)
             if portfolio.initial_equity_usd > 0
@@ -168,6 +186,8 @@ class ViewService:
             pnl_total_pct=round(pnl_pct, 2),
             drawdown_pct=portfolio.drawdown_pct,
             max_drawdown_pct=portfolio.max_drawdown_pct,
+            sharpe_status=sharpe["status"],
+            sharpe_ratio=sharpe["ratio"],
             drawdown_cap_pct=self._drawdown_cap_pct,
             exposure_pct=portfolio.exposure_pct,
             daily_pnl_usd=portfolio.daily_pnl_usd,
@@ -184,3 +204,44 @@ class ViewService:
                 for s in reversed(snapshots)
             ],
         )
+
+
+def _format_signed_pct(value: Decimal) -> str:
+    return f"{value.quantize(Decimal('0.01')):+.2f}"
+
+
+def _position_pnl_pct(pnl: Decimal, entry_price: Decimal, size: Decimal) -> str:
+    exposure = entry_price * size
+    if exposure <= 0:
+        return "+0.00"
+    return _format_signed_pct(pnl / exposure * Decimal("100"))
+
+
+def _is_spot_dry_run(trade) -> bool:
+    return trade.trade_id.startswith("dry_") or trade.provider == "dry_run" or "dry_run" in (trade.notes or "")
+
+
+def _is_perp_dry_run(trade) -> bool:
+    return trade.trade_id.startswith("dry_") or trade.venue == "dry_run" or "dry_run" in (trade.notes or "")
+
+
+def _daily_sharpe(snapshots) -> dict[str, str | None]:
+    if len(snapshots) < 2:
+        return {"status": "insufficient_data", "ratio": None}
+
+    daily_equity: OrderedDict[str, Decimal] = OrderedDict()
+    for snapshot in sorted(snapshots, key=lambda row: row.timestamp_utc):
+        daily_equity[snapshot.timestamp_utc.date().isoformat()] = Decimal(snapshot.total_equity_usd)
+
+    values = list(daily_equity.values())
+    returns: list[float] = []
+    for previous, current in zip(values, values[1:], strict=False):
+        if previous > 0:
+            returns.append(float((current - previous) / previous))
+    if len(returns) < 7:
+        return {"status": "insufficient_data", "ratio": None}
+    volatility = stdev(returns)
+    if volatility == 0:
+        return {"status": "insufficient_data", "ratio": None}
+    ratio = mean(returns) / volatility * sqrt(365)
+    return {"status": "ready", "ratio": f"{Decimal(str(ratio)).quantize(Decimal('0.01'))}"}

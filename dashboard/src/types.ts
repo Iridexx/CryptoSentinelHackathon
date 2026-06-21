@@ -7,6 +7,7 @@ export type SpotPosition = {
   entry_price: string;
   current_price: string;
   pnl_unrealized: string;
+  pnl_pct?: string | null;
   status: string;
   opened_at: string;
 };
@@ -17,8 +18,13 @@ export type SpotTrade = {
   side: string;
   amount: string;
   price: string;
+  pnl_usd?: string | null;
+  pnl_pct?: string | null;
+  entry_price?: string | null;
+  current_or_exit_price?: string | null;
   status: string;
   timestamp_utc: string;
+  is_simulated?: boolean;
 };
 
 export type SpotView = {
@@ -36,6 +42,46 @@ export type PnlPoint = {
   drawdown_pct: string;
 };
 
+export type PerpPosition = {
+  position_id: string;
+  asset: string;
+  side: string;
+  size: string;
+  entry_price: string;
+  current_price: string;
+  leverage: number;
+  pnl_unrealized: string;
+  pnl_pct?: string | null;
+  status: string;
+  opened_at: string;
+};
+
+export type PerpTrade = {
+  trade_id: string;
+  asset: string;
+  side: string;
+  direction: string;
+  size: string;
+  price: string;
+  pnl_usd?: string | null;
+  pnl_pct?: string | null;
+  entry_price?: string | null;
+  current_or_exit_price?: string | null;
+  leverage: number;
+  status: string;
+  timestamp_utc: string;
+  is_simulated?: boolean;
+};
+
+export type PerpView = {
+  open_positions: PerpPosition[];
+  history: PerpTrade[];
+  realized_pnl_usd: string;
+  unrealized_pnl_usd: string;
+  win_rate_pct: number;
+  trade_count: number;
+};
+
 export type GlobalView = {
   total_equity_usd: string;
   initial_equity_usd: string;
@@ -43,6 +89,8 @@ export type GlobalView = {
   pnl_total_pct: number;
   drawdown_pct: string;
   max_drawdown_pct: string;
+  sharpe_status?: string;
+  sharpe_ratio?: string | null;
   drawdown_cap_pct: number;
   exposure_pct: string;
   daily_pnl_usd: string;
@@ -51,6 +99,93 @@ export type GlobalView = {
   open_spot_positions: number;
   open_perp_positions: number;
   pnl_history: PnlPoint[];
+};
+
+export type EquityCurvePoint = {
+  timestamp_utc: string;
+  equity_usd: string;
+  pnl_usd: string;
+  pnl_pct: string;
+  drawdown_pct: string;
+};
+
+export type EquityCurveResponse = {
+  market: 'spot' | 'perp' | 'global';
+  range: '24h' | '7d' | 'all';
+  initial_equity_usd: string;
+  items: EquityCurvePoint[];
+};
+
+export type AgentDecisionItem = {
+  decision_id: string;
+  timestamp_utc: string;
+  asset?: string | null;
+  market: string;
+  signal_quality: string;
+  confidence: string;
+  action: string;
+  reasoning?: string | null;
+  execution_result?: string | null;
+  trade_id?: string | null;
+};
+
+export type AgentDecisionResponse = {
+  items: AgentDecisionItem[];
+  limit: number;
+  offset: number;
+};
+
+export type AssetBreakdownItem = {
+  asset: string;
+  trade_count: number;
+  win_rate_pct: string;
+  pnl_usd: string;
+  pnl_pct: string;
+  allocation_pct: string;
+};
+
+export type AssetBreakdownResponse = {
+  market: 'spot' | 'perp';
+  items: AssetBreakdownItem[];
+};
+
+export type TradeDetail = {
+  trade_id: string;
+  asset: string;
+  market: 'spot' | 'perp';
+  direction: string;
+  entry_price: string;
+  current_or_exit_price: string;
+  pnl_usd: string;
+  pnl_pct: string;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
+  trailing_stop?: string | null;
+  size: string;
+  leverage?: number | null;
+  exposure_usd: string;
+  opened_at: string;
+  closed_at?: string | null;
+  duration_seconds?: number | null;
+  close_reason?: string | null;
+  decision?: {
+    decision_id: string;
+    signal_quality: string;
+    confidence: string;
+    action: string;
+    reasoning?: string | null;
+  } | null;
+  events: Array<Record<string, unknown>>;
+  is_simulated: boolean;
+};
+
+export type OperationalStats = {
+  uptime_pct: string;
+  heartbeat: Record<string, unknown>;
+  degraded_count: number;
+  degraded_reasons: string[];
+  last_kill_switch?: string | null;
 };
 
 export type AgentStatus = {

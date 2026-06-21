@@ -1,6 +1,7 @@
 """ORM model registry — import here to ensure all tables are registered with Base."""
 
 from .alerts import AlertConfig
+from .archives import ArchivedRun
 from .base import Base
 from .decisions import AgentDecision
 from .device_alert_configs import DeviceAlertConfig
@@ -14,6 +15,7 @@ from .x402 import X402DailyBudget
 __all__ = [
     "Base",
     "AlertConfig",
+    "ArchivedRun",
     "AgentDecision",
     "DeviceAlertConfig",
     "DeviceToken",

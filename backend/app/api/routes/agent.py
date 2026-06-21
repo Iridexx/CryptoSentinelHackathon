@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import select
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agent.risk import KillSwitchState
 from backend.app.agent.service import get_agent_service
 from backend.app.agent.watchlist import selected_watchlist, set_selected_watchlist
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
+from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SessionDep
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
@@ -75,6 +77,46 @@ async def agent_watchlist(_: ReadAccessDep) -> dict:
         "eligible_tokens": service.settings.eligible_tokens,
         "selected_count": len(selected),
         "selected_tokens": selected,
+    }
+
+
+@router.get("/decisions")
+async def agent_decisions(
+    _: ReadAccessDep,
+    session: SessionDep,
+    market: str | None = Query(None, pattern="^(spot|perp)$"),
+    action: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict:
+    """Return paginated agent decision log."""
+
+    service = get_agent_service()
+    stmt = select(AgentDecision).where(AgentDecision.user_id == str(service.settings.default_user_id))
+    if market:
+        stmt = stmt.where(AgentDecision.market == market)
+    if action:
+        stmt = stmt.where(AgentDecision.action == action)
+    stmt = stmt.order_by(AgentDecision.timestamp_utc.desc()).offset(offset).limit(limit)
+    rows = list((await session.execute(stmt)).scalars().all())
+    return {
+        "items": [
+            {
+                "decision_id": row.decision_id,
+                "timestamp_utc": row.timestamp_utc.isoformat(),
+                "asset": row.asset,
+                "market": row.market,
+                "signal_quality": f"{(row.signal_quality or 0):.2f}",
+                "confidence": f"{(row.confidence or 0):.2f}",
+                "action": row.action,
+                "reasoning": row.reasoning,
+                "execution_result": row.execution_result,
+                "trade_id": row.trade_id,
+            }
+            for row in rows
+        ],
+        "limit": limit,
+        "offset": offset,
     }
 
 

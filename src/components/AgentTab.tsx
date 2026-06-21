@@ -2,21 +2,29 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import {
   fetchAgentSettings,
   fetchAgentStatus,
+  fetchAgentDecisions,
+  fetchAssetBreakdown,
+  fetchEquityCurve,
   fetchGlobalView,
   fetchMobileWallet,
   fetchPerpView,
   fetchSpotView,
+  fetchTradeDetail,
   saveAgentSettings,
   setKillSwitch,
   validateOnboarding,
+  type AgentDecisionResponse,
   type AgentMobileSettings,
   type AgentStatus,
+  type AssetBreakdownResponse,
   type CredentialValidationResponse,
+  type EquityCurveResponse,
   type GlobalView,
   type KillSwitchState,
   type MobileWalletView,
   type PerpView,
   type SpotView,
+  type TradeDetail,
 } from '../services/agentApi';
 import { hapticLight } from '../utils/haptics';
 
@@ -24,7 +32,7 @@ type AgentPane = 'spot' | 'perp' | 'global' | 'coins' | 'setup';
 
 const fmtUsd = (value: string | number | null | undefined) => {
   const n = Number(value ?? 0);
-  return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const fmtPct = (value: string | number | null | undefined) => {
@@ -62,6 +70,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_time_stop_hours: 8,
 };
 
+const AGENT_REFRESH_MS = 45_000;
+
 const EmptyState: FC<{ title: string; detail: string }> = ({ title, detail }) => (
   <div className="rounded-xl border border-dashed border-dark-600 bg-dark-800/60 px-4 py-8 text-center">
     <p className="text-sm font-semibold text-white">{title}</p>
@@ -77,6 +87,25 @@ const Stat: FC<{ label: string; value: string; tone?: 'good' | 'bad' | 'neutral'
     }`}>{value}</p>
   </div>
 );
+
+const MiniSparkline: FC<{ values: number[] }> = ({ values }) => {
+  if (values.length === 0) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 1);
+  const points = values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * 100;
+      const y = 42 - ((value - min) / range) * 40;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(' ');
+  return (
+    <svg className="h-16 w-full" viewBox="0 0 100 44" role="img" aria-label="Equity curve">
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-accent-blue" />
+    </svg>
+  );
+};
 
 const SegmentButton: FC<{ id: AgentPane; active: boolean; label: string; onClick: (id: AgentPane) => void }> = ({
   id, active, label, onClick,
@@ -148,7 +177,7 @@ const SelectInput: FC<{
   </label>
 );
 
-const SpotPane: FC<{ data: SpotView | null }> = ({ data }) => {
+const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }> = ({ data, onTrade }) => {
   const hasPositions = (data?.open_positions.length ?? 0) > 0;
   const hasHistory = (data?.history.length ?? 0) > 0;
   const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
@@ -170,7 +199,9 @@ const SpotPane: FC<{ data: SpotView | null }> = ({ data }) => {
             <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-white">{position.asset}</p>
-                <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>{fmtUsd(position.pnl_unrealized)}</p>
+                <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
+                  {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
+                </p>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
                 <span>Entry {fmtUsd(position.entry_price)}</span>
@@ -187,10 +218,18 @@ const SpotPane: FC<{ data: SpotView | null }> = ({ data }) => {
         <div className="space-y-2">
           <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot history</h3>
           {data!.history.slice(0, 5).map((trade) => (
-            <div key={trade.trade_id} className="flex items-center justify-between rounded-lg bg-dark-800 px-3 py-2 text-xs">
-              <span className="text-white">{trade.asset} {trade.side}</span>
-              <span className="text-gray-500">{trade.status}</span>
-            </div>
+            <button key={trade.trade_id} onClick={() => onTrade(trade.trade_id)} className="h-auto w-full rounded-lg border-0 bg-dark-800 px-3 py-2 text-left text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-white">{trade.asset} {trade.side}</span>
+                <span className={Number(trade.pnl_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>
+                  {trade.pnl_pct ?? '+0.00'}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2 text-gray-500">
+                <span>{fmtUsd(trade.entry_price ?? trade.price)} {'to'} {fmtUsd(trade.current_or_exit_price ?? trade.price)}</span>
+                <span>{trade.status}</span>
+              </div>
+            </button>
           ))}
         </div>
       ) : hasActivity && (
@@ -200,7 +239,7 @@ const SpotPane: FC<{ data: SpotView | null }> = ({ data }) => {
   );
 };
 
-const PerpPane: FC<{ data: PerpView | null }> = ({ data }) => {
+const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }> = ({ data, onTrade }) => {
   const hasPositions = (data?.open_positions.length ?? 0) > 0;
   const hasHistory = (data?.history.length ?? 0) > 0;
   const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
@@ -225,7 +264,7 @@ const PerpPane: FC<{ data: PerpView | null }> = ({ data }) => {
                 <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                <span>PnL {fmtUsd(position.pnl_unrealized)}</span>
+                <span>PnL {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%</span>
                 <span>Liq {position.liquidation_price ? fmtUsd(position.liquidation_price) : '-'}</span>
                 <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
                 <span>{position.status}</span>
@@ -236,17 +275,44 @@ const PerpPane: FC<{ data: PerpView | null }> = ({ data }) => {
       ) : hasActivity && (
         <EmptyState title="Nessuna posizione aperta" detail="Le posizioni perp long/short appariranno qui." />
       )}
-      {!hasHistory && hasActivity && (
+      {hasHistory ? (
+        <div className="space-y-2">
+          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Perp history</h3>
+          {data!.history.slice(0, 5).map((trade) => (
+            <button key={trade.trade_id} onClick={() => onTrade(trade.trade_id)} className="h-auto w-full rounded-lg border-0 bg-dark-800 px-3 py-2 text-left text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-white">{trade.asset} {trade.side} {trade.leverage}x</span>
+                <span className={Number(trade.pnl_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>
+                  {trade.pnl_pct ?? '+0.00'}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2 text-gray-500">
+                <span>{fmtUsd(trade.entry_price ?? trade.price)} {'to'} {fmtUsd(trade.current_or_exit_price ?? trade.price)}</span>
+                <span>{trade.status}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : hasActivity && (
         <EmptyState title="Nessun trade perp" detail="Lo storico perp si popola dopo le prime operazioni." />
       )}
     </div>
   );
 };
 
-const GlobalPane: FC<{ data: GlobalView | null; status: AgentStatus | null }> = ({ data, status }) => {
+const GlobalPane: FC<{
+  data: GlobalView | null;
+  status: AgentStatus | null;
+  equity: EquityCurveResponse | null;
+  decisions: AgentDecisionResponse | null;
+  assetBreakdown: AssetBreakdownResponse | null;
+}> = ({ data, status, equity, decisions, assetBreakdown }) => {
   const hasHistory = (data?.pnl_history.length ?? 0) > 0;
   const hasPortfolio = Number(data?.total_equity_usd ?? 0) > 0 || Number(data?.initial_equity_usd ?? 0) > 0;
   const hasTradesToday = Number(data?.trades_today ?? 0) > 0;
+  const sortedAssets = [...(assetBreakdown?.items ?? [])].sort((a, b) => Number(b.pnl_usd) - Number(a.pnl_usd));
+  const bestAssets = sortedAssets.slice(0, 3);
+  const worstAssets = sortedAssets.slice(-3).reverse();
 
   return (
     <div className="space-y-3">
@@ -267,26 +333,43 @@ const GlobalPane: FC<{ data: GlobalView | null; status: AgentStatus | null }> = 
       {hasHistory ? (
         <div className="rounded-xl bg-dark-800 px-4 py-3">
           <h3 className="text-xs font-semibold uppercase text-gray-500">Equity snapshots</h3>
-          <div className="mt-3 flex h-20 items-end gap-1">
-            {data!.pnl_history.slice(-24).map((point) => {
-              const equity = Number(point.total_equity_usd);
-              const max = Math.max(...data!.pnl_history.slice(-24).map((p) => Number(p.total_equity_usd)), 1);
-              return (
-                <span
-                  key={point.timestamp_utc}
-                  className="flex-1 rounded-t bg-accent-blue/70"
-                  style={{ height: `${Math.max(8, (equity / max) * 80)}px` }}
-                />
-              );
-            })}
-          </div>
+          <MiniSparkline values={(equity?.items ?? data!.pnl_history).slice(-24).map((point) => Number('equity_usd' in point ? point.equity_usd : point.total_equity_usd))} />
         </div>
       ) : hasPortfolio && (
         <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
       )}
+      <div className="grid grid-cols-2 gap-2">
+        <AssetRank title="Top asset" items={bestAssets} />
+        <AssetRank title="Worst asset" items={worstAssets} />
+      </div>
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Ultime decisioni</h3>
+        {(decisions?.items.length ?? 0) > 0 ? decisions!.items.slice(0, 3).map((item) => (
+          <div key={item.decision_id} className="flex items-center justify-between rounded-lg bg-dark-800 px-3 py-2 text-xs">
+            <span className="text-white">{item.action} {item.asset ?? '--'}</span>
+            <span className="text-gray-500">{new Date(item.timestamp_utc).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+        )) : (
+          <EmptyState title="Nessuna decisione" detail="Le ultime valutazioni AI appariranno qui." />
+        )}
+      </section>
     </div>
   );
 };
+
+const AssetRank: FC<{ title: string; items: AssetBreakdownResponse['items'] }> = ({ title, items }) => (
+  <section className="rounded-xl bg-dark-800 px-3 py-3">
+    <h3 className="text-xs font-semibold uppercase text-gray-500">{title}</h3>
+    <div className="mt-2 space-y-1.5">
+      {items.length > 0 ? items.map((item) => (
+        <div key={`${title}-${item.asset}`} className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-white">{item.asset}</span>
+          <span className={Number(item.pnl_usd) >= 0 ? 'text-accent-green' : 'text-accent-red'}>{item.pnl_pct}%</span>
+        </div>
+      )) : <p className="text-xs text-gray-500">--</p>}
+    </div>
+  </section>
+);
 
 const CoinsPane: FC<{
   eligibleTokens: string[];
@@ -574,6 +657,53 @@ const SetupPane: FC<{
   );
 };
 
+const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ detail, onBack }) => (
+  <div className="space-y-4">
+    <button onClick={onBack} className="rounded-lg bg-dark-800 px-3 py-2 text-sm font-semibold text-gray-300">
+      Back
+    </button>
+    <section className="rounded-xl bg-dark-800 px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold text-white">{detail.asset}</h3>
+          <p className="text-xs text-gray-500">{detail.market} / {detail.direction}</p>
+        </div>
+        <span className={detail.is_simulated ? 'rounded-full bg-accent-yellow/15 px-2 py-1 text-xs text-accent-yellow' : 'rounded-full bg-accent-green/15 px-2 py-1 text-xs text-accent-green'}>
+          {detail.is_simulated ? 'dry-run' : 'live'}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Stat label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
+        <Stat label="Entry" value={fmtUsd(detail.entry_price)} />
+        <Stat label="Now/Exit" value={fmtUsd(detail.current_or_exit_price)} />
+        <Stat label="Size" value={detail.size} />
+        <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
+      </div>
+    </section>
+    <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
+      <h3 className="text-sm font-semibold text-white">Risk levels</h3>
+      {[
+        ['Stop loss', detail.stop_loss],
+        ['Take profit 1', detail.take_profit_1],
+        ['Take profit 2', detail.take_profit_2],
+        ['Trailing stop', detail.trailing_stop],
+      ].map(([label, value]) => (
+        <div key={label} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
+          <span className="text-gray-500">{label}</span>
+          <span className="text-white">{value ? fmtUsd(value) : '-'}</span>
+        </div>
+      ))}
+    </section>
+    <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
+      <h3 className="text-sm font-semibold text-white">Timeline</h3>
+      <p className="text-xs text-gray-500">Open {new Date(detail.opened_at).toLocaleString('it-IT')}</p>
+      <p className="text-xs text-gray-500">Close {detail.closed_at ? new Date(detail.closed_at).toLocaleString('it-IT') : '-'}</p>
+      <p className="text-xs text-gray-500">Reason {detail.close_reason ?? '-'}</p>
+    </section>
+  </div>
+);
+
 interface AgentTabProps {
   adminToken: string;
   onAdminToken: (value: string) => void;
@@ -598,6 +728,10 @@ const AgentTab: FC<AgentTabProps> = ({
   const [spot, setSpot] = useState<SpotView | null>(null);
   const [perp, setPerp] = useState<PerpView | null>(null);
   const [global, setGlobal] = useState<GlobalView | null>(null);
+  const [equity, setEquity] = useState<EquityCurveResponse | null>(null);
+  const [decisions, setDecisions] = useState<AgentDecisionResponse | null>(null);
+  const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(null);
+  const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
   const [settings, setSettings] = useState<AgentMobileSettings>(defaultSettings);
   const [wallet, setWallet] = useState<MobileWalletView | null>(null);
   const [validation, setValidation] = useState<CredentialValidationResponse | null>(null);
@@ -610,13 +744,16 @@ const AgentTab: FC<AgentTabProps> = ({
     setLoading(true);
     setError('');
     try {
-      const [statusData, spotData, perpData, globalData, settingsData, walletData] = await Promise.all([
+      const [statusData, spotData, perpData, globalData, settingsData, walletData, equityData, decisionsData, breakdownData] = await Promise.all([
         fetchAgentStatus(),
         fetchSpotView(),
         fetchPerpView(),
         fetchGlobalView(),
         fetchAgentSettings(),
         fetchMobileWallet(),
+        fetchEquityCurve(),
+        fetchAgentDecisions(),
+        fetchAssetBreakdown(),
       ]);
       setStatus(statusData);
       setSpot(spotData);
@@ -624,6 +761,9 @@ const AgentTab: FC<AgentTabProps> = ({
       setGlobal(globalData);
       setSettings(settingsData.settings);
       setWallet(walletData);
+      setEquity(equityData);
+      setDecisions(decisionsData);
+      setAssetBreakdown(breakdownData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load agent data');
     } finally {
@@ -633,6 +773,13 @@ const AgentTab: FC<AgentTabProps> = ({
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      refresh();
+    }, AGENT_REFRESH_MS);
+    return () => window.clearInterval(timer);
   }, [refresh]);
 
   const handleSave = async () => {
@@ -672,6 +819,18 @@ const AgentTab: FC<AgentTabProps> = ({
     }
   };
 
+  const handleTradeDetail = async (tradeId: string) => {
+    setSaving(true);
+    setActionError('');
+    try {
+      setTradeDetail(await fetchTradeDetail(tradeId));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to load trade detail');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const statusTone = useMemo(() => {
     if (status?.kill_switch === 'hard_stop') return 'text-accent-red';
     if (status?.kill_switch === 'soft_stop' || status?.kill_switch === 'degraded') return 'text-accent-yellow';
@@ -680,6 +839,10 @@ const AgentTab: FC<AgentTabProps> = ({
 
   return (
     <div className="space-y-4">
+      {tradeDetail ? (
+        <TradeDetailScreen detail={tradeDetail} onBack={() => setTradeDetail(null)} />
+      ) : (
+        <>
       <div className="rounded-xl bg-dark-800 px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -708,9 +871,9 @@ const AgentTab: FC<AgentTabProps> = ({
       {watchlistError && pane !== 'coins' && (
         <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{watchlistError}</p>
       )}
-      {pane === 'spot' && <SpotPane data={spot} />}
-      {pane === 'perp' && <PerpPane data={perp} />}
-      {pane === 'global' && <GlobalPane data={global} status={status} />}
+      {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
+      {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
+      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} decisions={decisions} assetBreakdown={assetBreakdown} />}
       {pane === 'coins' && (
         <CoinsPane
           eligibleTokens={eligibleTokens}
@@ -736,6 +899,8 @@ const AgentTab: FC<AgentTabProps> = ({
           onValidate={handleValidate}
           onKill={handleKill}
         />
+      )}
+        </>
       )}
     </div>
   );

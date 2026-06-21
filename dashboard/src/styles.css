@@ -195,6 +195,10 @@ nav button.active {
   margin-bottom: 14px;
 }
 
+.metric-grid.two {
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+}
+
 .metric {
   border: 1px solid #343b32;
   border-radius: 8px;
@@ -281,6 +285,20 @@ td {
   text-align: left;
   border-bottom: 1px solid #30362f;
   white-space: nowrap;
+}
+
+tbody tr {
+  cursor: default;
+}
+
+tbody tr:hover {
+  background: #20261e;
+}
+
+.reasoning-cell {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 th {
@@ -592,6 +610,15 @@ button.danger {
   border: 1px solid #30362f;
   padding: 12px;
   color: #d8ded2;
+}
+
+.trade-inline,
+.trade-detail {
+  margin: 12px;
+  border: 1px solid #333a31;
+  border-radius: 8px;
+  background: #141814;
+  padding: 12px;
 }
 
 .log-list {

@@ -55,6 +55,25 @@ async def _backup_loop(settings: Settings) -> None:
             logger.exception("db_backup_periodic_failed")
 
 
+async def _startup_ohlcv_warmup(settings: Settings) -> None:
+    """Warm OHLCV caches after the API has started accepting requests."""
+
+    try:
+        warmup = await warmup_selected_watchlist(settings)
+        logger.info(
+            "agent_startup_ohlcv_warmup_finished",
+            status=warmup.get("status"),
+            reason=warmup.get("reason"),
+            requested_assets=warmup.get("requested_assets", 0),
+            loaded=warmup.get("loaded", 0),
+            ready=warmup.get("ready", 0),
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.warning("agent_startup_ohlcv_warmup_failed", error=str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop backend runtime tasks."""
@@ -68,24 +87,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session,
             fcm_tokens_path=settings.fcm_token_store_path,
         )
-    try:
-        warmup = await warmup_selected_watchlist(settings)
-        logger.info(
-            "agent_startup_ohlcv_warmup_finished",
-            status=warmup.get("status"),
-            reason=warmup.get("reason"),
-            requested_assets=warmup.get("requested_assets", 0),
-            loaded=warmup.get("loaded", 0),
-            ready=warmup.get("ready", 0),
-        )
-    except Exception as exc:
-        logger.warning("agent_startup_ohlcv_warmup_failed", error=str(exc))
-
+    warmup_task = asyncio.create_task(_startup_ohlcv_warmup(settings))
     heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
     price_checker_task = asyncio.create_task(price_checker_loop())
     agent_fast_task = asyncio.create_task(agent_fast_loop(settings))
     agent_slow_task = asyncio.create_task(agent_slow_loop(settings))
-    background_tasks = [heartbeat_task, price_checker_task, agent_fast_task, agent_slow_task]
+    background_tasks = [warmup_task, heartbeat_task, price_checker_task, agent_fast_task, agent_slow_task]
     if settings.db_backup_enabled:
         background_tasks.append(asyncio.create_task(_backup_loop(settings)))
     logger.info(

@@ -13,6 +13,7 @@ from backend.app.persistence import database
 from backend.app.persistence.backup import backup_db
 from backend.app.persistence.database import check_db, close_db, get_session_factory, init_db
 from backend.app.persistence.migration import migrate_json_to_db
+from backend.app.persistence.archive import archive_dry_run_records, list_archived_runs
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
@@ -272,6 +273,79 @@ async def test_spot_and_perp_views_return_open_positions(db) -> None:
         assert spot.unrealized_pnl_usd == Decimal("20")
         perp = await ViewService(session).perp_view(USER)
         assert perp.open_positions == []
+
+
+@pytest.mark.asyncio
+async def test_archive_dry_run_records_copies_and_clears_live_data(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await SpotTradeRepository(session).save(
+            SpotTrade(
+                trade_id="dry_spot_1",
+                user_id=USER,
+                asset="BNB",
+                side="buy",
+                amount=Decimal("0.1"),
+                price=Decimal("600"),
+                amount_quote=Decimal("60"),
+                status="prepared",
+                provider="dry_run",
+                timestamp_utc=now,
+            )
+        )
+        await AgentDecisionRepository(session).save(
+            AgentDecision(
+                decision_id="dry_dec_1",
+                user_id=USER,
+                timestamp_utc=now,
+                asset="BNB",
+                market="spot",
+                action="approve",
+                reasoning="dry_run regression",
+                trade_id="dry_spot_1",
+            )
+        )
+        await PnlRepository(session).save_snapshot(
+            PnlSnapshot(user_id=USER, timestamp_utc=now, total_equity_usd=Decimal("500"))
+        )
+        await PnlRepository(session).upsert_portfolio(
+            USER,
+            total_equity_usd=Decimal("612"),
+            initial_equity_usd=Decimal("500"),
+            peak_equity_usd=Decimal("650"),
+            drawdown_pct=Decimal("-5"),
+            max_drawdown_pct=Decimal("-8"),
+            exposure_pct=Decimal("20"),
+            daily_pnl_usd=Decimal("12"),
+            trades_today=3,
+        )
+        await session.commit()
+
+    async with factory() as session:
+        archive = await archive_dry_run_records(
+            session,
+            user_id=USER,
+            archive_label="test_archive",
+            reset_portfolio_capital_usd=Decimal("500"),
+        )
+        runs = await list_archived_runs(session, user_id=USER)
+        remaining_trades = await SpotTradeRepository(session).list_for_user(USER)
+        remaining_decisions = await AgentDecisionRepository(session).recent_for_user(USER)
+        remaining_snapshots = await PnlRepository(session).recent_for_user(USER)
+        portfolio = await PnlRepository(session).get_portfolio(USER)
+
+    assert archive.archive_label == "test_archive"
+    assert runs[0]["counts"]["spot_trades"] == 1
+    assert runs[0]["counts"]["agent_decisions"] == 1
+    assert runs[0]["counts"]["pnl_snapshots"] == 1
+    assert runs[0]["counts"]["portfolio_state"] == 1
+    assert remaining_trades == []
+    assert remaining_decisions == []
+    assert remaining_snapshots == []
+    assert portfolio is not None
+    assert portfolio.total_equity_usd == Decimal("500")
+    assert portfolio.trades_today == 0
 
 
 def test_backup_creates_timestamped_copy_and_prunes(tmp_path: Path) -> None:

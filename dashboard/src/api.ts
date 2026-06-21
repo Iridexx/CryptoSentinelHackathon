@@ -1,8 +1,11 @@
 import type {
   AgentSettings,
   AgentStatus,
+  AgentDecisionResponse,
+  AssetBreakdownResponse,
   CredentialValidationResponse,
   DataCoverageResponse,
+  EquityCurveResponse,
   ExecutionProviderSelectionResponse,
   ExecutionStatus,
   ExecutionWalletsResponse,
@@ -11,8 +14,11 @@ import type {
   KillSwitchState,
   LogResponse,
   MarketListResponse,
+  OperationalStats,
+  PerpView,
   SettingsResponse,
   SpotView,
+  TradeDetail,
 } from './types';
 
 export type DashboardSession = {
@@ -51,8 +57,34 @@ export function fetchSpot(session: DashboardSession) {
   return requestJson<SpotView>(session, '/api/v1/views/spot');
 }
 
+export function fetchPerp(session: DashboardSession) {
+  return requestJson<PerpView>(session, '/api/v1/views/perp');
+}
+
 export function fetchGlobal(session: DashboardSession) {
   return requestJson<GlobalView>(session, '/api/v1/views/global');
+}
+
+export function fetchEquityCurve(session: DashboardSession, market: 'spot' | 'perp' | 'global', range = '24h') {
+  return requestJson<EquityCurveResponse>(session, `/api/v1/views/equity-curve?market=${market}&range=${range}`);
+}
+
+export function fetchAssetBreakdown(session: DashboardSession, market: 'spot' | 'perp') {
+  return requestJson<AssetBreakdownResponse>(session, `/api/v1/views/asset-breakdown?market=${market}`);
+}
+
+export function fetchTradeDetail(session: DashboardSession, tradeId: string) {
+  return requestJson<TradeDetail>(session, `/api/v1/views/trade-detail/${encodeURIComponent(tradeId)}`);
+}
+
+export function fetchOperationalStats(session: DashboardSession) {
+  return requestJson<OperationalStats>(session, '/api/v1/views/operational-stats');
+}
+
+export function fetchAgentDecisions(session: DashboardSession, market?: 'spot' | 'perp') {
+  const params = new URLSearchParams({ limit: '50' });
+  if (market) params.set('market', market);
+  return requestJson<AgentDecisionResponse>(session, `/api/v1/agent/decisions?${params.toString()}`);
 }
 
 export function fetchAgentStatus(session: DashboardSession) {

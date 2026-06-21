@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-20
+Ultimo aggiornamento: 2026-06-21
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -36,7 +36,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- README.md - runbook backend, endpoint, auth, configurazione e FCM.
 |   |-- requirements.txt - dipendenze Python backend, incluso PyYAML per config centralizzata.
 |   |-- app/ - package applicativo backend.
-|   |   |-- main.py - entrypoint FastAPI, lifespan, warm-up OHLCV watchlist, heartbeat loop, CORS, proxy headers, logging richieste.
+|   |   |-- main.py - entrypoint FastAPI, lifespan non bloccante, warm-up OHLCV watchlist in background, heartbeat loop, CORS, proxy headers, logging richieste.
 |   |   |-- api/ - router FastAPI e dipendenze API.
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
@@ -47,10 +47,10 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
-|   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
+|   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - GET /api/v1/views/spot|perp|global: viste dashboard con posizioni, PnL, win rate.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
@@ -59,7 +59,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
 |   |   |   |-- loops/ - loop veloce gestione posizioni e loop lento scansione/decisione safe-by-default.
-|   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing e guardrail portfolio/drawdown/daily loss.
+|   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing dry-run realistico, soglia minima trade e guardrail portfolio/drawdown/daily loss.
 |   |   |   `-- signals/ - signal engine modulare Spot/Perp/V2.
 |   |   |       |-- base.py - primitive base signal engine.
 |   |   |       |-- common/indicators.py - primitive Candle, EMA, VWAP, ATR, RSI e relative volume.
@@ -121,7 +121,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- backup.py - copia SQLite con timestamp UTC, pruning retention, restituisce None se DB assente.
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot (FCM tokens, alert config/state).
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view per dashboard.
+|   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
@@ -131,6 +132,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- positions.py - SpotPosition e PerpPosition (leverage, liquidation_price, funding_rate).
 |   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
 |   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert).
+|   |   |   |   |-- archives.py - ArchivedRun: snapshot JSON dei dati dry-run simulati esclusi dalle viste live.
 |   |   |   |   |-- x402.py - X402DailyBudget (unique user_id + budget_date).
 |   |   |   |   |-- runtime_state.py - RuntimeState (unique user_id + key).
 |   |   |   |   `-- __init__.py - esporta tutti i modelli, registra tabelle con Base.
@@ -150,11 +152,12 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
 |   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary con balance asset non-zero.
 |   |   |   |-- observability.py - schemi Step 8 per log viewer dashboard.
-|   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint per viste dashboard.
+|   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint e campi analytics PnL/Sharpe per dashboard/app.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
 |   |-- scripts/ - script di avvio backend.
 |   |   |-- encrypt_wallet.py - creazione interattiva keystore Web3 cifrato senza input CLI.
+|   |   |-- archive_dry_run.py - helper manuale per archiviare dati dry-run simulati e pulire le tabelle live.
 |   |   |-- register_competition.py - helper manuale esplicito per `twak compete register --json`, con password TWAK via prompt nascosto.
 |   |   |-- select_twak_wallet.py - helper admin locale per aggiungere/selezionare il nuovo wallet TWAK pubblico in RuntimeState.
 |   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
@@ -175,12 +178,12 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_agent_step6.py - regressioni Step 6/9 per segnali Spot/Perp, risk guardrail, meta-controller, kill switch, daily heartbeat, watchlist scanner e dry-run agent service con persistenza decisione/trade.
 |       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti, onboarding validation e wallet multi-network.
 |       |-- integration/test_market_data_providers.py - regressioni provider market-data, inclusa cache identità su refresh ripetuti dei prezzi.
-|       |-- unit/test_persistence_layer.py - 12 test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, backup.
+|       |-- unit/test_persistence_layer.py - test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, archiviazione dry-run e backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.
 |-- configs/ - configurazione versionata e template installazione.
 |   |-- README.md - categorie config, precedenza e guardrail hard.
 |   |-- instance.example.yaml - template installazione non segreta; include sezione backup DB da Step 5; copiare in instance.yaml locale gitignored.
-|   |-- risk.yaml - default funzionali risk management e guardrail prudenziali.
+|   |-- risk.yaml - default funzionali risk management, incluso dry_run_capital_usd 500 e min_trade_size_usd 7.
 |   |-- strategy_spot.yaml - default strategia Spot.
 |   |-- strategy_perp.yaml - default strategia Perpetual.
 |   `-- eligible_tokens.yaml - universo 148 token eligible unici dopo rimozione del duplicato SLX.
@@ -203,6 +206,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step8.md - report dashboard web unificata Step 8.
 |       |-- report_step9.md - report testing e vincoli qualificazione Step 9.
 |       |-- report_twak_wallet_migration.md - report migrazione nuovo wallet TWAK, fix mainnet/domain e workaround password Windows.
+|       |-- report_dashboard_analytics.md - report archiviazione dry-run, sizing realistico e analytics dashboard/mobile.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
@@ -213,7 +217,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- main.tsx - entrypoint React dashboard.
 |       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets ed Export.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati.
-|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard.
+|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics e trade detail.
 |       `-- styles.css - layout desktop-first e stati UI.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -225,7 +229,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile Step 7 con viste Spot/Perp/Global, setup agente, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
+|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade, setup, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.
@@ -354,7 +358,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
 | Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
 | Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
-| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV e migrazione nuovo wallet TWAK consolidati; suite completa 124 passed. |
+| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV, migrazione nuovo wallet TWAK e analytics dry-run consolidati; suite completa 127 passed. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -400,7 +404,11 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Brain con poteri limitati | Claude può solo approve/reduce/block/skip; non aumenta leva, non inverte direzione e non cambia parametri. Senza Claude, dry-run usa fallback deterministico; live blocca fail-closed. |
 | Loop safe-by-default | Il loop lento valuta solo la watchlist AI selezionata dall'utente; con watchlist vuota resta idle. Il loop veloce gestisce heartbeat e stato posizioni. L'esecuzione live richiede provider astratti, dati completi e guardrail risk/brain favorevoli. |
 | Watchlist AI operativa | `eligible_tokens` definisce solo il perimetro consentito; `agent_watchlist_symbols` in RuntimeState definisce gli asset effettivamente scansionati dall'agente. Le modifiche sono admin-only e la mobile app mostra separatamente token tradabili e token attivi. |
-| Warm-up OHLCV watchlist | Il backend scalda la cache klines 5m all'avvio e sui token appena aggiunti alla watchlist. Data Coverage e signal engine leggono la stessa cache, quindi gli asset passano a `ready` appena lo storico richiesto è scaricato. |
+| Warm-up OHLCV watchlist | Il backend scalda la cache klines 5m in background all'avvio e sui token appena aggiunti alla watchlist. Data Coverage e signal engine leggono la stessa cache, quindi gli asset passano a `ready` appena lo storico richiesto è scaricato senza bloccare il bind API. |
+| Archivio dry-run live reset | I dati simulati storici possono essere copiati in `ArchivedRun`, rimossi dalle tabelle live e il `PortfolioState` riportato al capitale dry-run; dashboard/app leggono per default solo lo stato live pulito. |
+| Dry-run sizing realistico | Il capitale dry-run default è 500 USD e il risk engine blocca i trade sotto 7 USD con `below_minimum_trade_size`, senza forzare size fuori dai parametri. |
+| Analytics read-only condivisa | Dashboard e mobile usano endpoint `/views/*` read-only per equity curve, breakdown asset, trade detail e operational stats; i numeri display sono normalizzati a due decimali. |
+| Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati ogni 45 secondi, dentro il vincolo 30-60s e senza refresh aggressivo. |
 | Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
 | Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |
 | Mobile settings runtime | Le impostazioni agente salvate dalla mobile app sono persistite in `RuntimeState` e confermate dal backend; l'applicazione live completa ai loop va validata end-to-end prima della gara. |

@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   addExecutionWallet,
+  fetchAgentDecisions,
   fetchAgentStatus,
+  fetchAssetBreakdown,
   fetchDataCoverage,
+  fetchEquityCurve,
   fetchExecutionStatus,
   fetchExecutionWallets,
   fetchGlobal,
@@ -11,9 +14,12 @@ import {
   fetchLive,
   fetchLogs,
   fetchMarkets,
+  fetchOperationalStats,
+  fetchPerp,
   fetchReady,
   fetchSettings,
   fetchSpot,
+  fetchTradeDetail,
   saveSettings,
   setKillSwitch,
   setExecutionNetwork,
@@ -25,11 +31,14 @@ import {
   type DashboardSession,
 } from './api';
 import type {
+  AgentDecisionResponse,
   AgentSettings,
   AgentStatus,
+  AssetBreakdownResponse,
   CredentialCheck,
   DataCoverageItem,
   DataCoverageResponse,
+  EquityCurveResponse,
   ExecutionStatus,
   ExecutionWalletsResponse,
   GlobalView,
@@ -37,17 +46,21 @@ import type {
   KillSwitchState,
   LogEntry,
   MarketAsset,
+  OperationalStats,
+  PerpView,
   SettingsResponse,
   SpotView,
+  TradeDetail,
 } from './types';
 
-type Tab = 'overview' | 'spot' | 'global' | 'health' | 'wallet' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
+type Tab = 'overview' | 'spot' | 'global' | 'analytics' | 'health' | 'wallet' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
 type LoadState<T> = { data: T | null; loading: boolean; error: string | null };
 
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'spot', label: 'Spot' },
   { id: 'global', label: 'Global' },
+  { id: 'analytics', label: 'Analytics' },
   { id: 'health', label: 'Health' },
   { id: 'wallet', label: 'Wallet' },
   { id: 'logs', label: 'Logs' },
@@ -75,9 +88,19 @@ const settingFields = [
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';
 const LEGACY_BACKEND_URL = 'http://127.0.0.1:8000';
+const AUTO_REFRESH_MS = 45_000;
 
 function emptyState<T>(data: T | null = null): LoadState<T> {
   return { data, loading: false, error: null };
+}
+
+async function loadDetail<T>(setter: (value: LoadState<T>) => void, task: () => Promise<T>) {
+  setter({ data: null, loading: true, error: null });
+  try {
+    setter({ data: await task(), loading: false, error: null });
+  } catch (error) {
+    setter({ data: null, loading: false, error: error instanceof Error ? error.message : 'Request failed' });
+  }
 }
 
 function normalizedStoredBackendUrl() {
@@ -94,7 +117,12 @@ export default function App() {
     adminToken: localStorage.getItem('cs.dashboard.adminToken') || '',
   }));
   const [spot, setSpot] = useState<LoadState<SpotView>>(emptyState());
+  const [perp, setPerp] = useState<LoadState<PerpView>>(emptyState());
   const [global, setGlobal] = useState<LoadState<GlobalView>>(emptyState());
+  const [equity, setEquity] = useState<LoadState<EquityCurveResponse>>(emptyState());
+  const [decisions, setDecisions] = useState<LoadState<AgentDecisionResponse>>(emptyState());
+  const [assetBreakdown, setAssetBreakdown] = useState<LoadState<AssetBreakdownResponse>>(emptyState());
+  const [operationalStats, setOperationalStats] = useState<LoadState<OperationalStats>>(emptyState());
   const [agent, setAgent] = useState<LoadState<AgentStatus>>(emptyState());
   const [ready, setReady] = useState<LoadState<HealthPayload>>(emptyState());
   const [live, setLive] = useState<LoadState<HealthPayload>>(emptyState());
@@ -123,6 +151,13 @@ export default function App() {
     void refreshCore();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshCore();
+    }, AUTO_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [session.baseUrl, session.readToken]);
+
   async function load<T>(setter: (value: LoadState<T>) => void, task: () => Promise<T>) {
     setter({ data: null, loading: true, error: null });
     try {
@@ -139,7 +174,12 @@ export default function App() {
     await Promise.all([
       load(setLive, () => fetchLive(session)),
       canRead ? load(setSpot, () => fetchSpot(session)) : Promise.resolve(null),
+      canRead ? load(setPerp, () => fetchPerp(session)) : Promise.resolve(null),
       canRead ? load(setGlobal, () => fetchGlobal(session)) : Promise.resolve(null),
+      canRead ? load(setEquity, () => fetchEquityCurve(session, 'global', '24h')) : Promise.resolve(null),
+      canRead ? load(setDecisions, () => fetchAgentDecisions(session)) : Promise.resolve(null),
+      canRead ? load(setAssetBreakdown, () => fetchAssetBreakdown(session, 'spot')) : Promise.resolve(null),
+      canRead ? load(setOperationalStats, () => fetchOperationalStats(session)) : Promise.resolve(null),
       canRead ? load(setAgent, () => fetchAgentStatus(session)) : Promise.resolve(null),
       canRead ? load(setReady, () => fetchReady(session)) : Promise.resolve(null),
       canRead ? load(setHeartbeat, () => fetchHeartbeat(session)) : Promise.resolve(null),
@@ -281,6 +321,12 @@ export default function App() {
       scope: 'step8_dashboard_export',
       spot: spot.data,
       global: global.data,
+      analytics: {
+        equity_curve: equity.data,
+        decisions: decisions.data,
+        asset_breakdown: assetBreakdown.data,
+        operational_stats: operationalStats.data,
+      },
       agent: agent.data,
       health: {
         live: live.data,
@@ -291,7 +337,21 @@ export default function App() {
         data_coverage: coverage.data,
       },
     }),
-    [agent.data, coverage.data, execution.data, global.data, heartbeat.data, live.data, ready.data, spot.data, wallets.data],
+    [
+      agent.data,
+      assetBreakdown.data,
+      coverage.data,
+      decisions.data,
+      equity.data,
+      execution.data,
+      global.data,
+      heartbeat.data,
+      live.data,
+      operationalStats.data,
+      ready.data,
+      spot.data,
+      wallets.data,
+    ],
   );
 
   return (
@@ -359,6 +419,15 @@ export default function App() {
         )}
         {tab === 'spot' && <SpotPanel spot={spot} expanded />}
         {tab === 'global' && <GlobalPanel global={global} expanded />}
+        {tab === 'analytics' && (
+          <AnalyticsPanel
+            equity={equity}
+            decisions={decisions}
+            assetBreakdown={assetBreakdown}
+            operationalStats={operationalStats}
+            onTradeDetail={(tradeId) => fetchTradeDetail(session, tradeId)}
+          />
+        )}
         {tab === 'health' && (
           <HealthPanel live={live} ready={ready} heartbeat={heartbeat} execution={execution} coverage={coverage} expanded />
         )}
@@ -434,6 +503,12 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
             <Metric label="Trades" value={String(data.trades_today)} />
             <Metric label="Drawdown" value={`${data.drawdown_pct}%`} tone="warn" />
             <Metric label="Exposure" value={`${data.exposure_pct}%`} />
+            {expanded && (
+              <Metric
+                label="Sharpe"
+                value={data.sharpe_status === 'ready' && data.sharpe_ratio ? data.sharpe_ratio : 'insufficient data'}
+              />
+            )}
           </div>
           {data.pnl_history.length === 0 ? (
             <Empty title="No PnL history" detail="Global tracking is ready and waiting for confirmed activity." />
@@ -448,6 +523,7 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
 
 function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expanded?: boolean }) {
   const data = spot.data;
+  const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
     <Panel title="Spot Ranking View" className={expanded ? 'wide' : ''}>
       <StateBlock state={spot} empty="No Spot data loaded" />
@@ -456,7 +532,7 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
           <div className="metric-grid">
             <Metric label="Realized" value={money(data.realized_pnl_usd)} />
             <Metric label="Unrealized" value={money(data.unrealized_pnl_usd)} />
-            <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(1)}%`} />
+            <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(2)}%`} />
             <Metric label="Trades" value={String(data.trade_count)} />
           </div>
           {data.open_positions.length === 0 ? (
@@ -478,21 +554,179 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
             (data.history.length === 0 ? (
               <Empty title="No Spot trades today" detail="Trade history will appear after the first confirmed Spot order." />
             ) : (
-              <Table
-                columns={['Asset', 'Side', 'Amount', 'Price', 'Status', 'Time']}
-                rows={data.history.map((item) => [
-                  item.asset,
-                  item.side,
-                  item.amount,
-                  money(item.price),
-                  item.status,
-                  shortDate(item.timestamp_utc),
-                ])}
-              />
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Asset</th>
+                      <th>Side</th>
+                      <th>Amount</th>
+                      <th>Entry</th>
+                      <th>Now/Exit</th>
+                      <th>PnL</th>
+                      <th>Status</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.history.map((item) => (
+                      <tr key={item.trade_id} onClick={() => setOpenTrade(openTrade === item.trade_id ? null : item.trade_id)}>
+                        <td>{item.asset}</td>
+                        <td>{item.side}</td>
+                        <td>{item.amount}</td>
+                        <td>{money(item.entry_price ?? item.price)}</td>
+                        <td>{money(item.current_or_exit_price ?? item.price)}</td>
+                        <td className={Number(item.pnl_usd ?? 0) >= 0 ? 'ok-text' : 'error-text'}>
+                          {item.pnl_usd ?? '+0.00'} / {item.pnl_pct ?? '+0.00'}%
+                        </td>
+                        <td>{item.status}</td>
+                        <td>{shortDate(item.timestamp_utc)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {openTrade && <TradeDetailInline tradeId={openTrade} />}
+              </div>
             ))}
         </>
       )}
     </Panel>
+  );
+}
+
+function AnalyticsPanel({
+  equity,
+  decisions,
+  assetBreakdown,
+  operationalStats,
+  onTradeDetail,
+}: {
+  equity: LoadState<EquityCurveResponse>;
+  decisions: LoadState<AgentDecisionResponse>;
+  assetBreakdown: LoadState<AssetBreakdownResponse>;
+  operationalStats: LoadState<OperationalStats>;
+  onTradeDetail: (tradeId: string) => Promise<TradeDetail>;
+}) {
+  const [detail, setDetail] = useState<LoadState<TradeDetail>>(emptyState());
+  async function openDetail(tradeId?: string | null) {
+    if (!tradeId) return;
+    await loadDetail(setDetail, () => onTradeDetail(tradeId));
+  }
+  return (
+    <div className="grid overview-grid">
+      <Panel title="Equity Curve" className="wide">
+        <StateBlock state={equity} empty="No equity curve data" />
+        {equity.data && equity.data.items.length > 0 ? (
+          <>
+            <Sparkline points={equity.data.items.map((point) => Number(point.equity_usd))} />
+            <Table
+              columns={['Time', 'Equity', 'PnL', 'ROI', 'Drawdown']}
+              rows={equity.data.items.slice(-12).map((item) => [
+                shortDate(item.timestamp_utc),
+                money(item.equity_usd),
+                item.pnl_usd,
+                `${item.pnl_pct}%`,
+                `${item.drawdown_pct}%`,
+              ])}
+            />
+          </>
+        ) : equity.data ? (
+          <Empty title="No equity snapshots" detail="New clean dry-run snapshots will appear here." />
+        ) : null}
+      </Panel>
+
+      <Panel title="Operational Stats">
+        <StateBlock state={operationalStats} empty="No operational stats loaded" />
+        {operationalStats.data && (
+          <div className="metric-grid two">
+            <Metric label="Uptime" value={`${operationalStats.data.uptime_pct}%`} />
+            <Metric label="Degraded" value={String(operationalStats.data.degraded_count)} />
+            <Metric label="Kill switch" value={operationalStats.data.last_kill_switch ?? 'none'} />
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Asset Breakdown" className="wide">
+        <StateBlock state={assetBreakdown} empty="No asset breakdown data" />
+        {assetBreakdown.data && assetBreakdown.data.items.length > 0 ? (
+          <Table
+            columns={['Asset', 'Trades', 'Win rate', 'PnL', 'ROI', 'Allocation']}
+            rows={assetBreakdown.data.items.map((item) => [
+              item.asset,
+              String(item.trade_count),
+              `${item.win_rate_pct}%`,
+              item.pnl_usd,
+              `${item.pnl_pct}%`,
+              `${item.allocation_pct}%`,
+            ])}
+          />
+        ) : assetBreakdown.data ? (
+          <Empty title="No asset activity" detail="Breakdown starts after the first non-archived trade or position." />
+        ) : null}
+      </Panel>
+
+      <Panel title="Decision Log" className="wide">
+        <StateBlock state={decisions} empty="No agent decisions loaded" />
+        {decisions.data && decisions.data.items.length > 0 ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Asset</th>
+                  <th>Market</th>
+                  <th>Quality</th>
+                  <th>Action</th>
+                  <th>Execution</th>
+                  <th>Reasoning</th>
+                </tr>
+              </thead>
+              <tbody>
+                {decisions.data.items.map((item) => (
+                  <tr key={item.decision_id} onClick={() => void openDetail(item.trade_id)}>
+                    <td>{shortDate(item.timestamp_utc)}</td>
+                    <td>{item.asset ?? '--'}</td>
+                    <td>{item.market}</td>
+                    <td>{item.signal_quality}</td>
+                    <td>{item.action}</td>
+                    <td>{item.execution_result ?? '--'}</td>
+                    <td className="reasoning-cell">{item.reasoning ?? '--'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : decisions.data ? (
+          <Empty title="No decisions" detail="Agent reasoning will appear after the first evaluation." />
+        ) : null}
+        {detail.data && <TradeDetailCard detail={detail.data} />}
+        {detail.error && <p className="error-text">{detail.error}</p>}
+      </Panel>
+    </div>
+  );
+}
+
+function TradeDetailInline({ tradeId }: { tradeId: string }) {
+  return <div className="trade-inline">Selected trade: <strong>{tradeId}</strong>. Open the Analytics decision row for full detail.</div>;
+}
+
+function TradeDetailCard({ detail }: { detail: TradeDetail }) {
+  return (
+    <div className="trade-detail">
+      <div className="subhead">
+        <h3>{detail.asset} {detail.market}</h3>
+        <span>{detail.is_simulated ? 'simulated' : 'live'}</span>
+      </div>
+      <div className="metric-grid">
+        <Metric label="Direction" value={detail.direction} />
+        <Metric label="Entry" value={money(detail.entry_price)} />
+        <Metric label="Now/Exit" value={money(detail.current_or_exit_price)} />
+        <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
+        <Metric label="Exposure" value={money(detail.exposure_usd)} />
+        <Metric label="Size" value={detail.size} />
+      </div>
+      <pre className="json-dump">{JSON.stringify(detail, null, 2)}</pre>
+    </div>
   );
 }
 
@@ -993,7 +1227,12 @@ function Sparkline({ points }: { points: number[] }) {
 function money(value: string | number) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return String(value);
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(numeric);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numeric);
 }
 
 function compact(value: number) {

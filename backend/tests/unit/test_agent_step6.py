@@ -63,6 +63,8 @@ def settings(**overrides):
         risk_daily_loss_limit_pct=-8.0,
         risk_max_drawdown_pct=-15.0,
         risk_min_pool_liquidity_usd=50000.0,
+        dry_run_capital_usd=500.0,
+        min_trade_size_usd=7.0,
         min_portfolio_value_usd=5.0,
         test_scaling_pct=10.0,
         spot_confidence_threshold=0.70,
@@ -312,6 +314,31 @@ def test_risk_engine_size_cap() -> None:
     assert decision.size_quote == Decimal("30.00")
 
 
+def test_risk_engine_uses_500_dry_run_capital_for_natural_size() -> None:
+    decision = RiskManager(settings()).evaluate(
+        _intent(quote_equity=Decimal("500"), price=Decimal("100"), stop_loss=Decimal("95")),
+        portfolio=None,
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is True
+    assert decision.size_quote == Decimal("30.00")
+
+
+def test_risk_engine_blocks_below_minimum_trade_size() -> None:
+    decision = RiskManager(settings()).evaluate(
+        _intent(quote_equity=Decimal("100"), price=Decimal("100"), stop_loss=Decimal("95")),
+        portfolio=None,
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "below_minimum_trade_size"
+    assert decision.size_quote == Decimal("6.00")
+
+
 @pytest.mark.asyncio
 async def test_meta_controller_fallback_on_timeout(monkeypatch) -> None:
     class TimeoutClient:
@@ -463,6 +490,7 @@ async def test_heartbeat_triggers_at_20utc(db) -> None:
     assert len(trades) == 1
     assert trades[0].asset == "ETH"
     assert trades[0].notes == "dry_run_step6"
+    assert trades[0].amount_quote == Decimal("7")
 
 
 @pytest.mark.asyncio
