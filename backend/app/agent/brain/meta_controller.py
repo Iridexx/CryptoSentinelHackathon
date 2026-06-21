@@ -35,7 +35,14 @@ class ClaudeMetaController:
 
     async def decide(self, *, signal: dict[str, Any], risk: dict[str, Any]) -> BrainDecision:
         if not self.settings.anthropic_api_key:
+            logger.warning("claude_meta_controller_skipped", reason="no_api_key")
             return self._local_fallback(signal, risk)
+        logger.info(
+            "claude_meta_controller_calling",
+            model=self.settings.anthropic_model,
+            asset=signal.get("asset"),
+            signal_action=signal.get("action"),
+        )
         try:
             payload = self._build_payload(signal, risk)
             async with httpx.AsyncClient(timeout=20.0) as client:
@@ -56,9 +63,20 @@ class ClaudeMetaController:
                     body=response.text[:300],
                 )
             response.raise_for_status()
-            return self._parse_response(response.json())
+            result = self._parse_response(response.json())
+            logger.info(
+                "claude_meta_controller_ok",
+                action=result.action,
+                confidence=str(result.confidence),
+            )
+            return result
         except Exception as exc:
-            logger.warning("claude_meta_controller_failed", error=str(exc), model=self.settings.anthropic_model)
+            logger.warning(
+                "claude_meta_controller_failed",
+                error=str(exc),
+                model=self.settings.anthropic_model,
+                error_type=type(exc).__name__,
+            )
             if self.settings.execution_mode == "dry_run":
                 return self._local_fallback(signal, risk, reason_prefix="claude_unavailable_dry_run")
             raise MetaControllerError("claude_meta_controller_unavailable") from exc
