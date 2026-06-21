@@ -232,12 +232,12 @@ const TradeHistoryList: FC<{
           value={search}
           onChange={(e) => { setSearch(e.target.value); resetPage(); }}
           placeholder="Asset…"
-          className="w-20 flex-shrink-0 rounded-lg border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-white outline-none"
+          className="w-24 flex-shrink-0 rounded-lg border border-dark-600 bg-dark-800 px-3 py-1.5 text-sm text-white outline-none"
         />
         <select
           value={filterSide}
           onChange={(e) => { setFilterSide(e.target.value); resetPage(); }}
-          className="flex-1 min-w-0 rounded-lg border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-white outline-none"
+          className="flex-1 min-w-0 rounded-lg border border-dark-600 bg-dark-800 px-3 py-1.5 text-sm text-white outline-none"
         >
           {sides.map((s) => <option key={s} value={s}>{s === 'all' ? 'All sides' : s}</option>)}
         </select>
@@ -245,7 +245,7 @@ const TradeHistoryList: FC<{
           <select
             value={filterDir}
             onChange={(e) => { setFilterDir(e.target.value); resetPage(); }}
-            className="flex-1 min-w-0 rounded-lg border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-white outline-none"
+            className="flex-1 min-w-0 rounded-lg border border-dark-600 bg-dark-800 px-3 py-1.5 text-sm text-white outline-none"
           >
             {dirs.map((d) => <option key={d} value={d}>{d === 'all' ? 'Open+Close' : d}</option>)}
           </select>
@@ -264,7 +264,7 @@ const TradeHistoryList: FC<{
           <button
             key={t.trade_id}
             onClick={() => onTrade(t.trade_id)}
-            className={`h-auto w-full rounded-xl border-0 px-3 py-3 text-left text-xs ${isClose ? 'bg-dark-700' : 'bg-dark-800'}`}
+            className={`h-auto w-full rounded-xl border-0 px-4 py-3 text-left text-sm ${isClose ? 'bg-dark-700' : 'bg-dark-800'}`}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-white">{label}</span>
@@ -272,16 +272,16 @@ const TradeHistoryList: FC<{
                 {t.pnl_pct ?? '--'}%
               </span>
             </div>
-            <div className="mt-1.5 grid grid-cols-3 gap-1 text-gray-400">
+            <div className="mt-2 grid grid-cols-3 gap-1 text-sm text-gray-400">
               <span>In {fmtPrice(t.entry_price ?? t.price)}</span>
               <span>Out {fmtPrice(t.current_or_exit_price ?? t.price)}</span>
               <span className={isGood ? 'text-accent-green' : 'text-accent-red'}>
                 {isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}
               </span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-gray-500">
-              <span className="uppercase tracking-wide" style={{ fontSize: '10px' }}>{t.status}</span>
-              <span style={{ fontSize: '10px' }}>
+            <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+              <span className="uppercase tracking-wide">{t.status}</span>
+              <span>
                 {new Date(t.timestamp_utc).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
@@ -290,17 +290,17 @@ const TradeHistoryList: FC<{
       })}
 
       {/* pager */}
-      <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+      <div className="flex items-center justify-between text-sm text-gray-500 pt-1">
         <button
           onClick={() => setPage((p) => Math.max(0, p - 1))}
           disabled={pg === 0}
-          className="px-3 py-1 rounded-lg bg-dark-800 border border-dark-600 disabled:opacity-30"
+          className="px-4 py-1.5 rounded-lg bg-dark-800 border border-dark-600 disabled:opacity-30 text-sm"
         >‹ Prev</button>
         <span>{pg + 1}/{totalPages} ({filtered.length} trade)</span>
         <button
           onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
           disabled={pg >= totalPages - 1}
-          className="px-3 py-1 rounded-lg bg-dark-800 border border-dark-600 disabled:opacity-30"
+          className="px-4 py-1.5 rounded-lg bg-dark-800 border border-dark-600 disabled:opacity-30 text-sm"
         >Next ›</button>
       </div>
     </div>

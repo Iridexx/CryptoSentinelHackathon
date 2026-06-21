@@ -1103,22 +1103,22 @@ button.danger {
 }
 
 .trade-history-search {
-  width: 110px;
-  padding: 4px 8px;
+  width: 120px;
+  padding: 5px 10px;
   background: #1e221e;
   border: 1px solid #2e362e;
   border-radius: 6px;
   color: #e8ece7;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .trade-history-filters select {
-  padding: 4px 8px;
+  padding: 5px 10px;
   background: #1e221e;
   border: 1px solid #2e362e;
   border-radius: 6px;
   color: #e8ece7;
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -1126,14 +1126,14 @@ button.danger {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 14px;
   color: #a7b0a4;
   white-space: nowrap;
 }
 
 .pager-btn {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1141,7 +1141,7 @@ button.danger {
   border: 1px solid #2e362e;
   border-radius: 6px;
   color: #e8ece7;
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
@@ -1177,18 +1177,18 @@ button.danger {
 .trade-history-scroll table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .trade-history-scroll thead th {
   position: sticky;
   top: 0;
   background: #1a1f1a;
-  padding: 7px 10px;
+  padding: 9px 12px;
   text-align: left;
   color: #6a8060;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -1214,7 +1214,7 @@ button.danger {
 }
 
 .trade-history-scroll td {
-  padding: 6px 10px;
+  padding: 8px 12px;
   vertical-align: middle;
   color: #cdd4cc;
   white-space: nowrap;
@@ -1223,19 +1223,19 @@ button.danger {
 .trade-history-scroll td.num {
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .trade-history-scroll td.date-cell {
   color: #6a736a;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
