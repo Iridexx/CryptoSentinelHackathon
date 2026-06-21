@@ -81,6 +81,19 @@ class SpotTradeRepository:
         )
         return int(result.scalar_one())
 
+    async def sum_realized_pnl(self, user_id: str, *, since: datetime | None = None) -> Decimal:
+        """Somma pnl_usd di tutti i trade spot con pnl registrato."""
+        stmt = (
+            select(func.sum(SpotTrade.pnl_usd))
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.pnl_usd.is_not(None))
+        )
+        if since is not None:
+            stmt = stmt.where(SpotTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
+        val = result.scalar_one_or_none()
+        return Decimal(str(val)) if val is not None else Decimal("0")
+
 
 class PerpTradeRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -122,3 +135,16 @@ class PerpTradeRepository:
             .where(PerpTrade.timestamp_utc >= start)
         )
         return int(result.scalar_one())
+
+    async def sum_realized_pnl(self, user_id: str, *, since: datetime | None = None) -> Decimal:
+        """Somma pnl_usd di tutti i trade perp con pnl registrato."""
+        stmt = (
+            select(func.sum(PerpTrade.pnl_usd))
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.pnl_usd.is_not(None))
+        )
+        if since is not None:
+            stmt = stmt.where(PerpTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
+        val = result.scalar_one_or_none()
+        return Decimal(str(val)) if val is not None else Decimal("0")

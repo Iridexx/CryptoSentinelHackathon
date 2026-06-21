@@ -387,7 +387,18 @@ class AgentService:
         unrealized = sum((p.pnl_unrealized for p in spot_positions), Decimal("0")) + sum(
             (p.pnl_unrealized for p in perp_positions), Decimal("0")
         )
-        total = portfolio.initial_equity_usd + unrealized
+
+        spot_repo = SpotTradeRepository(session)
+        perp_repo = PerpTradeRepository(session)
+        realized_spot = await spot_repo.sum_realized_pnl(user_id)
+        realized_perp = await perp_repo.sum_realized_pnl(user_id)
+        realized = realized_spot + realized_perp
+        total = portfolio.initial_equity_usd + realized + unrealized
+
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_realized_spot = await spot_repo.sum_realized_pnl(user_id, since=day_start)
+        daily_realized_perp = await perp_repo.sum_realized_pnl(user_id, since=day_start)
+        daily_pnl = daily_realized_spot + daily_realized_perp + unrealized
 
         spot_exposure = sum((p.entry_price * p.size for p in spot_positions), Decimal("0"))
         perp_exposure = sum((p.entry_price * p.size for p in perp_positions), Decimal("0"))
@@ -399,8 +410,8 @@ class AgentService:
         drawdown_pct = drawdown.quantize(Decimal("0.01"))
         max_drawdown_pct = max(portfolio.max_drawdown_pct, drawdown_pct)
 
-        spot_count = await SpotTradeRepository(session).count_today(user_id, now)
-        perp_count = await PerpTradeRepository(session).count_today(user_id, now)
+        spot_count = await spot_repo.count_today(user_id, now)
+        perp_count = await perp_repo.count_today(user_id, now)
 
         await pnl_repo.upsert_portfolio(
             user_id,
@@ -409,7 +420,7 @@ class AgentService:
             drawdown_pct=drawdown_pct,
             max_drawdown_pct=max_drawdown_pct,
             exposure_pct=exposure_pct,
-            daily_pnl_usd=unrealized,
+            daily_pnl_usd=daily_pnl,
             agent_status=self.risk.kill_switch.value,
             trades_today=spot_count + perp_count,
         )
