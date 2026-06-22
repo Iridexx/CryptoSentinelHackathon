@@ -75,6 +75,9 @@ export interface PerpPositionView {
   leverage: number;
   pnl_unrealized: string;
   pnl_pct?: string | null;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
   liquidation_price?: string | null;
   funding_rate?: string | null;
   status: string;
