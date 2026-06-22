@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Literal
 
@@ -135,11 +136,15 @@ async def set_agent_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     added = [token for token in selected if token not in previous]
-    warmup = await warmup_selected_watchlist(service.settings, assets=added) if added else {
-        "status": "skipped",
-        "reason": "no_new_tokens",
-        "items": [],
-    }
+    # Il warmup OHLCV e' solo un'ottimizzazione di cache: gira in background per non
+    # bloccare la risposta. Per i token senza mercato Binance (es. token piccoli della
+    # competizione) il fetch va in timeout e bloccava la PUT, facendo "rimbalzare" la
+    # selezione nel client. La watchlist e' gia' stata persistita sopra.
+    if added:
+        asyncio.create_task(warmup_selected_watchlist(service.settings, assets=added))
+        warmup = {"status": "scheduled", "assets": added}
+    else:
+        warmup = {"status": "skipped", "reason": "no_new_tokens", "items": []}
     return {
         "eligible_count": len(service.settings.eligible_tokens),
         "eligible_tokens": service.settings.eligible_tokens,
