@@ -42,14 +42,16 @@ class SpotTradeRepository:
         return list(result.scalars().all())
 
     async def win_rate(self, user_id: str) -> dict:
-        trades = await self.list_for_user(user_id, limit=10_000, status="confirmed")
-        if not trades:
+        """Win rate sui trade di chiusura (quelli con pnl_usd registrato)."""
+        trades = await self.list_for_user(user_id, limit=10_000)
+        closed = [t for t in trades if t.pnl_usd is not None]
+        if not closed:
             return {"total": 0, "wins": 0, "win_rate_pct": 0.0}
-        wins = sum(1 for t in trades if t.side == "sell" and t.notes and "profit" in t.notes)
+        wins = sum(1 for t in closed if t.pnl_usd > 0)
         return {
-            "total": len(trades),
+            "total": len(closed),
             "wins": wins,
-            "win_rate_pct": round(wins / len(trades) * 100, 1),
+            "win_rate_pct": round(wins / len(closed) * 100, 1),
         }
 
     async def count_since(
@@ -166,3 +168,16 @@ class PerpTradeRepository:
             .where(PerpTrade.asset == asset)
         )
         return result.scalar_one_or_none()
+
+    async def win_rate(self, user_id: str) -> dict:
+        """Win rate sui trade di chiusura (quelli con pnl_usd registrato)."""
+        trades = await self.list_for_user(user_id, limit=10_000)
+        closed = [t for t in trades if t.pnl_usd is not None]
+        if not closed:
+            return {"total": 0, "wins": 0, "win_rate_pct": 0.0}
+        wins = sum(1 for t in closed if t.pnl_usd > 0)
+        return {
+            "total": len(closed),
+            "wins": wins,
+            "win_rate_pct": round(wins / len(closed) * 100, 1),
+        }

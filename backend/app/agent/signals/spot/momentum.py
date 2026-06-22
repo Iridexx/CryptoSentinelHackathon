@@ -107,6 +107,8 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
         min_stop = current * (1 - SPOT_MIN_STOP_DISTANCE_PCT / 100)
         stop_loss = min(atr_stop, min_stop)
         take_profit_1 = current * (1 + self.settings.spot_partial_take_profit_pct / 100)
+        # TP2 (uscita finale) a distanza doppia rispetto a TP1: lascia correre il residuo.
+        take_profit_2 = current * (1 + 2 * self.settings.spot_partial_take_profit_pct / 100)
         trailing_stop = current * (1 - self.settings.spot_trailing_distance_pct / 100)
 
         return {
@@ -119,6 +121,7 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
             "price": current,
             "stop_loss": stop_loss if stop_loss > 0 else None,
             "take_profit_1": take_profit_1,
+            "take_profit_2": take_profit_2,
             "trailing_stop": trailing_stop,
             "reason": "momentum_confirmed" if action == "enter_long" else "spot_filters_not_satisfied",
             "components": {

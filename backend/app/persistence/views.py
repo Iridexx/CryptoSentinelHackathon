@@ -93,7 +93,7 @@ class ViewService:
         trade_repo = PerpTradeRepository(self._session)
         positions = await pos_repo.open_for_user(user_id)
         trades = await trade_repo.list_for_user(user_id, limit=100)
-        closed = [t for t in trades if t.status == "confirmed"]
+        win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = sum((t.pnl_usd for t in trades if t.pnl_usd is not None), Decimal("0"))
         history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
@@ -142,7 +142,7 @@ class ViewService:
             ],
             realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
-            win_rate_pct=round(len(closed) / len(trades) * 100, 1) if trades else 0.0,
+            win_rate_pct=win["win_rate_pct"],
             trade_count=len(trades),
         )
 

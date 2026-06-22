@@ -67,6 +67,10 @@ class AgentService:
         self.brain = brain or ClaudeMetaController(self.settings)
         self.spot_registry = spot_registry or get_execution_provider_registry()
         self.perp_registry = perp_registry or get_perp_execution_registry()
+        # Feed riusato per il refresh prezzi delle posizioni aperte (no nuova istanza a ogni tick).
+        self.price_feed = BinanceKlineFeed(
+            timeout_seconds=self.settings.market_data_request_timeout_seconds
+        )
 
     def status(self) -> dict:
         return {
@@ -168,27 +172,29 @@ class AgentService:
         perp_positions: list,
     ) -> None:
         """Fetch live Binance prices and update current_price + pnl_unrealized for open positions."""
-        feed = BinanceKlineFeed()
         now = datetime.now(UTC)
 
-        perp_assets: set[str] = {p.asset for p in perp_positions}
-        spot_assets: set[str] = {p.asset for p in spot_positions}
+        perp_assets: list[str] = sorted({p.asset for p in perp_positions})
+        spot_assets: list[str] = sorted({p.asset for p in spot_positions})
 
+        # Una sola chiamata batch per mercato invece di N richieste seriali.
         perp_prices: dict[str, Decimal] = {}
-        for asset in perp_assets:
+        if perp_assets:
             try:
-                candles = await feed.fetch(symbol=f"{asset}USDT", interval="1m", limit=1, market="futures")
-                if candles:
-                    perp_prices[asset] = Decimal(str(candles[-1].close))
+                ticker = await self.price_feed.fetch_prices(
+                    symbols=[f"{a}USDT" for a in perp_assets], market="futures"
+                )
+                perp_prices = {a: ticker[f"{a}USDT"] for a in perp_assets if f"{a}USDT" in ticker}
             except Exception:
                 pass
 
         spot_prices: dict[str, Decimal] = {}
-        for asset in spot_assets:
+        if spot_assets:
             try:
-                candles = await feed.fetch(symbol=f"{asset}USDT", interval="1m", limit=1, market="spot")
-                if candles:
-                    spot_prices[asset] = Decimal(str(candles[-1].close))
+                ticker = await self.price_feed.fetch_prices(
+                    symbols=[f"{a}USDT" for a in spot_assets], market="spot"
+                )
+                spot_prices = {a: ticker[f"{a}USDT"] for a in spot_assets if f"{a}USDT" in ticker}
             except Exception:
                 pass
 
@@ -224,12 +230,22 @@ class AgentService:
         exit_price: Decimal,
         reason: str,
         now: datetime,
+        *,
+        partial: bool = False,
     ) -> Decimal:
-        """Chiude una posizione spot: aggiorna status, crea trade di chiusura con pnl_usd."""
-        pnl = (exit_price - pos.entry_price) * pos.size
-        pos.status = "closed"
+        """Chiude (totalmente o al 50% per TP1) una posizione spot; crea trade di chiusura con pnl_usd."""
+        if partial:
+            close_size = (pos.size / Decimal("2")).quantize(Decimal("0.000001"))
+            pnl = (exit_price - pos.entry_price) * close_size
+            pos.size = pos.size - close_size
+            pos.tp1_reached = True
+            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size
+        else:
+            close_size = pos.size
+            pnl = (exit_price - pos.entry_price) * close_size
+            pos.status = "closed"
+            pos.pnl_unrealized = pnl
         pos.current_price = exit_price
-        pos.pnl_unrealized = pnl
         pos.updated_at = now
         session.add(pos)
         close_trade = SpotTrade(
@@ -237,17 +253,17 @@ class AgentService:
             user_id=pos.user_id,
             asset=pos.asset,
             side="sell",
-            amount=pos.size,
+            amount=close_size,
             price=exit_price,
-            amount_quote=exit_price * pos.size,
+            amount_quote=exit_price * close_size,
             status="confirmed",
             provider="agent",
             timestamp_utc=now,
-            notes=f"auto_close:{reason}",
+            notes=f"auto_close:{reason}{'_partial' if partial else ''}",
             pnl_usd=pnl,
         )
         await SpotTradeRepository(session).save(close_trade)
-        logger.info("spot_position_closed", asset=pos.asset, reason=reason, pnl_usd=float(pnl))
+        logger.info("spot_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
 
     async def _close_perp_position(
@@ -314,12 +330,16 @@ class AgentService:
                 continue
             price = pos.current_price
             reason: str | None = None
+            partial = False
             if pos.stop_loss and price <= pos.stop_loss:
                 reason = "stop_loss"
-            elif pos.take_profit_2 and price >= pos.take_profit_2:
+            # TP2 (uscita finale) solo dopo che TP1 e' stato preso.
+            if reason is None and pos.tp1_reached and pos.take_profit_2 and price >= pos.take_profit_2:
                 reason = "take_profit_2"
-            elif pos.take_profit_1 and price >= pos.take_profit_1:
+            # TP1: chiusura parziale (50%) la prima volta che viene raggiunto.
+            if reason is None and not pos.tp1_reached and pos.take_profit_1 and price >= pos.take_profit_1:
                 reason = "take_profit_1"
+                partial = True
             # Trailing stop: trascina il livello verso l'alto e chiude se il prezzo ritraccia.
             if reason is None and self.settings.spot_trailing_distance_pct > 0:
                 candidate = price * (Decimal("1") - Decimal(str(self.settings.spot_trailing_distance_pct)) / Decimal("100"))
@@ -334,7 +354,7 @@ class AgentService:
                 if age_hours >= self.settings.spot_time_stop_hours:
                     reason = "time_stop"
             if reason:
-                pnl = await self._close_spot_position(session, pos, price, reason, now)
+                pnl = await self._close_spot_position(session, pos, price, reason, now, partial=partial)
                 exposure = pos.entry_price * pos.size
                 pnl_pct = pnl / exposure * 100 if exposure > 0 else Decimal("0")
                 asyncio.create_task(
@@ -730,6 +750,7 @@ class AgentService:
                 current_price=price,
                 stop_loss=_optional_decimal(signal.get("stop_loss")),
                 take_profit_1=_optional_decimal(signal.get("take_profit_1")),
+                take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                 trailing_stop=_optional_decimal(signal.get("trailing_stop")),
                 open_trade_id=trade_id,
                 opened_at=now,

@@ -144,6 +144,38 @@ async def test_spot_trade_repo_save_and_list(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_win_rate_uses_pnl_sign(db) -> None:
+    factory = get_session_factory()
+    async with factory() as session:
+        repo = SpotTradeRepository(session)
+        now = datetime.now(UTC)
+        # Apertura senza pnl (esclusa dal calcolo) + 2 chiusure: 1 vincente, 1 perdente.
+        await repo.save(SpotTrade(
+            trade_id="open", user_id=USER, asset="BNB", side="buy",
+            amount=Decimal("1"), price=Decimal("100"), amount_quote=Decimal("100"),
+            status="prepared", timestamp_utc=now,
+        ))
+        await repo.save(SpotTrade(
+            trade_id="win", user_id=USER, asset="BNB", side="sell",
+            amount=Decimal("1"), price=Decimal("110"), amount_quote=Decimal("110"),
+            status="confirmed", timestamp_utc=now, notes="auto_close:trailing_stop",
+            pnl_usd=Decimal("10"),
+        ))
+        await repo.save(SpotTrade(
+            trade_id="loss", user_id=USER, asset="BNB", side="sell",
+            amount=Decimal("1"), price=Decimal("95"), amount_quote=Decimal("95"),
+            status="confirmed", timestamp_utc=now, notes="auto_close:stop_loss",
+            pnl_usd=Decimal("-5"),
+        ))
+    async with factory() as session:
+        win = await SpotTradeRepository(session).win_rate(USER)
+        # 2 chiusure, 1 vincente (anche se chiusa per trailing_stop, conta perche' pnl>0).
+        assert win["total"] == 2
+        assert win["wins"] == 1
+        assert win["win_rate_pct"] == 50.0
+
+
+@pytest.mark.asyncio
 async def test_perp_position_carries_leverage_and_liquidation(db) -> None:
     factory = get_session_factory()
     async with factory() as session:

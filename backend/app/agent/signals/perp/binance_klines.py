@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 
 import httpx
@@ -77,6 +79,32 @@ class BinanceKlineFeed:
             updated_at=datetime.now(UTC),
         )
         return candles
+
+
+    async def fetch_prices(
+        self,
+        *,
+        symbols: list[str],
+        market: BinanceMarket = "futures",
+    ) -> dict[str, Decimal]:
+        """Prezzo corrente per piu' symbol in una sola chiamata (ticker/price batch).
+
+        Ritorna una mappa SYMBOL->prezzo (es. {"BTCUSDT": Decimal("...")}).
+        """
+        if not symbols:
+            return {}
+        base_url = self.futures_base_url if market == "futures" else self.spot_base_url
+        path = "/fapi/v1/ticker/price" if market == "futures" else "/api/v3/ticker/price"
+        symbols_param = json.dumps([s.upper() for s in symbols], separators=(",", ":"))
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.get(f"{base_url}{path}", params={"symbols": symbols_param})
+        if response.status_code >= 400:
+            raise BinanceKlineFeedError(f"binance_ticker_http_{response.status_code}")
+        try:
+            payload = response.json()
+            return {str(row["symbol"]).upper(): Decimal(str(row["price"])) for row in payload}
+        except (TypeError, ValueError, KeyError) as exc:
+            raise BinanceKlineFeedError("binance_ticker_parse_failed") from exc
 
 
 def get_kline_cache_entry(*, market: BinanceMarket, symbol: str, interval: str = "5m") -> BinanceKlineCacheEntry | None:

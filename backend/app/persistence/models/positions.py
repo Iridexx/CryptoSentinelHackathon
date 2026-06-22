@@ -26,6 +26,7 @@ class SpotPosition(Base):
     take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    tp1_reached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open / closed
     open_trade_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
