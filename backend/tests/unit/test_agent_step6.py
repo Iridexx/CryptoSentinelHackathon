@@ -576,6 +576,44 @@ async def test_build_spot_swap_params_resolves_via_cmc() -> None:
 
 
 @pytest.mark.asyncio
+async def test_spot_trailing_activates_only_after_tp1(db) -> None:
+    service = AgentService(
+        settings(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+
+    def _pos(position_id: str, tp1: bool) -> SpotPosition:
+        # entry 100, trailing a 99, prezzo a 98 (sotto il trailing): chiuderebbe per trailing.
+        # stop_loss basso (90) e nessun TP per isolare il solo trailing.
+        return SpotPosition(
+            position_id=position_id,
+            user_id=str(USER_ID),
+            asset="BTC",
+            size=Decimal("1"),
+            entry_price=Decimal("100"),
+            current_price=Decimal("98"),
+            stop_loss=Decimal("90"),
+            trailing_stop=Decimal("99"),
+            tp1_reached=tp1,
+            status="open",
+            opened_at=now,
+            updated_at=now,
+        )
+
+    pos_no_tp1 = _pos("p-no-tp1", tp1=False)
+    pos_tp1 = _pos("p-tp1", tp1=True)
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos_no_tp1, pos_tp1], [], now)
+
+    # Senza TP1 il trailing non si attiva: la posizione resta aperta.
+    assert pos_no_tp1.status == "open"
+    # Con TP1 raggiunto il trailing chiude la posizione.
+    assert pos_tp1.status == "closed"
+
+
+@pytest.mark.asyncio
 async def test_heartbeat_skips_when_eth_already_open(db) -> None:
     service = AgentService(
         settings(eligible_tokens=["ETH"] + [f"TOKEN_{i}" for i in range(148)]),

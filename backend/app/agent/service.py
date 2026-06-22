@@ -347,8 +347,9 @@ class AgentService:
             if reason is None and not pos.tp1_reached and pos.take_profit_1 and price >= pos.take_profit_1:
                 reason = "take_profit_1"
                 partial = True
-            # Trailing stop: trascina il livello verso l'alto e chiude se il prezzo ritraccia.
-            if reason is None and self.settings.spot_trailing_distance_pct > 0:
+            # Trailing stop: attivo solo dopo TP1 (trade in profitto), per non scattare
+            # su un ritracciamento iniziale. Trascina il livello verso l'alto e chiude se ritraccia.
+            if reason is None and pos.tp1_reached and self.settings.spot_trailing_distance_pct > 0:
                 candidate = price * (Decimal("1") - Decimal(str(self.settings.spot_trailing_distance_pct)) / Decimal("100"))
                 if pos.trailing_stop is None or candidate > pos.trailing_stop:
                     pos.trailing_stop = candidate
@@ -397,8 +398,9 @@ class AgentService:
                     reason = "take_profit_1"
                     partial = True
 
-            # Trailing stop dinamico: trascina il livello in direzione del profitto e chiude la posizione residua.
-            if reason is None and pos.trailing_stop is not None:
+            # Trailing stop dinamico: attivo solo dopo TP1 (posizione residua in profitto),
+            # per non scattare su un ritracciamento iniziale.
+            if reason is None and pos.tp1_reached and pos.trailing_stop is not None:
                 dist = PERP_TRAILING_DISTANCE_PCT / Decimal("100")
                 if is_long:
                     candidate = price * (Decimal("1") - dist)
