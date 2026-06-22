@@ -94,6 +94,15 @@ class SpotTradeRepository:
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
 
+    async def last_timestamp_for_asset(self, user_id: str, asset: str) -> datetime | None:
+        """Timestamp del trade spot piu' recente sull'asset (per cooldown)."""
+        result = await self._session.execute(
+            select(func.max(SpotTrade.timestamp_utc))
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.asset == asset)
+        )
+        return result.scalar_one_or_none()
+
 
 class PerpTradeRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -148,3 +157,12 @@ class PerpTradeRepository:
         result = await self._session.execute(stmt)
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
+
+    async def last_timestamp_for_asset(self, user_id: str, asset: str) -> datetime | None:
+        """Timestamp del trade perp piu' recente sull'asset (per cooldown)."""
+        result = await self._session.execute(
+            select(func.max(PerpTrade.timestamp_utc))
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.asset == asset)
+        )
+        return result.scalar_one_or_none()

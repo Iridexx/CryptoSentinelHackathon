@@ -62,6 +62,7 @@ def settings(**overrides):
         risk_max_total_exposure_pct=30.0,
         risk_daily_loss_limit_pct=-8.0,
         risk_max_drawdown_pct=-15.0,
+        risk_cooldown_minutes=0,
         risk_min_pool_liquidity_usd=50000.0,
         dry_run_capital_usd=200.0,
         min_trade_size_usd=7.0,
@@ -252,12 +253,12 @@ def _portfolio(**overrides) -> PortfolioState:
     return PortfolioState(**payload)
 
 
-def _spot_position(index: int = 0) -> SpotPosition:
+def _spot_position(index: int = 0, asset: str = "BTC") -> SpotPosition:
     now = datetime.now(UTC)
     return SpotPosition(
         position_id=f"pos-{index}",
         user_id=str(USER_ID),
-        asset="BTC",
+        asset=asset,
         size=Decimal("1"),
         entry_price=Decimal("100"),
         current_price=Decimal("100"),
@@ -279,15 +280,42 @@ def test_risk_engine_daily_loss_limit() -> None:
 
 
 def test_risk_engine_max_positions() -> None:
+    # Asset diversi tra loro e dall'intent: testa il limite totale, non il dedup per-asset.
     decision = RiskManager(settings(risk_max_open_positions=2)).evaluate(
-        _intent(),
+        _intent(asset="TOKEN_5"),
         portfolio=_portfolio(),
-        open_spot_positions=[_spot_position(1), _spot_position(2)],
+        open_spot_positions=[_spot_position(1, asset="TOKEN_1"), _spot_position(2, asset="TOKEN_2")],
         open_perp_positions=[],
     )
 
     assert decision.allowed is False
     assert decision.reason == "max_open_positions_guard"
+
+
+def test_risk_engine_dedup_per_asset() -> None:
+    # Un nuovo segnale su un asset gia' in posizione viene bloccato prima del limite totale.
+    decision = RiskManager(settings(risk_max_open_positions=5)).evaluate(
+        _intent(asset="BTC"),
+        portfolio=_portfolio(),
+        open_spot_positions=[_spot_position(1, asset="BTC")],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "asset_already_open"
+
+
+def test_risk_engine_drawdown_cap_positive_convention() -> None:
+    # drawdown_pct e' positivo (entita' del calo); cap negativo -15 => blocca a >= 15.
+    decision = RiskManager(settings()).evaluate(
+        _intent(),
+        portfolio=_portfolio(drawdown_pct=Decimal("16")),
+        open_spot_positions=[],
+        open_perp_positions=[],
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "drawdown_cap_guard"
 
 
 def test_risk_engine_guardia_dollar() -> None:
@@ -356,7 +384,7 @@ async def test_meta_controller_fallback_on_timeout(monkeypatch) -> None:
 
     monkeypatch.setattr("backend.app.agent.brain.meta_controller.httpx.AsyncClient", TimeoutClient)
 
-    decision = await ClaudeMetaController(settings(anthropic_api_key="configured")).decide(
+    decision, _usage = await ClaudeMetaController(settings(anthropic_api_key="configured")).decide(
         signal={"quality": 0.9},
         risk={"allowed": True, "reason": "risk_approved"},
     )
@@ -367,7 +395,7 @@ async def test_meta_controller_fallback_on_timeout(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_meta_controller_reduce() -> None:
-    decision = await ClaudeMetaController(settings()).decide(
+    decision, _usage = await ClaudeMetaController(settings()).decide(
         signal={"quality": 0.7},
         risk={"allowed": True, "reason": "risk_approved"},
     )

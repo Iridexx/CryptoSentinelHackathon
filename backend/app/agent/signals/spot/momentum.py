@@ -20,6 +20,8 @@ from backend.app.core.logging import get_logger
 logger = get_logger("agent.signals.spot")
 MIN_SPOT_CANDLES = 50
 SPOT_WARMUP_CANDLES = 100
+# Distanza minima dello stop-loss dall'entry: evita stop troppo stretti quando l'ATR su 5m e' minimo.
+SPOT_MIN_STOP_DISTANCE_PCT = 1.0
 
 
 class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
@@ -101,7 +103,9 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
             and extension_ok
         )
         action = "enter_long" if trigger and quality >= self.settings.spot_confidence_threshold else "skip"
-        stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
+        atr_stop = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
+        min_stop = current * (1 - SPOT_MIN_STOP_DISTANCE_PCT / 100)
+        stop_loss = min(atr_stop, min_stop)
         take_profit_1 = current * (1 + self.settings.spot_partial_take_profit_pct / 100)
         trailing_stop = current * (1 - self.settings.spot_trailing_distance_pct / 100)
 

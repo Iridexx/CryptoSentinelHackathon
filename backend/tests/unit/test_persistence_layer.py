@@ -240,6 +240,23 @@ async def test_global_view_assembles_from_portfolio(db) -> None:
             agent_status="running",
             trades_today=2,
         )
+        # global_view ricalcola total_equity = initial + realized + unrealized:
+        # un trade realizzato da +100 porta l'equity a 1100.
+        await SpotTradeRepository(session).save(
+            SpotTrade(
+                trade_id="gv1",
+                user_id=USER,
+                asset="BNB",
+                side="sell",
+                amount=Decimal("1"),
+                price=Decimal("100"),
+                amount_quote=Decimal("100"),
+                status="confirmed",
+                provider="agent",
+                timestamp_utc=datetime.now(UTC),
+                pnl_usd=Decimal("100"),
+            )
+        )
     async with factory() as session:
         view = await ViewService(session, drawdown_cap_pct=-15.0).global_view(USER)
         assert view.total_equity_usd == Decimal("1100")

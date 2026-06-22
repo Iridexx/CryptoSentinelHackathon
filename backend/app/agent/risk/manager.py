@@ -90,12 +90,21 @@ class RiskManager:
         if portfolio is not None:
             if Decimal(portfolio.total_equity_usd) <= Decimal(str(self.settings.min_portfolio_value_usd)):
                 return RiskDecision(False, "portfolio_floor_guard")
-            if Decimal(portfolio.drawdown_pct) <= Decimal(str(self.settings.risk_max_drawdown_pct)):
+            # drawdown_pct e' memorizzato come valore POSITIVO (entita' del calo dal picco),
+            # mentre risk_max_drawdown_pct e' negativo (es. -15). Confronto su valore assoluto.
+            if Decimal(portfolio.drawdown_pct) >= abs(Decimal(str(self.settings.risk_max_drawdown_pct))):
                 return RiskDecision(False, "drawdown_cap_guard")
+            # daily_loss_limit_used_pct e' negativo in perdita (es. -8); cap negativo (es. -8).
             if Decimal(portfolio.daily_loss_limit_used_pct) <= Decimal(str(self.settings.risk_daily_loss_limit_pct)):
                 return RiskDecision(False, "daily_loss_limit_guard")
         if intent.liquidity_usd is not None and intent.liquidity_usd < Decimal(str(self.settings.risk_min_pool_liquidity_usd)):
             return RiskDecision(False, "liquidity_guard")
+
+        # Dedup per-asset: una sola posizione aperta per asset (spot o perp).
+        asset_upper = intent.asset.upper()
+        open_assets = {p.asset.upper() for p in open_spot_positions} | {p.asset.upper() for p in open_perp_positions}
+        if asset_upper in open_assets:
+            return RiskDecision(False, "asset_already_open")
 
         open_count = len(open_spot_positions) + len(open_perp_positions)
         if open_count >= self.settings.risk_max_open_positions:

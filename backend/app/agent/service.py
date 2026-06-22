@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from functools import lru_cache
 from uuid import uuid4
@@ -42,6 +42,8 @@ DAILY_TRADE_CHECK_TIME_UTC = time(20, 0, tzinfo=UTC)
 DAILY_TRADE_RETRY_UNTIL_UTC = time(23, 30, tzinfo=UTC)
 HEARTBEAT_TRADE_ASSET = "ETH"
 HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
+# Distanza trailing-stop per il perp (coerente col livello generato dal segnale, 1%).
+PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
 
 
 class AgentService:
@@ -318,7 +320,16 @@ class AgentService:
                 reason = "take_profit_2"
             elif pos.take_profit_1 and price >= pos.take_profit_1:
                 reason = "take_profit_1"
-            elif self.settings.spot_time_stop_hours > 0:
+            # Trailing stop: trascina il livello verso l'alto e chiude se il prezzo ritraccia.
+            if reason is None and self.settings.spot_trailing_distance_pct > 0:
+                candidate = price * (Decimal("1") - Decimal(str(self.settings.spot_trailing_distance_pct)) / Decimal("100"))
+                if pos.trailing_stop is None or candidate > pos.trailing_stop:
+                    pos.trailing_stop = candidate
+                    pos.updated_at = now
+                    session.add(pos)
+                if pos.trailing_stop is not None and price <= pos.trailing_stop:
+                    reason = "trailing_stop"
+            if reason is None and self.settings.spot_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
                 if age_hours >= self.settings.spot_time_stop_hours:
                     reason = "time_stop"
@@ -358,6 +369,31 @@ class AgentService:
                 if (is_long and price >= pos.take_profit_1) or (not is_long and price <= pos.take_profit_1):
                     reason = "take_profit_1"
                     partial = True
+
+            # Trailing stop dinamico: trascina il livello in direzione del profitto e chiude la posizione residua.
+            if reason is None and pos.trailing_stop is not None:
+                dist = PERP_TRAILING_DISTANCE_PCT / Decimal("100")
+                if is_long:
+                    candidate = price * (Decimal("1") - dist)
+                    if candidate > pos.trailing_stop:
+                        pos.trailing_stop = candidate
+                        pos.updated_at = now
+                        session.add(pos)
+                    if price <= pos.trailing_stop:
+                        reason = "trailing_stop"
+                else:
+                    candidate = price * (Decimal("1") + dist)
+                    if candidate < pos.trailing_stop:
+                        pos.trailing_stop = candidate
+                        pos.updated_at = now
+                        session.add(pos)
+                    if price >= pos.trailing_stop:
+                        reason = "trailing_stop"
+
+            if reason is None and self.settings.perp_time_stop_hours > 0:
+                age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
+                if age_hours >= self.settings.perp_time_stop_hours:
+                    reason = "time_stop"
 
             if reason:
                 pnl = await self._close_perp_position(session, pos, price, reason, now, partial=partial)
@@ -404,6 +440,10 @@ class AgentService:
         daily_realized_spot = await spot_repo.sum_realized_pnl(user_id, since=day_start)
         daily_realized_perp = await perp_repo.sum_realized_pnl(user_id, since=day_start)
         daily_pnl = daily_realized_spot + daily_realized_perp + unrealized
+        # % di PnL giornaliero sull'equity (negativo in perdita) per la guardia daily_loss_limit.
+        daily_loss_limit_used_pct = (
+            (daily_pnl / total * 100).quantize(Decimal("0.01")) if total > 0 else Decimal("0")
+        )
 
         spot_exposure = sum((p.entry_price * p.size for p in spot_positions), Decimal("0"))
         perp_exposure = sum((p.entry_price * p.size for p in perp_positions), Decimal("0"))
@@ -426,6 +466,7 @@ class AgentService:
             max_drawdown_pct=max_drawdown_pct,
             exposure_pct=exposure_pct,
             daily_pnl_usd=daily_pnl,
+            daily_loss_limit_used_pct=daily_loss_limit_used_pct,
             agent_status=self.risk.kill_switch.value,
             trades_today=spot_count + perp_count,
         )
@@ -505,6 +546,22 @@ class AgentService:
             }
 
         user_id = str(self.settings.default_user_id)
+        now = datetime.now(UTC)
+
+        if await self._in_cooldown(session, signal, now):
+            risk_decision = RiskDecision(False, "cooldown_active")
+            brain_decision = self.brain._local_fallback(
+                signal, risk_decision.__dict__, reason_prefix="cooldown"
+            )
+            decision = await self._record_decision(session, signal, risk_decision, brain_decision)
+            return {
+                "signal": signal,
+                "risk": risk_decision.__dict__,
+                "brain": brain_decision.__dict__,
+                "decision_id": decision.decision_id,
+                "execution": {"status": "skipped", "reason": "cooldown_active"},
+            }
+
         portfolio = await PnlRepository(session).get_portfolio(user_id)
         if portfolio is None and self.settings.execution_mode == "dry_run":
             portfolio = await _initialise_dry_run_portfolio(session, self.settings)
@@ -552,6 +609,24 @@ class AgentService:
             except Exception:
                 pass  # non bloccare il trade per errori di logging
         return decision
+
+    async def _in_cooldown(self, session: AsyncSession, signal: dict, now: datetime) -> bool:
+        """True se esiste un trade recente sull'asset entro la finestra di cooldown."""
+        minutes = self.settings.risk_cooldown_minutes
+        asset = signal.get("asset")
+        if minutes <= 0 or not asset:
+            return False
+        user_id = str(self.settings.default_user_id)
+        asset = str(asset)
+        spot_ts = await SpotTradeRepository(session).last_timestamp_for_asset(user_id, asset)
+        perp_ts = await PerpTradeRepository(session).last_timestamp_for_asset(user_id, asset)
+        candidates = [t for t in (spot_ts, perp_ts) if t is not None]
+        if not candidates:
+            return False
+        last_ts = max(candidates)
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=UTC)
+        return (now - last_ts) < timedelta(minutes=minutes)
 
     async def _record_decision(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> AgentDecision:
         decision = AgentDecision(
