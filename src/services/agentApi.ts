@@ -257,6 +257,36 @@ export interface MobileWalletView {
   }>;
 }
 
+export interface ExecutionWalletAddressView {
+  address: string;
+  active: boolean;
+  network: string;
+  balance_bnb?: string | null;
+  balance_status: string;
+}
+
+export interface ExecutionWalletProviderView {
+  provider: string;
+  market: 'spot' | 'perp';
+  address?: string | null;
+  network: string;
+  configured: boolean;
+  active: boolean;
+  balance_bnb?: string | null;
+  balance_status: string;
+}
+
+export interface ExecutionWalletsResponse {
+  network: string;
+  chain_id: number;
+  bsc_network?: 'testnet' | 'mainnet';
+  active_wallet_address?: string | null;
+  spot_active_provider: string;
+  perp_active_provider: string;
+  available_wallets: ExecutionWalletAddressView[];
+  wallets: ExecutionWalletProviderView[];
+}
+
 function requireBackend(): string {
   if (!BACKEND_URL) throw new Error('Backend URL is not configured');
   if (!READ_TOKEN) throw new Error('Read token is not configured');
@@ -372,6 +402,10 @@ export function validateOnboarding(adminToken: string): Promise<CredentialValida
 
 export function fetchMobileWallet(): Promise<MobileWalletView> {
   return request<MobileWalletView>('/api/v1/mobile/agent/wallet');
+}
+
+export function fetchExecutionWallets(): Promise<ExecutionWalletsResponse> {
+  return request<ExecutionWalletsResponse>('/api/v1/execution/wallets');
 }
 
 export function setKillSwitch(state: KillSwitchState, adminToken: string): Promise<AgentStatus> {

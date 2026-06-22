@@ -5,8 +5,8 @@ import {
   fetchAgentDecisions,
   fetchAssetBreakdown,
   fetchEquityCurve,
+  fetchExecutionWallets,
   fetchGlobalView,
-  fetchMobileWallet,
   fetchPerpView,
   fetchSpotView,
   fetchTradeDetail,
@@ -19,9 +19,9 @@ import {
   type AssetBreakdownResponse,
   type CredentialValidationResponse,
   type EquityCurveResponse,
+  type ExecutionWalletsResponse,
   type GlobalView,
   type KillSwitchState,
-  type MobileWalletView,
   type PerpView,
   type SpotView,
   type TradeDetail,
@@ -476,10 +476,10 @@ const AssetRank: FC<{ title: string; items: AssetBreakdownResponse['items'] }> =
 );
 
 const WalletPane: FC<{
-  wallet: MobileWalletView | null;
+  execWallets: ExecutionWalletsResponse | null;
   spot: SpotView | null;
   perp: PerpView | null;
-}> = ({ wallet, spot, perp }) => {
+}> = ({ execWallets, spot, perp }) => {
   const [copied, setCopied] = useState<string | null>(null);
 
   const copyAddress = async (address: string) => {
@@ -498,62 +498,68 @@ const WalletPane: FC<{
     sum + Number(p.pnl_unrealized), 0);
   const totalPerpPnl = (perp?.open_positions ?? []).reduce((sum, p) =>
     sum + Number(p.pnl_unrealized), 0);
+  const totalPnl = totalSpotPnl + totalPerpPnl;
+
+  const activeWallet = execWallets?.available_wallets.find((w) => w.active)
+    ?? execWallets?.available_wallets[0];
 
   return (
     <div className="space-y-4">
 
       {/* ── SUMMARY ── */}
       <div className="grid grid-cols-3 gap-2">
-        <Stat label="Pos. spot" value={String(spot?.open_positions.length ?? 0)} />
-        <Stat label="Pos. perp" value={String(perp?.open_positions.length ?? 0)} />
-        <Stat label="Tot. PnL" value={fmtUsd(totalSpotPnl + totalPerpPnl)} tone={(totalSpotPnl + totalPerpPnl) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Spot" value={String(spot?.open_positions.length ?? 0)} />
+        <Stat label="Perp" value={String(perp?.open_positions.length ?? 0)} />
+        <Stat label="PnL aperto" value={fmtUsd(totalPnl)} tone={totalPnl >= 0 ? 'good' : 'bad'} />
       </div>
 
-      {/* ── GAS / INDIRIZZI ── */}
+      {/* ── WALLET ATTIVO ── */}
       <section className="space-y-2">
-        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Indirizzi & Gas</h3>
-        {(wallet?.networks ?? []).map((net) => (
-          <div key={net.network} className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">
+          Wallet attivo · {execWallets?.network ?? '—'} (chain {execWallets?.chain_id ?? '—'})
+        </h3>
+        {activeWallet ? (
+          <div className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-white">{net.network}</p>
-                <p className="text-xs text-gray-500">{net.role}</p>
+                <p className="text-xs text-gray-500">{activeWallet.network}</p>
+                <p className="text-xs text-gray-500">
+                  Spot: {execWallets?.spot_active_provider} · Perp: {execWallets?.perp_active_provider}
+                </p>
               </div>
-              <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${net.configured ? 'bg-accent-green/15 text-accent-green' : 'bg-gray-700 text-gray-400'}`}>
-                {net.configured ? 'configurato' : 'mancante'}
-              </span>
+              <span className="rounded-full bg-accent-green/15 px-2 py-0.5 text-xs font-semibold text-accent-green">attivo</span>
             </div>
-            {net.address && (
-              <button
-                onClick={() => copyAddress(net.address!)}
-                className="w-full text-left rounded-lg bg-dark-900 px-3 py-2"
-              >
-                <p className="font-mono text-xs text-gray-300 break-all leading-relaxed">{net.address}</p>
-                <p className="mt-0.5 text-[11px] text-accent-blue">{copied === net.address ? '✓ Copiato' : 'Tocca per copiare'}</p>
-              </button>
-            )}
-            {net.balances.length > 0 ? (
-              <div className="space-y-1">
-                {net.balances.map((b) => (
-                  <div key={b.asset} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-semibold text-white">{b.asset}</p>
-                      <p className="text-[11px] text-gray-600">{b.source}</p>
-                    </div>
-                    <p className="font-mono text-sm font-bold text-accent-green">{b.balance}</p>
-                  </div>
-                ))}
+            <button onClick={() => copyAddress(activeWallet.address)} className="w-full text-left rounded-lg bg-dark-900 px-3 py-2">
+              <p className="font-mono text-xs text-gray-300 break-all leading-relaxed">{activeWallet.address}</p>
+              <p className="mt-0.5 text-[11px] text-accent-blue">{copied === activeWallet.address ? '✓ Copiato' : 'Tocca per copiare'}</p>
+            </button>
+            {/* BNB balance */}
+            <div className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2">
+              <div>
+                <p className="text-sm font-semibold text-white">BNB</p>
+                <p className="text-[11px] text-gray-500">gas · {activeWallet.balance_status}</p>
               </div>
-            ) : (
-              <p className="text-xs text-gray-500 px-1">
-                {net.balance_status === 'rpc_not_configured' ? 'RPC non configurato' :
-                 net.balance_status === 'unavailable' ? 'Balance non disponibile' :
-                 net.balance_status === 'empty' ? 'Balance 0' : 'Non configurato'}
+              <p className="font-mono text-sm font-bold text-accent-green">
+                {activeWallet.balance_bnb ? `${parseFloat(activeWallet.balance_bnb).toFixed(6)} BNB` : '—'}
               </p>
-            )}
+            </div>
           </div>
-        ))}
-        {!wallet && <EmptyState title="Dati wallet non disponibili" detail="Controlla la connessione al backend." />}
+        ) : (
+          <EmptyState title="Wallet non configurato" detail="Aggiungi un indirizzo wallet dalla dashboard." />
+        )}
+
+        {/* altri wallet disponibili */}
+        {(execWallets?.available_wallets.length ?? 0) > 1 && (
+          <div className="space-y-1">
+            <p className="px-1 text-[11px] text-gray-600 uppercase">Altri indirizzi</p>
+            {execWallets!.available_wallets.filter((w) => !w.active).map((w) => (
+              <button key={w.address} onClick={() => copyAddress(w.address)} className="w-full text-left rounded-lg bg-dark-800 px-3 py-2">
+                <p className="font-mono text-xs text-gray-500 break-all">{w.address}</p>
+                <p className="text-[11px] text-gray-600">{w.balance_bnb ? `${parseFloat(w.balance_bnb).toFixed(4)} BNB` : w.balance_status}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── POSIZIONI SPOT ── */}
@@ -940,7 +946,7 @@ const AgentTab: FC<AgentTabProps> = ({
   const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(null);
   const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
   const [settings, setSettings] = useState<AgentMobileSettings>(defaultSettings);
-  const [wallet, setWallet] = useState<MobileWalletView | null>(null);
+  const [execWallets, setExecWallets] = useState<ExecutionWalletsResponse | null>(null);
   const [validation, setValidation] = useState<CredentialValidationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -951,13 +957,13 @@ const AgentTab: FC<AgentTabProps> = ({
     setLoading(true);
     setError('');
     try {
-      const [statusData, spotData, perpData, globalData, settingsData, walletData, equityData, decisionsData, breakdownData] = await Promise.all([
+      const [statusData, spotData, perpData, globalData, settingsData, execWalletsData, equityData, decisionsData, breakdownData] = await Promise.all([
         fetchAgentStatus(),
         fetchSpotView(),
         fetchPerpView(),
         fetchGlobalView(),
         fetchAgentSettings(),
-        fetchMobileWallet(),
+        fetchExecutionWallets(),
         fetchEquityCurve(),
         fetchAgentDecisions(),
         fetchAssetBreakdown(),
@@ -967,7 +973,7 @@ const AgentTab: FC<AgentTabProps> = ({
       setPerp(perpData);
       setGlobal(globalData);
       setSettings(settingsData.settings);
-      setWallet(walletData);
+      setExecWallets(execWalletsData);
       setEquity(equityData);
       setDecisions(decisionsData);
       setAssetBreakdown(breakdownData);
@@ -1084,7 +1090,7 @@ const AgentTab: FC<AgentTabProps> = ({
       {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} decisions={decisions} assetBreakdown={assetBreakdown} />}
-      {pane === 'wallet' && <WalletPane wallet={wallet} spot={spot} perp={perp} />}
+      {pane === 'wallet' && <WalletPane execWallets={execWallets} spot={spot} perp={perp} />}
       {pane === 'coins' && (
         <CoinsPane
           eligibleTokens={eligibleTokens}
