@@ -431,13 +431,11 @@ const GlobalPane: FC<{
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
         <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
         <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />
-        {claudeUsage != null && (
-          <Stat
-            label="API Claude"
-            value={`$${claudeUsage.total_cost_usd.toFixed(2)} / $${claudeUsage.budget_usd.toFixed(2)}`}
-            tone={claudeUsage.budget_pct >= 90 ? 'bad' : claudeUsage.budget_pct >= 70 ? 'neutral' : 'good'}
-          />
-        )}
+        <Stat
+          label="API Claude"
+          value={claudeUsage != null ? `$${claudeUsage.total_cost_usd.toFixed(2)} / $${claudeUsage.budget_usd.toFixed(2)}` : '--'}
+          tone={claudeUsage == null ? 'neutral' : claudeUsage.budget_pct >= 90 ? 'bad' : claudeUsage.budget_pct >= 70 ? 'neutral' : 'good'}
+        />
       </div>
       {!hasPortfolio && !hasHistory && (
         <EmptyState title="In attesa dello stato globale" detail="Equity, drawdown ed esposizione saranno visibili al primo snapshot." />
