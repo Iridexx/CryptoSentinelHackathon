@@ -143,6 +143,34 @@ async def test_spot_trade_repo_save_and_list(db) -> None:
         assert trades[0].block_timestamp_utc is not None
 
 
+def test_spot_trade_detail_closed_uses_position_levels() -> None:
+    from backend.app.api.routes.views import _spot_trade_detail
+
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="pos1", user_id=USER, asset="BTC", size=Decimal("1"),
+        entry_price=Decimal("100"), current_price=Decimal("105"),
+        stop_loss=Decimal("95"), take_profit_1=Decimal("103"), take_profit_2=Decimal("106"),
+        status="closed", opened_at=now, updated_at=now,
+    )
+    close_trade = SpotTrade(
+        trade_id="cls_pos1_abc12345", user_id=USER, asset="BTC", side="sell",
+        amount=Decimal("1"), price=Decimal("105"), amount_quote=Decimal("105"),
+        status="confirmed", timestamp_utc=now, pnl_usd=Decimal("5"),
+        notes="auto_close:take_profit_2",
+    )
+    detail = _spot_trade_detail(close_trade, pos, None, None)
+    # Entry e uscita NON devono coincidere; livelli e timeline popolati.
+    assert detail["entry_price"] == "100.00"
+    assert detail["current_or_exit_price"] == "105.00"
+    assert detail["stop_loss"] == "95.00"
+    assert detail["take_profit_1"] == "103.00"
+    assert detail["take_profit_2"] == "106.00"
+    assert detail["closed_at"] is not None
+    assert detail["pnl_usd"] == "+5.00"
+    assert detail["size"] == "1.00"
+
+
 @pytest.mark.asyncio
 async def test_win_rate_uses_pnl_sign(db) -> None:
     factory = get_session_factory()

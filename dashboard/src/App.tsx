@@ -933,10 +933,24 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
       {detail && (
         <>
           <div className="metric-grid">
+            <Metric label="Direction" value={detail.direction} />
             <Metric label="Entry" value={fmtPrice(detail.entry_price)} />
-            <Metric label="Exit" value={fmtPrice(detail.current_or_exit_price)} />
+            <Metric label="Now/Exit" value={fmtPrice(detail.current_or_exit_price)} />
             <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
+            <Metric label="Size" value={detail.size} />
+            <Metric label="Leverage" value={detail.leverage ? `${detail.leverage}x` : '—'} />
+            <Metric label="Exposure" value={money(detail.exposure_usd)} />
             <Metric label="Motivo" value={detail.close_reason ? (CLOSE_REASON_LABELS[detail.close_reason] ?? detail.close_reason) : '—'} />
+          </div>
+          <div className="metric-grid">
+            <Metric label="Stop loss" value={detail.stop_loss ? fmtPrice(detail.stop_loss) : '—'} />
+            <Metric label="Take profit 1" value={detail.take_profit_1 ? fmtPrice(detail.take_profit_1) : '—'} />
+            <Metric label="Take profit 2" value={detail.take_profit_2 ? fmtPrice(detail.take_profit_2) : '—'} />
+            <Metric label="Trailing" value={detail.trailing_stop ? fmtPrice(detail.trailing_stop) : '—'} />
+          </div>
+          <div className="trade-timeline muted">
+            <span>Open: {detail.opened_at ? shortDate(detail.opened_at) : '—'}</span>
+            <span>Close: {detail.closed_at ? shortDate(detail.closed_at) : '—'}</span>
           </div>
           {detail.chart ? (
             <div className="trade-chart">
