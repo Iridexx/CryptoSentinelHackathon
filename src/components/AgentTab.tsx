@@ -28,7 +28,7 @@ import {
 } from '../services/agentApi';
 import { hapticLight } from '../utils/haptics';
 
-type AgentPane = 'spot' | 'perp' | 'global' | 'coins' | 'setup';
+type AgentPane = 'spot' | 'perp' | 'global' | 'coins' | 'wallet' | 'setup';
 
 const fmtUsd = (value: string | number | null | undefined) => {
   const n = Number(value ?? 0);
@@ -475,6 +475,171 @@ const AssetRank: FC<{ title: string; items: AssetBreakdownResponse['items'] }> =
   </section>
 );
 
+const WalletPane: FC<{
+  wallet: MobileWalletView | null;
+  spot: SpotView | null;
+  perp: PerpView | null;
+}> = ({ wallet, spot, perp }) => {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyAddress = async (address: string) => {
+    try { await navigator.clipboard.writeText(address); } catch {
+      const el = document.createElement('textarea');
+      el.value = address; document.body.appendChild(el); el.select();
+      document.execCommand('copy'); document.body.removeChild(el);
+    }
+    setCopied(address);
+    setTimeout(() => setCopied(null), 1600);
+  };
+
+  const totalSpotValue = (spot?.open_positions ?? []).reduce((sum, p) =>
+    sum + Number(p.current_price) * Number(p.size), 0);
+  const totalSpotPnl = (spot?.open_positions ?? []).reduce((sum, p) =>
+    sum + Number(p.pnl_unrealized), 0);
+  const totalPerpPnl = (perp?.open_positions ?? []).reduce((sum, p) =>
+    sum + Number(p.pnl_unrealized), 0);
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── SUMMARY ── */}
+      <div className="grid grid-cols-3 gap-2">
+        <Stat label="Pos. spot" value={String(spot?.open_positions.length ?? 0)} />
+        <Stat label="Pos. perp" value={String(perp?.open_positions.length ?? 0)} />
+        <Stat label="Tot. PnL" value={fmtUsd(totalSpotPnl + totalPerpPnl)} tone={(totalSpotPnl + totalPerpPnl) >= 0 ? 'good' : 'bad'} />
+      </div>
+
+      {/* ── GAS / INDIRIZZI ── */}
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Indirizzi & Gas</h3>
+        {(wallet?.networks ?? []).map((net) => (
+          <div key={net.network} className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-white">{net.network}</p>
+                <p className="text-xs text-gray-500">{net.role}</p>
+              </div>
+              <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${net.configured ? 'bg-accent-green/15 text-accent-green' : 'bg-gray-700 text-gray-400'}`}>
+                {net.configured ? 'configurato' : 'mancante'}
+              </span>
+            </div>
+            {net.address && (
+              <button
+                onClick={() => copyAddress(net.address!)}
+                className="w-full text-left rounded-lg bg-dark-900 px-3 py-2"
+              >
+                <p className="font-mono text-xs text-gray-300 break-all leading-relaxed">{net.address}</p>
+                <p className="mt-0.5 text-[11px] text-accent-blue">{copied === net.address ? '✓ Copiato' : 'Tocca per copiare'}</p>
+              </button>
+            )}
+            {net.balances.length > 0 ? (
+              <div className="space-y-1">
+                {net.balances.map((b) => (
+                  <div key={b.asset} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{b.asset}</p>
+                      <p className="text-[11px] text-gray-600">{b.source}</p>
+                    </div>
+                    <p className="font-mono text-sm font-bold text-accent-green">{b.balance}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 px-1">
+                {net.balance_status === 'rpc_not_configured' ? 'RPC non configurato' :
+                 net.balance_status === 'unavailable' ? 'Balance non disponibile' :
+                 net.balance_status === 'empty' ? 'Balance 0' : 'Non configurato'}
+              </p>
+            )}
+          </div>
+        ))}
+        {!wallet && <EmptyState title="Dati wallet non disponibili" detail="Controlla la connessione al backend." />}
+      </section>
+
+      {/* ── POSIZIONI SPOT ── */}
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">
+          Posizioni spot aperte {spot?.open_positions.length ? `(${fmtUsd(totalSpotValue)} valore)` : ''}
+        </h3>
+        {(spot?.open_positions.length ?? 0) === 0
+          ? <EmptyState title="Nessuna posizione spot" detail="Le posizioni aperte dall'agente appariranno qui." />
+          : (spot?.open_positions ?? []).map((p) => {
+              const pnl = Number(p.pnl_unrealized);
+              const isGood = pnl >= 0;
+              const entry = Number(p.entry_price);
+              const now = Number(p.current_price);
+              const size = Number(p.size);
+              return (
+                <div key={p.position_id} className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{p.asset}</p>
+                      <p className="text-xs text-gray-500">Spot · {p.status}</p>
+                    </div>
+                    <div className={`text-right font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
+                      <p>{isGood ? '+' : ''}{fmtUsd(pnl)}</p>
+                      <p className="text-xs">{p.pnl_pct ?? '+0.00'}%</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-xs text-gray-400">
+                    <span>Size {size.toFixed(6)}</span>
+                    <span>Entry {fmtPrice(entry)}</span>
+                    <span>Now {fmtPrice(now)}</span>
+                  </div>
+                  {(p.stop_loss || p.take_profit_1) && (
+                    <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
+                      {p.stop_loss && <span>SL {fmtPrice(p.stop_loss)}</span>}
+                      {p.take_profit_1 && <span>TP1 {fmtPrice(p.take_profit_1)}</span>}
+                      {p.take_profit_2 && <span>TP2 {fmtPrice(p.take_profit_2)}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+      </section>
+
+      {/* ── POSIZIONI PERP ── */}
+      <section className="space-y-2">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">
+          Posizioni perp aperte {perp?.open_positions.length ? `(PnL ${fmtUsd(totalPerpPnl)})` : ''}
+        </h3>
+        {(perp?.open_positions.length ?? 0) === 0
+          ? <EmptyState title="Nessuna posizione perp" detail="Le posizioni long/short appariranno qui." />
+          : (perp?.open_positions ?? []).map((p) => {
+              const pnl = Number(p.pnl_unrealized);
+              const isGood = pnl >= 0;
+              return (
+                <div key={p.position_id} className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">{p.asset} <span className="text-accent-blue">{p.side}</span> {p.leverage}x</p>
+                      <p className="text-xs text-gray-500">Perp · {p.status}</p>
+                    </div>
+                    <div className={`text-right font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
+                      <p>{isGood ? '+' : ''}{fmtUsd(pnl)}</p>
+                      <p className="text-xs">{p.pnl_pct ?? '+0.00'}%</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 text-xs text-gray-400">
+                    <span>Size {Number(p.size).toFixed(4)}</span>
+                    <span>Entry {fmtPrice(p.entry_price)}</span>
+                    <span>Now {fmtPrice(p.current_price)}</span>
+                  </div>
+                  {(p.stop_loss || p.liquidation_price) && (
+                    <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
+                      {p.stop_loss && <span>SL {fmtPrice(p.stop_loss)}</span>}
+                      {p.liquidation_price && <span className="text-accent-red">Liq {fmtPrice(p.liquidation_price)}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+      </section>
+
+    </div>
+  );
+};
+
 const CoinsPane: FC<{
   eligibleTokens: string[];
   selectedAiSymbols: Set<string>;
@@ -553,7 +718,6 @@ const SetupPane: FC<{
   onSettings: (settings: AgentMobileSettings) => void;
   adminToken: string;
   onAdminToken: (value: string) => void;
-  wallet: MobileWalletView | null;
   validation: CredentialValidationResponse | null;
   agentStatus: AgentStatus | null;
   saving: boolean;
@@ -566,7 +730,6 @@ const SetupPane: FC<{
   onSettings,
   adminToken,
   onAdminToken,
-  wallet,
   validation,
   agentStatus,
   saving,
@@ -576,21 +739,6 @@ const SetupPane: FC<{
   onKill,
 }) => {
   const patch = (partial: Partial<AgentMobileSettings>) => onSettings({ ...settings, ...partial });
-  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const copyAddress = async (address: string) => {
-    try {
-      await navigator.clipboard.writeText(address);
-    } catch {
-      const el = document.createElement('textarea');
-      el.value = address;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
-    }
-    setCopiedAddress(address);
-    setTimeout(() => setCopiedAddress(null), 1600);
-  };
 
   return (
     <div className="space-y-4">
@@ -647,53 +795,8 @@ const SetupPane: FC<{
         )}
       </section>
 
-      <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
-        <h3 className="text-sm font-semibold text-white">Wallet</h3>
-        {wallet?.networks.map((network) => (
-          <div key={network.network} className="rounded-lg bg-dark-900 px-3 py-3 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-white">{network.network}</p>
-              <span className={network.configured ? 'text-xs text-accent-green' : 'text-xs text-gray-500'}>{network.configured ? 'ready' : 'missing'}</span>
-            </div>
-            <button
-              type="button"
-              disabled={!network.address}
-              onClick={() => network.address && copyAddress(network.address)}
-              className="w-full rounded-lg bg-dark-800 px-3 py-2 text-left disabled:opacity-50"
-            >
-              <span className="block text-[11px] uppercase text-gray-600">{network.role}</span>
-              <span className="mt-1 block break-all font-mono text-xs leading-relaxed text-gray-300">
-                {network.address ?? 'Wallet not configured'}
-              </span>
-              {network.address && (
-                <span className="mt-1 block text-[11px] text-accent-blue">
-                  {copiedAddress === network.address ? 'Copied' : 'Tap to copy'}
-                </span>
-              )}
-            </button>
-            {network.balances.length > 0 ? (
-              <div className="space-y-1.5">
-                {network.balances.map((balance) => (
-                  <div key={`${network.network}-${balance.asset}`} className="flex items-center justify-between rounded-lg bg-dark-800 px-3 py-2">
-                    <div>
-                      <p className="text-sm font-semibold text-white">{balance.asset}</p>
-                      <p className="text-[11px] text-gray-600">{balance.source}</p>
-                    </div>
-                    <p className="font-mono text-sm font-bold text-accent-green">{balance.balance}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="rounded-lg border border-dashed border-dark-700 px-3 py-2 text-xs text-gray-500">
-                {network.balance_status === 'rpc_not_configured'
-                  ? 'Balance RPC not configured.'
-                  : network.balance_status === 'unavailable'
-                    ? 'Balance unavailable.'
-                    : 'No asset balance greater than 0.'}
-              </p>
-            )}
-          </div>
-        ))}
+      <section className="rounded-xl bg-dark-800 px-4 py-3">
+        <p className="text-xs text-gray-500">Per indirizzi e posizioni aperte usa il tab <span className="text-accent-blue font-semibold">Wallet</span>.</p>
       </section>
 
       <section className="space-y-3">
@@ -963,10 +1066,13 @@ const AgentTab: FC<AgentTabProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5">
         <SegmentButton id="spot" label="Spot" active={pane === 'spot'} onClick={setPane} />
         <SegmentButton id="perp" label="Perp" active={pane === 'perp'} onClick={setPane} />
         <SegmentButton id="global" label="Global" active={pane === 'global'} onClick={setPane} />
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        <SegmentButton id="wallet" label="Wallet" active={pane === 'wallet'} onClick={setPane} />
         <SegmentButton id="coins" label="Coins" active={pane === 'coins'} onClick={setPane} />
         <SegmentButton id="setup" label="Setup" active={pane === 'setup'} onClick={setPane} />
       </div>
@@ -978,6 +1084,7 @@ const AgentTab: FC<AgentTabProps> = ({
       {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} decisions={decisions} assetBreakdown={assetBreakdown} />}
+      {pane === 'wallet' && <WalletPane wallet={wallet} spot={spot} perp={perp} />}
       {pane === 'coins' && (
         <CoinsPane
           eligibleTokens={eligibleTokens}
@@ -994,7 +1101,6 @@ const AgentTab: FC<AgentTabProps> = ({
           onSettings={setSettings}
           adminToken={adminToken}
           onAdminToken={onAdminToken}
-          wallet={wallet}
           validation={validation}
           agentStatus={status}
           saving={saving}
