@@ -793,3 +793,44 @@ async def test_watchlist_warmup_populates_data_coverage_cache(db) -> None:
     assert {item["market"] for item in cake_items} == {"spot", "perp"}
     assert all(item["available_candles"] == 288 for item in cake_items)
     assert all(item["status"] == "ready" for item in cake_items)
+
+
+class _FakeResp:
+    def __init__(self, payload: dict, status: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeClient:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    async def get(self, url, params=None):
+        return _FakeResp(self._payload)
+
+
+@pytest.mark.asyncio
+async def test_kucoin_spot_kline_parsing_maps_close_before_high() -> None:
+    from backend.app.agent.signals.perp.cex_fallback import _kucoin_klines
+
+    # KuCoin spot row: [time(sec), open, close, high, low, volume, turnover]
+    payload = {"data": [["1700000000", "100", "105", "110", "95", "10", "1000"]]}
+    candles = await _kucoin_klines(_FakeClient(payload), "ETHUSDT", "5m", 100, False)
+    assert len(candles) == 1
+    c = candles[0]
+    assert (c.open, c.close, c.high, c.low) == (100.0, 105.0, 110.0, 95.0)
+
+
+@pytest.mark.asyncio
+async def test_bitget_spot_kline_parsing() -> None:
+    from backend.app.agent.signals.perp.cex_fallback import _bitget_klines
+
+    # Bitget row: [ts(ms), open, high, low, close, baseVol, quoteVol]
+    payload = {"data": [["1700000000000", "100", "110", "95", "105", "10", "1000"]]}
+    candles = await _bitget_klines(_FakeClient(payload), "ETHUSDT", "5m", 100, False)
+    assert len(candles) == 1
+    c = candles[0]
+    assert (c.open, c.high, c.low, c.close) == (100.0, 110.0, 95.0, 105.0)

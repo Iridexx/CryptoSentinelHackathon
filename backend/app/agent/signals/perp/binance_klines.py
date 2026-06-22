@@ -49,6 +49,21 @@ class BinanceKlineFeed:
         self.spot_base_url = spot_base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
+    async def _binance_klines(self, symbol: str, interval: str, limit: int, market: BinanceMarket) -> list[Candle]:
+        base_url = self.futures_base_url if market == "futures" else self.spot_base_url
+        path = "/fapi/v1/klines" if market == "futures" else "/api/v3/klines"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.get(
+                    f"{base_url}{path}",
+                    params={"symbol": symbol.upper(), "interval": interval, "limit": limit},
+                )
+            if response.status_code >= 400:
+                return []
+            return [_parse_kline(row) for row in response.json()]
+        except Exception:
+            return []
+
     async def fetch(
         self,
         *,
@@ -57,20 +72,17 @@ class BinanceKlineFeed:
         limit: int = 288,
         market: BinanceMarket = "futures",
     ) -> list[Candle]:
-        base_url = self.futures_base_url if market == "futures" else self.spot_base_url
-        path = "/fapi/v1/klines" if market == "futures" else "/api/v3/klines"
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.get(
-                f"{base_url}{path}",
-                params={"symbol": symbol.upper(), "interval": interval, "limit": limit},
+        candles = await self._binance_klines(symbol, interval, limit, market)
+        if not candles:
+            # Fallback CEX: Bitget -> KuCoin (per token senza mercato Binance).
+            from backend.app.agent.signals.perp.cex_fallback import fetch_klines_fallback
+
+            candles = await fetch_klines_fallback(
+                symbol=symbol, interval=interval, limit=limit,
+                futures=(market == "futures"), timeout=self.timeout_seconds,
             )
-        if response.status_code >= 400:
-            raise BinanceKlineFeedError(f"binance_klines_http_{response.status_code}")
-        try:
-            payload = response.json()
-            candles = [_parse_kline(row) for row in payload]
-        except (TypeError, ValueError, IndexError) as exc:
-            raise BinanceKlineFeedError("binance_klines_parse_failed") from exc
+        if not candles:
+            raise BinanceKlineFeedError(f"no_klines_any_cex_{symbol.upper()}")
         _KLINE_CACHE[(market, symbol.upper(), interval)] = BinanceKlineCacheEntry(
             market=market,
             symbol=symbol.upper(),
@@ -96,15 +108,26 @@ class BinanceKlineFeed:
         base_url = self.futures_base_url if market == "futures" else self.spot_base_url
         path = "/fapi/v1/ticker/price" if market == "futures" else "/api/v3/ticker/price"
         symbols_param = json.dumps([s.upper() for s in symbols], separators=(",", ":"))
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.get(f"{base_url}{path}", params={"symbols": symbols_param})
-        if response.status_code >= 400:
-            raise BinanceKlineFeedError(f"binance_ticker_http_{response.status_code}")
+        result: dict[str, Decimal] = {}
         try:
-            payload = response.json()
-            return {str(row["symbol"]).upper(): Decimal(str(row["price"])) for row in payload}
-        except (TypeError, ValueError, KeyError) as exc:
-            raise BinanceKlineFeedError("binance_ticker_parse_failed") from exc
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.get(f"{base_url}{path}", params={"symbols": symbols_param})
+            if response.status_code < 400:
+                result = {str(row["symbol"]).upper(): Decimal(str(row["price"])) for row in response.json()}
+        except Exception:
+            result = {}
+        # Fallback CEX per i symbol non coperti da Binance (Bitget -> KuCoin).
+        missing = [s for s in symbols if s.upper() not in result]
+        if missing:
+            from backend.app.agent.signals.perp.cex_fallback import fetch_price_fallback
+
+            for sym in missing:
+                price = await fetch_price_fallback(
+                    symbol=sym, futures=(market == "futures"), timeout=self.timeout_seconds
+                )
+                if price is not None:
+                    result[sym.upper()] = price
+        return result
 
 
 def get_kline_cache_entry(*, market: BinanceMarket, symbol: str, interval: str = "5m") -> BinanceKlineCacheEntry | None:
