@@ -456,8 +456,26 @@ export default function App() {
   }, []);
 
   const isSearching = search.trim().length > 0;
-  const rawDisplayCoins = isSearching ? searchResults : coins;
   const displayLoading = isSearching ? searching : loading;
+
+  // Filtro locale sulle coin gia' caricate (per nome E simbolo): garantisce che le
+  // coin presenti nell'elenco mercati (incluse quelle marcate AI) siano sempre
+  // trovabili anche se la search del provider non le indicizza per nome.
+  const localSearchMatches = useMemo(() => {
+    if (!isSearching) return [];
+    const q = search.trim().toLowerCase();
+    return coins.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q),
+    );
+  }, [isSearching, search, coins]);
+
+  const rawDisplayCoins = useMemo(() => {
+    if (!isSearching) return coins;
+    // Unione: prima le coin locali (con stato AI gia' risolto), poi i risultati
+    // del backend non gia' presenti, deduplicati per id.
+    const seen = new Set(localSearchMatches.map((c) => c.id));
+    return [...localSearchMatches, ...searchResults.filter((c) => !seen.has(c.id))];
+  }, [isSearching, coins, localSearchMatches, searchResults]);
 
   const displayCoins = useMemo(() => {
     return sortCoins(rawDisplayCoins, sortBy, sortDesc);
