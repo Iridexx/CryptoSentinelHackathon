@@ -5,6 +5,8 @@ import {
   fetchAgentDecisions,
   fetchAssetBreakdown,
   fetchEquityCurve,
+  type ClaudeUsageView,
+  fetchClaudeUsage,
   fetchExecutionWallets,
   fetchGlobalView,
   fetchPerpView,
@@ -410,7 +412,8 @@ const GlobalPane: FC<{
   equity: EquityCurveResponse | null;
   decisions: AgentDecisionResponse | null;
   assetBreakdown: AssetBreakdownResponse | null;
-}> = ({ data, status, equity, decisions, assetBreakdown }) => {
+  claudeUsage: ClaudeUsageView | null;
+}> = ({ data, status, equity, decisions, assetBreakdown, claudeUsage }) => {
   const hasHistory = (data?.pnl_history.length ?? 0) > 0;
   const hasPortfolio = Number(data?.total_equity_usd ?? 0) > 0 || Number(data?.initial_equity_usd ?? 0) > 0;
   const hasTradesToday = Number(data?.trades_today ?? 0) > 0;
@@ -428,6 +431,13 @@ const GlobalPane: FC<{
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
         <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
         <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />
+        {claudeUsage != null && (
+          <Stat
+            label="API Claude"
+            value={`$${claudeUsage.total_cost_usd.toFixed(2)} / $${claudeUsage.budget_usd.toFixed(2)}`}
+            tone={claudeUsage.budget_pct >= 90 ? 'bad' : claudeUsage.budget_pct >= 70 ? 'neutral' : 'good'}
+          />
+        )}
       </div>
       {!hasPortfolio && !hasHistory && (
         <EmptyState title="In attesa dello stato globale" detail="Equity, drawdown ed esposizione saranno visibili al primo snapshot." />
@@ -948,6 +958,7 @@ const AgentTab: FC<AgentTabProps> = ({
   const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
   const [settings, setSettings] = useState<AgentMobileSettings>(defaultSettings);
   const [execWallets, setExecWallets] = useState<ExecutionWalletsResponse | null>(null);
+  const [claudeUsage, setClaudeUsage] = useState<ClaudeUsageView | null>(null);
   const [validation, setValidation] = useState<CredentialValidationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -958,7 +969,7 @@ const AgentTab: FC<AgentTabProps> = ({
     setLoading(true);
     setError('');
     try {
-      const [statusData, spotData, perpData, globalData, settingsData, execWalletsData, equityData, decisionsData, breakdownData] = await Promise.all([
+      const [statusData, spotData, perpData, globalData, settingsData, execWalletsData, equityData, decisionsData, breakdownData, claudeUsageData] = await Promise.all([
         fetchAgentStatus(),
         fetchSpotView(),
         fetchPerpView(),
@@ -968,6 +979,7 @@ const AgentTab: FC<AgentTabProps> = ({
         fetchEquityCurve(),
         fetchAgentDecisions(),
         fetchAssetBreakdown(),
+        fetchClaudeUsage().catch(() => null),
       ]);
       setStatus(statusData);
       setSpot(spotData);
@@ -978,6 +990,7 @@ const AgentTab: FC<AgentTabProps> = ({
       setEquity(equityData);
       setDecisions(decisionsData);
       setAssetBreakdown(breakdownData);
+      setClaudeUsage(claudeUsageData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load agent data');
     } finally {
@@ -1090,7 +1103,7 @@ const AgentTab: FC<AgentTabProps> = ({
       )}
       {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
-      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} decisions={decisions} assetBreakdown={assetBreakdown} />}
+      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} decisions={decisions} assetBreakdown={assetBreakdown} claudeUsage={claudeUsage} />}
       {pane === 'wallet' && <WalletPane execWallets={execWallets} spot={spot} perp={perp} />}
       {pane === 'coins' && (
         <CoinsPane
