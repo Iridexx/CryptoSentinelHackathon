@@ -966,34 +966,33 @@ const AgentTab: FC<AgentTabProps> = ({
   const refresh = useCallback(async () => {
     setLoading(true);
     setError('');
-    try {
-      const [statusData, spotData, perpData, globalData, settingsData, execWalletsData, equityData, decisionsData, breakdownData] = await Promise.all([
-        fetchAgentStatus(),
-        fetchSpotView(),
-        fetchPerpView(),
-        fetchGlobalView(),
-        fetchAgentSettings(),
-        fetchExecutionWallets(),
-        fetchEquityCurve(),
-        fetchAgentDecisions(),
-        fetchAssetBreakdown(),
-      ]);
-      setStatus(statusData);
-      setSpot(spotData);
-      setPerp(perpData);
-      setGlobal(globalData);
-      setSettings(settingsData.settings);
-      setExecWallets(execWalletsData);
-      setEquity(equityData);
-      setDecisions(decisionsData);
-      setAssetBreakdown(breakdownData);
-      // fetch non bloccante: non deve mai ritardare il refresh principale
-      fetchClaudeUsage().then(setClaudeUsage).catch(() => {});
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load agent data');
-    } finally {
-      setLoading(false);
-    }
+    const [statusRes, spotRes, perpRes, globalRes, settingsRes, execWalletsRes, equityRes, decisionsRes, breakdownRes] = await Promise.allSettled([
+      fetchAgentStatus(),
+      fetchSpotView(),
+      fetchPerpView(),
+      fetchGlobalView(),
+      fetchAgentSettings(),
+      fetchExecutionWallets(),
+      fetchEquityCurve(),
+      fetchAgentDecisions(),
+      fetchAssetBreakdown(),
+    ]);
+    if (statusRes.status === 'fulfilled') setStatus(statusRes.value);
+    if (spotRes.status === 'fulfilled') setSpot(spotRes.value);
+    if (perpRes.status === 'fulfilled') setPerp(perpRes.value);
+    if (globalRes.status === 'fulfilled') setGlobal(globalRes.value);
+    if (settingsRes.status === 'fulfilled') setSettings(settingsRes.value.settings);
+    if (execWalletsRes.status === 'fulfilled') setExecWallets(execWalletsRes.value);
+    if (equityRes.status === 'fulfilled') setEquity(equityRes.value);
+    if (decisionsRes.status === 'fulfilled') setDecisions(decisionsRes.value);
+    if (breakdownRes.status === 'fulfilled') setAssetBreakdown(breakdownRes.value);
+    const failed = [statusRes, spotRes, perpRes, globalRes, settingsRes, execWalletsRes, equityRes, decisionsRes, breakdownRes]
+      .filter(r => r.status === 'rejected').length;
+    if (failed > 0) setError(`${failed} endpoint non raggiungibili`);
+    else setError('');
+    setLoading(false);
+    // fetch non bloccante: non deve mai ritardare il refresh principale
+    fetchClaudeUsage().then(setClaudeUsage).catch(() => {});
   }, []);
 
   useEffect(() => {
