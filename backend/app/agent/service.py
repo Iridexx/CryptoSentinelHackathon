@@ -318,6 +318,10 @@ class AgentService:
                 reason = "take_profit_2"
             elif pos.take_profit_1 and price >= pos.take_profit_1:
                 reason = "take_profit_1"
+            elif self.settings.spot_time_stop_hours > 0:
+                age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
+                if age_hours >= self.settings.spot_time_stop_hours:
+                    reason = "time_stop"
             if reason:
                 pnl = await self._close_spot_position(session, pos, price, reason, now)
                 exposure = pos.entry_price * pos.size

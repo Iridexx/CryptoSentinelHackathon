@@ -460,7 +460,7 @@ class Settings(BaseSettings):
     spot_relative_volume_threshold: float = Field(default=1.8, alias="SPOT_RELATIVE_VOLUME_THRESHOLD")
     spot_atr_stop_multiplier: float = Field(default=1.5, alias="SPOT_ATR_STOP_MULTIPLIER")
     spot_trailing_distance_pct: float = Field(default=2.0, alias="SPOT_TRAILING_DISTANCE_PCT")
-    spot_partial_take_profit_pct: float = Field(default=50.0, alias="SPOT_PARTIAL_TAKE_PROFIT_PCT")
+    spot_partial_take_profit_pct: float = Field(default=3.0, alias="SPOT_PARTIAL_TAKE_PROFIT_PCT")
     spot_time_stop_hours: int = Field(default=6, alias="SPOT_TIME_STOP_HOURS")
     spot_vwap_atr_extension_limit: float = Field(default=1.2, alias="SPOT_VWAP_ATR_EXTENSION_LIMIT")
     spot_rsi_weight_pct: float = Field(default=15.0, alias="SPOT_RSI_WEIGHT_PCT")
