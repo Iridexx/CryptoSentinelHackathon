@@ -96,6 +96,9 @@ def settings(**overrides):
         market_data_request_timeout_seconds=5.0,
         wallet_address=None,
         risk_max_slippage_pct=1.0,
+        spot_quote_token_address=None,
+        spot_quote_token_decimals=18,
+        spot_token_map={},
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -520,6 +523,40 @@ async def test_heartbeat_triggers_at_20utc(db) -> None:
     assert trades[0].asset == "ETH"
     assert trades[0].notes == "dry_run_step6"
     assert trades[0].amount_quote == Decimal("7")
+
+
+def test_build_spot_swap_params_maps_token() -> None:
+    service = AgentService(
+        settings(
+            spot_quote_token_address="0xQUOTE",
+            spot_quote_token_decimals=18,
+            spot_token_map={"ETH": "0xETH:18"},
+        ),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    params = service._build_spot_swap_params({"asset": "ETH"}, Decimal("10"))
+    assert params is not None
+    assert params["from_asset"] == "0xQUOTE"
+    assert params["to_asset"] == "0xETH"
+    assert params["amount_in_atomic"] == 10 * 10**18
+
+
+def test_build_spot_swap_params_skips_when_unmapped_or_no_quote() -> None:
+    # Asset non in mappa => None.
+    s1 = AgentService(
+        settings(spot_quote_token_address="0xQUOTE", spot_token_map={}),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    assert s1._build_spot_swap_params({"asset": "ETH"}, Decimal("10")) is None
+    # Quote token non configurato => None anche se l'asset e' mappato.
+    s2 = AgentService(
+        settings(spot_quote_token_address=None, spot_token_map={"ETH": "0xETH"}),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    assert s2._build_spot_swap_params({"asset": "ETH"}, Decimal("10")) is None
 
 
 @pytest.mark.asyncio

@@ -399,6 +399,12 @@ class Settings(BaseSettings):
         default="0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
         alias="PANCAKESWAP_WBNB_ADDRESS_TESTNET",
     )
+    # Routing token per l'esecuzione spot in LIVE (in dry-run non vengono usati).
+    # Indirizzi on-chain reali: NON hardcodati: vanno forniti via .env (vuoti = spot live disabilitato).
+    spot_quote_token_address: str | None = Field(default=None, alias="SPOT_QUOTE_TOKEN_ADDRESS")
+    spot_quote_token_decimals: int = Field(default=18, alias="SPOT_QUOTE_TOKEN_DECIMALS")
+    # Mappa symbol -> "address" oppure "address:decimals" (decimals default 18). JSON in env.
+    spot_token_map: dict[str, str] = Field(default_factory=dict, alias="SPOT_TOKEN_MAP")
 
     bnb_ai_agent_sdk_enabled: bool = Field(default=False, alias="BNB_AI_AGENT_SDK_ENABLED")
     perp_execution_provider: Literal["bnb_sdk"] = Field(

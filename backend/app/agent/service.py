@@ -669,13 +669,49 @@ class AgentService:
         if self.settings.execution_mode == "dry_run":
             execution = await self._simulate_trade(session, signal, size_quote)
         elif signal.get("market") == "spot":
-            execution = await self._execute_spot(signal, size_quote)
+            # In live i parametri on-chain (token + amount) sono assenti dal segnale:
+            # li deriviamo dalla mappa token configurata; se mancano, skip esplicito.
+            if signal.get("from_asset") and signal.get("to_asset") and signal.get("amount_in_atomic") is not None:
+                swap_params: dict | None = {}
+            else:
+                swap_params = self._build_spot_swap_params(signal, size_quote)
+            if swap_params is None:
+                execution = {"status": "skipped", "reason": "spot_token_not_mapped"}
+            else:
+                execution = await self._execute_spot({**signal, **swap_params}, size_quote)
         else:
             execution = await self._execute_perp(signal, size_quote)
 
         if execution.get("trade_id") and execution.get("status") in {"prepared", "confirmed"}:
             asyncio.create_task(self._notify_trade_opened(signal, risk_decision, execution))
         return execution
+
+    def _build_spot_swap_params(self, signal: dict, size_quote: Decimal) -> dict | None:
+        """Costruisce from_asset/to_asset/amount_in_atomic per lo swap spot live.
+
+        Usa la mappa token configurata (settings.spot_token_map) e il quote token.
+        Ritorna None se mancano gli indirizzi necessari (spot live disabilitato/non mappato).
+        """
+        quote_address = self.settings.spot_quote_token_address
+        if not quote_address:
+            return None
+        asset = str(signal.get("asset") or "").upper()
+        token_entry = self.settings.spot_token_map.get(asset)
+        if not token_entry:
+            return None
+        # Formato valore: "address" oppure "address:decimals".
+        to_address, _, _decimals = token_entry.partition(":")
+        if not to_address:
+            return None
+        quote_decimals = int(self.settings.spot_quote_token_decimals)
+        amount_in_atomic = int(size_quote * (Decimal(10) ** quote_decimals))
+        if amount_in_atomic <= 0:
+            return None
+        return {
+            "from_asset": quote_address,
+            "to_asset": to_address,
+            "amount_in_atomic": amount_in_atomic,
+        }
 
     async def _simulate_trade(self, session: AsyncSession, signal: dict, size_quote: Decimal) -> dict:
         now = datetime.now(UTC)
