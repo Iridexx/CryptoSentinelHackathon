@@ -1,5 +1,6 @@
 """Dashboard data views: Spot / Perp / Global."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -11,7 +12,9 @@ from backend.app.persistence.archive import list_archived_runs
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
+from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
+from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.views import ViewService, _close_reason
 from backend.app.schemas.views import GlobalView, PerpView, SpotView
 
@@ -148,13 +151,29 @@ async def trade_detail(
     perp = (await session.execute(select(PerpTrade).where(PerpTrade.user_id == user_id).where(PerpTrade.trade_id == trade_id))).scalar_one_or_none()
     if spot is None and perp is None:
         raise HTTPException(status_code=404, detail="trade_not_found")
+    chart_repo = TradeChartRepository(session)
     if spot is not None:
         position = (await session.execute(select(SpotPosition).where(SpotPosition.open_trade_id == trade_id))).scalar_one_or_none()
         decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
-        return _spot_trade_detail(spot, position, decision)
+        snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
+        return _spot_trade_detail(spot, position, decision, snapshot)
     position = (await session.execute(select(PerpPosition).where(PerpPosition.open_trade_id == trade_id))).scalar_one_or_none()
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
-    return _perp_trade_detail(perp, position, decision)
+    snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
+    return _perp_trade_detail(perp, position, decision, snapshot)
+
+
+async def _load_chart_snapshot(
+    chart_repo: TradeChartRepository,
+    user_id: str,
+    trade_id: str,
+    position,
+) -> TradeChartSnapshot | None:
+    """Lo snapshot e' legato al trade di chiusura (cls_...) o, in fallback, alla posizione."""
+    snapshot = await chart_repo.get_for_close_trade(user_id, trade_id)
+    if snapshot is None and position is not None:
+        snapshot = await chart_repo.get_for_position(user_id, position.position_id)
+    return snapshot
 
 
 @router.get("/operational-stats")
@@ -238,7 +257,7 @@ def _decision_payload(decision: AgentDecision | None) -> dict | None:
     }
 
 
-def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None) -> dict:
+def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None) -> dict:
     current = Decimal(position.current_price) if position else Decimal(trade.price)
     size = Decimal(position.size) if position else Decimal(trade.amount)
     entry = Decimal(position.entry_price) if position else Decimal(trade.price)
@@ -265,11 +284,12 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
         "close_reason": _close_reason(trade),
         "decision": _decision_payload(decision),
         "events": [],
+        "chart": json.loads(snapshot.payload) if snapshot else None,
         "is_simulated": trade.trade_id.startswith("dry_") or trade.provider == "dry_run",
     }
 
 
-def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None) -> dict:
+def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None) -> dict:
     current = Decimal(position.current_price) if position else Decimal(trade.price)
     size = Decimal(position.size) if position else Decimal(trade.size)
     entry = Decimal(position.entry_price) if position else Decimal(trade.price)
@@ -296,5 +316,6 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "close_reason": _close_reason(trade),
         "decision": _decision_payload(decision),
         "events": [{"name": "tp1", "reached": position.tp1_reached}] if position else [],
+        "chart": json.loads(snapshot.payload) if snapshot else None,
         "is_simulated": trade.trade_id.startswith("dry_") or trade.venue == "dry_run",
     }

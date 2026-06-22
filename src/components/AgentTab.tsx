@@ -894,11 +894,93 @@ const SetupPane: FC<{
   );
 };
 
+const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ chart }) => {
+  const candles = chart.candles ?? [];
+  if (candles.length < 2) {
+    return <p className="text-xs text-gray-500">Grafico non disponibile per questo trade.</p>;
+  }
+  const W = 320;
+  const H = 170;
+  const padX = 6;
+  const padY = 10;
+  const entry = Number(chart.entry_price);
+  const exit = Number(chart.exit_price);
+  const sl = chart.stop_loss != null ? Number(chart.stop_loss) : null;
+  const tp1 = chart.take_profit_1 != null ? Number(chart.take_profit_1) : null;
+  const tp2 = chart.take_profit_2 != null ? Number(chart.take_profit_2) : null;
+
+  const levels = [entry, exit, sl, tp1, tp2].filter((v): v is number => v != null && !Number.isNaN(v));
+  let hi = Math.max(...candles.map((c) => c.h), ...levels);
+  let lo = Math.min(...candles.map((c) => c.l), ...levels);
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const range = hi - lo;
+  const y = (price: number) => padY + (1 - (price - lo) / range) * (H - 2 * padY);
+  const colW = (W - 2 * padX) / candles.length;
+  const cx = (i: number) => padX + colW * (i + 0.5);
+
+  // Marker temporali: candela piu' vicina ad apertura/chiusura.
+  const ts = (s: string) => new Date(s).getTime();
+  const nearest = (target: number) => {
+    let best = 0;
+    let bestD = Infinity;
+    candles.forEach((c, i) => { const d = Math.abs(ts(c.t) - target); if (d < bestD) { bestD = d; best = i; } });
+    return best;
+  };
+  const entryIdx = nearest(ts(chart.opened_at));
+  const exitIdx = nearest(ts(chart.closed_at));
+  const exitGood = exit >= entry;
+
+  const levelLine = (price: number | null, color: string, dash: string) =>
+    price == null || Number.isNaN(price) ? null : (
+      <line x1={padX} x2={W - padX} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
+    );
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
+      {candles.map((c, i) => {
+        const up = c.c >= c.o;
+        const color = up ? '#22c55e' : '#ef4444';
+        const bodyTop = y(Math.max(c.o, c.c));
+        const bodyBot = y(Math.min(c.o, c.c));
+        const bw = Math.max(1, colW * 0.6);
+        return (
+          <g key={i}>
+            <line x1={cx(i)} x2={cx(i)} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth="1" />
+            <rect x={cx(i) - bw / 2} y={bodyTop} width={bw} height={Math.max(1, bodyBot - bodyTop)} fill={color} />
+          </g>
+        );
+      })}
+      {levelLine(sl, '#ef4444', '4 3')}
+      {levelLine(tp1, '#22c55e', '4 3')}
+      {levelLine(tp2, '#16a34a', '2 3')}
+      {levelLine(entry, '#9ca3af', '1 0')}
+      {/* marker ingresso/uscita */}
+      <circle cx={cx(entryIdx)} cy={y(entry)} r="3.5" fill="#e5e7eb" stroke="#0b0e11" strokeWidth="1" />
+      <circle cx={cx(exitIdx)} cy={y(exit)} r="3.5" fill={exitGood ? '#22c55e' : '#ef4444'} stroke="#0b0e11" strokeWidth="1" />
+    </svg>
+  );
+};
+
 const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ detail, onBack }) => (
   <div className="space-y-4">
     <button onClick={onBack} className="rounded-lg bg-dark-800 px-3 py-2 text-sm font-semibold text-gray-300">
       Back
     </button>
+    {detail.chart && (
+      <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-white">Grafico del trade</h3>
+          <span className="text-xs text-gray-500">{detail.chart.interval}</span>
+        </div>
+        <TradeCandleChart chart={detail.chart} />
+        <div className="flex flex-wrap gap-3 text-[10px] text-gray-400">
+          <span>⚪ Entry</span>
+          <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● Exit</span>
+          <span className="text-accent-red">- - SL</span>
+          <span className="text-accent-green">- - TP</span>
+        </div>
+      </section>
+    )}
     <section className="rounded-xl bg-dark-800 px-4 py-4">
       <div className="flex items-center justify-between gap-3">
         <div>

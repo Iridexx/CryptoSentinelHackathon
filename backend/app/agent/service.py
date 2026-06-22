@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from functools import lru_cache
@@ -34,6 +35,8 @@ from backend.app.persistence.repositories.api_usage import ApiUsageRepository
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
 from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.positions import PerpPositionRepository, SpotPositionRepository
+from backend.app.persistence.models.trade_charts import TradeChartSnapshot
+from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 
@@ -47,6 +50,17 @@ HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
 # Sentinel per la lazy-init del resolver token (distingue "non inizializzato" da "None").
 _UNSET = object()
+
+
+def _auto_chart_interval(duration_min: int) -> tuple[str, int]:
+    """Intervallo candele in base alla durata del trade -> (interval, minuti per candela)."""
+    if duration_min <= 6 * 60:
+        return "5m", 5
+    if duration_min <= 2 * 24 * 60:
+        return "1h", 60
+    if duration_min <= 30 * 24 * 60:
+        return "4h", 240
+    return "1d", 1440
 
 
 class AgentService:
@@ -230,6 +244,61 @@ class AgentService:
         if updated:
             await session.commit()
 
+    async def _snapshot_closed_trade(
+        self,
+        session: AsyncSession,
+        pos,
+        *,
+        market: str,
+        exit_price: Decimal,
+        close_trade_id: str,
+        now: datetime,
+    ) -> None:
+        """Congela candele + livelli alla chiusura per ridisegnare il grafico nel dettaglio.
+
+        Best-effort: un errore (es. feed irraggiungibile) non blocca la chiusura del trade.
+        """
+        try:
+            opened_at = pos.opened_at
+            if opened_at.tzinfo is None:
+                opened_at = opened_at.replace(tzinfo=UTC)
+            duration_min = max(1, int((now - opened_at).total_seconds() / 60))
+            interval, per_min = _auto_chart_interval(duration_min)
+            limit = int(min(120, max(20, (duration_min / per_min) * 1.6)))
+            feed_market = "futures" if market == "perp" else "spot"
+            candles = await self.price_feed.fetch(
+                symbol=f"{pos.asset}USDT", interval=interval, limit=limit, market=feed_market
+            )
+            tp2 = getattr(pos, "take_profit_2", None)
+            payload = {
+                "interval": interval,
+                "market": market,
+                "side": pos.side if market == "perp" else "long",
+                "entry_price": str(pos.entry_price),
+                "exit_price": str(exit_price),
+                "stop_loss": str(pos.stop_loss) if pos.stop_loss else None,
+                "take_profit_1": str(pos.take_profit_1) if pos.take_profit_1 else None,
+                "take_profit_2": str(tp2) if tp2 else None,
+                "opened_at": opened_at.isoformat(),
+                "closed_at": now.isoformat(),
+                "candles": [
+                    {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
+                    for c in candles
+                ],
+            }
+            await TradeChartRepository(session).save(
+                TradeChartSnapshot(
+                    user_id=pos.user_id,
+                    position_id=pos.position_id,
+                    close_trade_id=close_trade_id,
+                    market=market,
+                    payload=json.dumps(payload),
+                    created_at=now,
+                )
+            )
+        except Exception:
+            logger.warning("trade_chart_snapshot_failed", asset=pos.asset, position_id=pos.position_id)
+
     async def _close_spot_position(
         self,
         session: AsyncSession,
@@ -270,6 +339,11 @@ class AgentService:
             pnl_usd=pnl,
         )
         await SpotTradeRepository(session).save(close_trade)
+        if not partial:
+            await self._snapshot_closed_trade(
+                session, pos, market="spot", exit_price=exit_price,
+                close_trade_id=close_trade.trade_id, now=now,
+            )
         logger.info("spot_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
 
@@ -318,6 +392,11 @@ class AgentService:
             pnl_usd=pnl,
         )
         await PerpTradeRepository(session).save(close_trade)
+        if not partial:
+            await self._snapshot_closed_trade(
+                session, pos, market="perp", exit_price=exit_price,
+                close_trade_id=close_trade.trade_id, now=now,
+            )
         logger.info("perp_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
 

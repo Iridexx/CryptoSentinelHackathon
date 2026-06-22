@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -22,6 +23,7 @@ from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.agent.watchlist import set_selected_watchlist
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
 from backend.app.persistence.repositories.positions import SpotPositionRepository
+from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import SpotPosition
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
@@ -573,6 +575,49 @@ async def test_build_spot_swap_params_resolves_via_cmc() -> None:
     assert params["from_asset"] == "0xUSDTCMC"
     assert params["to_asset"] == "0xETHCMC"
     assert params["amount_in_atomic"] == 10 * 10**18
+
+
+@pytest.mark.asyncio
+async def test_close_generates_chart_snapshot(db) -> None:
+    service = AgentService(
+        settings(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+
+    class FakeFeed:
+        async def fetch(self, *, symbol, interval, limit, market):
+            return [
+                Candle(timestamp=now - timedelta(minutes=5 * i), open=100, high=101, low=99, close=100.5, volume=1.0)
+                for i in range(5)
+            ]
+
+    service.price_feed = FakeFeed()
+    pos = SpotPosition(
+        position_id="pos-chart",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("103"),
+        stop_loss=Decimal("98"),
+        take_profit_1=Decimal("103"),
+        take_profit_2=Decimal("106"),
+        tp1_reached=True,
+        status="open",
+        opened_at=now - timedelta(hours=2),
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._close_spot_position(session, pos, Decimal("103"), "take_profit_2", now)
+        snap = await TradeChartRepository(session).get_for_position(str(USER_ID), "pos-chart")
+
+    assert snap is not None
+    payload = json.loads(snap.payload)
+    assert payload["entry_price"] == "100"
+    assert payload["exit_price"] == "103"
+    assert len(payload["candles"]) == 5
 
 
 @pytest.mark.asyncio

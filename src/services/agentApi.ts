@@ -173,6 +173,28 @@ export interface AssetBreakdownResponse {
   }>;
 }
 
+export interface TradeChartCandle {
+  t: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+}
+
+export interface TradeChart {
+  interval: string;
+  market: string;
+  side: string;
+  entry_price: string;
+  exit_price: string;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
+  opened_at: string;
+  closed_at: string;
+  candles: TradeChartCandle[];
+}
+
 export interface TradeDetail {
   trade_id: string;
   asset: string;
@@ -192,6 +214,7 @@ export interface TradeDetail {
   opened_at: string;
   closed_at?: string | null;
   close_reason?: string | null;
+  chart?: TradeChart | null;
   is_simulated: boolean;
 }
 
