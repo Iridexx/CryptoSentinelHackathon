@@ -158,7 +158,7 @@ async def set_kill_switch(request: KillSwitchRequest, _: AdminAccessDep) -> dict
 
 # Cache leggera della summary spesa Claude: evita una query DB a ogni refresh dell'app.
 _CLAUDE_USAGE_CACHE: dict[str, object] = {"at": 0.0, "view": None}
-_CLAUDE_USAGE_TTL_SECONDS = 60.0
+_CLAUDE_USAGE_TTL_SECONDS = 300.0
 
 
 @router.get("/claude-usage", response_model=ClaudeUsageView)

@@ -1109,7 +1109,7 @@ const AgentTab: FC<AgentTabProps> = ({
     let active = true;
     const load = () => { fetchClaudeUsage().then((v) => { if (active) setClaudeUsage(v); }).catch(() => {}); };
     load();
-    const timer = window.setInterval(load, 120_000);
+    const timer = window.setInterval(load, 300_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [pane]);
 
