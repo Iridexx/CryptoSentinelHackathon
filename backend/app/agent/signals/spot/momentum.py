@@ -103,7 +103,7 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
         trigger = (
             volatility_pct >= self.settings.spot_volatility_trigger_pct
             and (rel_volume or 0.0) >= self.settings.spot_relative_volume_threshold
-            and trend_score >= 0.55
+            and trend_score >= 0.45
             and extension_ok
         )
         action = "enter_long" if trigger and quality >= self.settings.spot_confidence_threshold else "skip"

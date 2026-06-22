@@ -44,6 +44,10 @@ logger = get_logger("agent.service")
 
 DAILY_TRADE_CHECK_TIME_UTC = time(20, 0, tzinfo=UTC)
 DAILY_TRADE_RETRY_UNTIL_UTC = time(23, 30, tzinfo=UTC)
+# Stablecoin: niente scansione spot (volatilita' ~0, nessun segnale sensato).
+SPOT_EXCLUDED_STABLECOINS = frozenset(
+    {"USDT", "USDC", "DAI", "USD1", "TUSD", "FDUSD", "BUSD", "USDP", "USDD", "GUSD", "PYUSD"}
+)
 HEARTBEAT_TRADE_ASSET = "ETH"
 HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 # Distanza trailing-stop per il perp (coerente col livello generato dal segnale, 1%).
@@ -623,7 +627,7 @@ class AgentService:
         markets = _active_markets(self.settings.markets_enabled)
         scanner_results = []
         for asset in selected_assets:
-            if "spot" in markets:
+            if "spot" in markets and asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
                 scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
             if "perp" in markets:
                 scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))

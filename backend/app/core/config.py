@@ -464,9 +464,9 @@ class Settings(BaseSettings):
     risk_correlation_limit: float = Field(default=0.8, alias="RISK_CORRELATION_LIMIT")
     risk_cooldown_minutes: int = Field(default=30, alias="RISK_COOLDOWN_MINUTES")
 
-    spot_confidence_threshold: float = Field(default=0.70, alias="SPOT_CONFIDENCE_THRESHOLD")
-    spot_volatility_trigger_pct: float = Field(default=3.0, alias="SPOT_VOLATILITY_TRIGGER_PCT")
-    spot_relative_volume_threshold: float = Field(default=1.8, alias="SPOT_RELATIVE_VOLUME_THRESHOLD")
+    spot_confidence_threshold: float = Field(default=0.55, alias="SPOT_CONFIDENCE_THRESHOLD")
+    spot_volatility_trigger_pct: float = Field(default=0.8, alias="SPOT_VOLATILITY_TRIGGER_PCT")
+    spot_relative_volume_threshold: float = Field(default=1.3, alias="SPOT_RELATIVE_VOLUME_THRESHOLD")
     spot_atr_stop_multiplier: float = Field(default=1.5, alias="SPOT_ATR_STOP_MULTIPLIER")
     spot_trailing_distance_pct: float = Field(default=2.0, alias="SPOT_TRAILING_DISTANCE_PCT")
     spot_partial_take_profit_pct: float = Field(default=3.0, alias="SPOT_PARTIAL_TAKE_PROFIT_PCT")
