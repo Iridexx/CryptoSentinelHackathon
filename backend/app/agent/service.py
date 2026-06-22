@@ -29,6 +29,7 @@ from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
+from backend.app.persistence.repositories.api_usage import ApiUsageRepository
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
 from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.positions import PerpPositionRepository, SpotPositionRepository
@@ -512,7 +513,7 @@ class AgentService:
             open_spot_positions=spot_positions,
             open_perp_positions=perp_positions,
         )
-        brain_decision = await self._brain_decision(signal, risk_decision)
+        brain_decision = await self._brain_decision(session, signal, risk_decision)
         decision = await self._record_decision(session, signal, risk_decision, brain_decision)
         execution = {"status": "skipped", "reason": "brain_or_risk_blocked"}
         if risk_decision.allowed and brain_decision.allows_execution:
@@ -528,15 +529,25 @@ class AgentService:
             "execution": execution,
         }
 
-    async def _brain_decision(self, signal: dict, risk_decision) -> object:
+    async def _brain_decision(self, session: AsyncSession, signal: dict, risk_decision) -> object:
         try:
-            return await self.brain.decide(signal=signal, risk=risk_decision.__dict__)
+            decision, usage = await self.brain.decide(signal=signal, risk=risk_decision.__dict__)
         except MetaControllerError:
             self.risk.mark_degraded("claude_unavailable")
-            return await self.brain.decide(
+            decision, usage = await self.brain.decide(
                 signal={**signal, "quality": 0},
                 risk={"allowed": False, "reason": "claude_unavailable"},
             )
+        if usage is not None:
+            try:
+                await ApiUsageRepository(session).record(
+                    model=usage.model,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                )
+            except Exception:
+                pass  # non bloccare il trade per errori di logging
+        return decision
 
     async def _record_decision(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> AgentDecision:
         decision = AgentDecision(

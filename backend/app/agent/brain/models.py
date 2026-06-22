@@ -21,3 +21,12 @@ class BrainDecision:
     @property
     def allows_execution(self) -> bool:
         return self.action in {"approve", "reduce"}
+
+
+@dataclass(frozen=True)
+class BrainUsage:
+    """Token usage from a single Claude API call."""
+
+    model: str
+    input_tokens: int
+    output_tokens: int

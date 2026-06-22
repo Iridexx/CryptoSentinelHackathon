@@ -95,6 +95,15 @@ class PerpView(BaseModel):
     trade_count: int
 
 
+class ClaudeUsageView(BaseModel):
+    call_count: int
+    input_tokens: int
+    output_tokens: int
+    total_cost_usd: float
+    budget_usd: float
+    budget_pct: float
+
+
 class PnlPoint(BaseModel):
     timestamp_utc: str
     total_equity_usd: Decimal

@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from backend.app.agent.brain.models import BrainDecision
+from backend.app.agent.brain.models import BrainDecision, BrainUsage
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 
@@ -34,10 +34,10 @@ class ClaudeMetaController:
         else:
             logger.warning("claude_meta_controller_no_api_key", fallback="local_deterministic")
 
-    async def decide(self, *, signal: dict[str, Any], risk: dict[str, Any]) -> BrainDecision:
+    async def decide(self, *, signal: dict[str, Any], risk: dict[str, Any]) -> tuple[BrainDecision, BrainUsage | None]:
         if not self.settings.anthropic_api_key:
             logger.warning("claude_meta_controller_skipped", reason="no_api_key")
-            return self._local_fallback(signal, risk)
+            return self._local_fallback(signal, risk), None
         logger.info(
             "claude_meta_controller_calling",
             model=self.settings.anthropic_model,
@@ -64,13 +64,22 @@ class ClaudeMetaController:
                     body=response.text[:300],
                 )
             response.raise_for_status()
-            result = self._parse_response(response.json())
+            body = response.json()
+            result = self._parse_response(body)
+            usage_data = body.get("usage", {})
+            usage = BrainUsage(
+                model=self.settings.anthropic_model,
+                input_tokens=int(usage_data.get("input_tokens", 0)),
+                output_tokens=int(usage_data.get("output_tokens", 0)),
+            )
             logger.info(
                 "claude_meta_controller_ok",
                 action=result.action,
                 confidence=str(result.confidence),
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
             )
-            return result
+            return result, usage
         except Exception as exc:
             logger.warning(
                 "claude_meta_controller_failed",
@@ -79,7 +88,7 @@ class ClaudeMetaController:
                 error_type=type(exc).__name__,
             )
             if self.settings.execution_mode == "dry_run":
-                return self._local_fallback(signal, risk, reason_prefix="claude_unavailable_dry_run")
+                return self._local_fallback(signal, risk, reason_prefix="claude_unavailable_dry_run"), None
             raise MetaControllerError("claude_meta_controller_unavailable") from exc
 
     def _local_fallback(
