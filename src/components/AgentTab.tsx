@@ -1088,8 +1088,6 @@ const AgentTab: FC<AgentTabProps> = ({
     if (failed > 0) setError(`${failed} endpoint non raggiungibili`);
     else setError('');
     setLoading(false);
-    // fetch non bloccante: non deve mai ritardare il refresh principale
-    fetchClaudeUsage().then(setClaudeUsage).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1102,6 +1100,18 @@ const AgentTab: FC<AgentTabProps> = ({
     }, AGENT_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [refresh]);
+
+  // Spesa API Claude: la carichiamo SOLO quando il pane Global e' attivo e con
+  // cadenza ridotta (non cambia di secondo in secondo). Cosi' non appesantisce
+  // gli altri pane ne' il refresh principale.
+  useEffect(() => {
+    if (pane !== 'global') return;
+    let active = true;
+    const load = () => { fetchClaudeUsage().then((v) => { if (active) setClaudeUsage(v); }).catch(() => {}); };
+    load();
+    const timer = window.setInterval(load, 120_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [pane]);
 
   const handleSave = async () => {
     setSaving(true);

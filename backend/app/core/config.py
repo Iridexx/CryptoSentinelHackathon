@@ -340,6 +340,9 @@ class Settings(BaseSettings):
     anthropic_max_tokens: int = Field(default=1024, alias="ANTHROPIC_MAX_TOKENS")
     anthropic_daily_cost_limit_usd: float = Field(default=10.0, alias="ANTHROPIC_DAILY_COST_LIMIT_USD")
     anthropic_budget_usd: float = Field(default=5.0, alias="ANTHROPIC_BUDGET_USD")
+    # Spesa pregressa non tracciata dal DB (es. chiamate fatte prima del tracking),
+    # sommata al costo registrato per allinearsi alla console Anthropic.
+    anthropic_cost_baseline_usd: float = Field(default=0.0, alias="ANTHROPIC_COST_BASELINE_USD")
 
     bsc_network: str = Field(default="testnet", alias="BSC_NETWORK")
     bsc_chain_id: int = Field(default=97, alias="BSC_CHAIN_ID")

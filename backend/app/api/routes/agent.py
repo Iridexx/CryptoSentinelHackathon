@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -155,18 +156,28 @@ async def set_kill_switch(request: KillSwitchRequest, _: AdminAccessDep) -> dict
     return get_agent_service().set_kill_switch(KillSwitchState(request.state))
 
 
+# Cache leggera della summary spesa Claude: evita una query DB a ogni refresh dell'app.
+_CLAUDE_USAGE_CACHE: dict[str, object] = {"at": 0.0, "view": None}
+_CLAUDE_USAGE_TTL_SECONDS = 60.0
+
+
 @router.get("/claude-usage", response_model=ClaudeUsageView)
 async def claude_usage(_: ReadAccessDep, session: SessionDep) -> ClaudeUsageView:
-    """Return cumulative Claude API token usage and estimated cost."""
+    """Return cumulative Claude API token usage and estimated cost (cached ~60s)."""
+    cached = _CLAUDE_USAGE_CACHE.get("view")
+    if cached is not None and (time.monotonic() - float(_CLAUDE_USAGE_CACHE["at"])) < _CLAUDE_USAGE_TTL_SECONDS:
+        return cached  # type: ignore[return-value]
+
     settings = get_settings()
     budget = settings.anthropic_budget_usd
+    baseline = settings.anthropic_cost_baseline_usd
     try:
         summary = await ApiUsageRepository(session).summary()
-        cost = summary["total_cost_usd"]
+        cost = summary["total_cost_usd"] + baseline
     except Exception:
         summary = {"call_count": 0, "input_tokens": 0, "output_tokens": 0}
-        cost = 0.0
-    return ClaudeUsageView(
+        cost = baseline
+    view = ClaudeUsageView(
         call_count=summary["call_count"],
         input_tokens=summary["input_tokens"],
         output_tokens=summary["output_tokens"],
@@ -174,6 +185,9 @@ async def claude_usage(_: ReadAccessDep, session: SessionDep) -> ClaudeUsageView
         budget_usd=budget,
         budget_pct=round(cost / budget * 100, 1) if budget > 0 else 0.0,
     )
+    _CLAUDE_USAGE_CACHE["view"] = view
+    _CLAUDE_USAGE_CACHE["at"] = time.monotonic()
+    return view
 
 
 @router.post("/evaluate")
