@@ -13,7 +13,10 @@ from backend.app.agent.service import get_agent_service
 from backend.app.agent.watchlist import selected_watchlist, set_selected_watchlist
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.persistence.models.decisions import AgentDecision
+from backend.app.persistence.repositories.api_usage import ApiUsageRepository
+from backend.app.schemas.views import ClaudeUsageView
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SessionDep
+from backend.app.core.config import get_settings
 
 router = APIRouter(prefix="/api/v1/agent", tags=["agent"])
 
@@ -150,6 +153,27 @@ async def set_kill_switch(request: KillSwitchRequest, _: AdminAccessDep) -> dict
     """Set the process-level agent kill switch."""
 
     return get_agent_service().set_kill_switch(KillSwitchState(request.state))
+
+
+@router.get("/claude-usage", response_model=ClaudeUsageView)
+async def claude_usage(_: ReadAccessDep, session: SessionDep) -> ClaudeUsageView:
+    """Return cumulative Claude API token usage and estimated cost."""
+    settings = get_settings()
+    budget = settings.anthropic_budget_usd
+    try:
+        summary = await ApiUsageRepository(session).summary()
+        cost = summary["total_cost_usd"]
+    except Exception:
+        summary = {"call_count": 0, "input_tokens": 0, "output_tokens": 0}
+        cost = 0.0
+    return ClaudeUsageView(
+        call_count=summary["call_count"],
+        input_tokens=summary["input_tokens"],
+        output_tokens=summary["output_tokens"],
+        total_cost_usd=round(cost, 6),
+        budget_usd=budget,
+        budget_pct=round(cost / budget * 100, 1) if budget > 0 else 0.0,
+    )
 
 
 @router.post("/evaluate")

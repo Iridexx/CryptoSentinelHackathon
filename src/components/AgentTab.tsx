@@ -967,7 +967,7 @@ const AgentTab: FC<AgentTabProps> = ({
     setLoading(true);
     setError('');
     try {
-      const [statusData, spotData, perpData, globalData, settingsData, execWalletsData, equityData, decisionsData, breakdownData, claudeUsageData] = await Promise.all([
+      const [statusData, spotData, perpData, globalData, settingsData, execWalletsData, equityData, decisionsData, breakdownData] = await Promise.all([
         fetchAgentStatus(),
         fetchSpotView(),
         fetchPerpView(),
@@ -977,7 +977,6 @@ const AgentTab: FC<AgentTabProps> = ({
         fetchEquityCurve(),
         fetchAgentDecisions(),
         fetchAssetBreakdown(),
-        fetchClaudeUsage().catch(() => null),
       ]);
       setStatus(statusData);
       setSpot(spotData);
@@ -988,7 +987,8 @@ const AgentTab: FC<AgentTabProps> = ({
       setEquity(equityData);
       setDecisions(decisionsData);
       setAssetBreakdown(breakdownData);
-      setClaudeUsage(claudeUsageData);
+      // fetch non bloccante: non deve mai ritardare il refresh principale
+      fetchClaudeUsage().then(setClaudeUsage).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load agent data');
     } finally {
