@@ -315,7 +315,7 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
-        <Stat label="Spot PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Spot PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0)) >= 0 ? 'good' : 'bad'} />
         <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
         <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
@@ -364,7 +364,7 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
-        <Stat label="Perp PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="Perp PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0)) >= 0 ? 'good' : 'bad'} />
         <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
         <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
