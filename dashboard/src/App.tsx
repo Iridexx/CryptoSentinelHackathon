@@ -55,6 +55,7 @@ import type {
   PerpView,
   SettingsResponse,
   SpotView,
+  TradeChart,
   TradeDetail,
 } from './types';
 
@@ -445,14 +446,14 @@ export default function App() {
         {tab === 'overview' && (
           <div className="grid overview-grid">
             <GlobalPanel global={global} />
-            <SpotPanel spot={spot} />
-            <PerpPanel perp={perp} />
+            <SpotPanel spot={spot} session={session} />
+            <PerpPanel perp={perp} session={session} />
             <HealthPanel live={live} ready={ready} heartbeat={heartbeat} execution={execution} coverage={coverage} />
             <KillSwitchPanel agent={agent} onSet={(state) => void updateKillSwitch(state)} canAdmin={canAdmin} />
           </div>
         )}
-        {tab === 'spot' && <SpotPanel spot={spot} expanded />}
-        {tab === 'perp' && <PerpPanel perp={perp} expanded />}
+        {tab === 'spot' && <SpotPanel spot={spot} session={session} expanded />}
+        {tab === 'perp' && <PerpPanel perp={perp} session={session} expanded />}
         {tab === 'global' && <GlobalPanel global={global} expanded />}
         {tab === 'analytics' && (
           <AnalyticsPanel
@@ -568,7 +569,7 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
   );
 }
 
-function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expanded?: boolean }) {
+function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotView>; session: DashboardSession; expanded?: boolean }) {
   const data = spot.data;
   return (
     <Panel title="Spot Ranking View" className={expanded ? 'wide' : ''}>
@@ -608,7 +609,7 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
           {expanded && (
             <div className="history-section">
               <div className="section-head">Trade History</div>
-              <TradeHistoryTable trades={data.history} market="spot" />
+              <TradeHistoryTable trades={data.history} market="spot" session={session} />
             </div>
           )}
         </>
@@ -617,7 +618,7 @@ function SpotPanel({ spot, expanded = false }: { spot: LoadState<SpotView>; expa
   );
 }
 
-function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expanded?: boolean }) {
+function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpView>; session: DashboardSession; expanded?: boolean }) {
   const data = perp.data;
   return (
     <Panel title="Perp Futures View" className={expanded ? 'wide' : ''}>
@@ -658,7 +659,7 @@ function PerpPanel({ perp, expanded = false }: { perp: LoadState<PerpView>; expa
           {expanded && (
             <div className="history-section">
               <div className="section-head">Trade History</div>
-              <TradeHistoryTable trades={data.history} market="perp" />
+              <TradeHistoryTable trades={data.history} market="perp" session={session} />
             </div>
           )}
         </>
@@ -851,8 +852,107 @@ function AnalyticsPanel({
   );
 }
 
-function TradeDetailInline({ tradeId }: { tradeId: string }) {
-  return <div className="trade-inline">Selected trade: <strong>{tradeId}</strong>. Open the Analytics decision row for full detail.</div>;
+function TradeCandleChart({ chart }: { chart: TradeChart }) {
+  const candles = chart.candles ?? [];
+  if (candles.length < 2) {
+    return <p className="muted">Grafico non disponibile per questo trade.</p>;
+  }
+  const W = 520;
+  const H = 220;
+  const padX = 8;
+  const padY = 12;
+  const entry = Number(chart.entry_price);
+  const exit = Number(chart.exit_price);
+  const sl = chart.stop_loss != null ? Number(chart.stop_loss) : null;
+  const tp1 = chart.take_profit_1 != null ? Number(chart.take_profit_1) : null;
+  const tp2 = chart.take_profit_2 != null ? Number(chart.take_profit_2) : null;
+
+  const levels = [entry, exit, sl, tp1, tp2].filter((v): v is number => v != null && !Number.isNaN(v));
+  let hi = Math.max(...candles.map((c) => c.h), ...levels);
+  let lo = Math.min(...candles.map((c) => c.l), ...levels);
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const range = hi - lo;
+  const y = (price: number) => padY + (1 - (price - lo) / range) * (H - 2 * padY);
+  const colW = (W - 2 * padX) / candles.length;
+  const cx = (i: number) => padX + colW * (i + 0.5);
+
+  const ts = (s: string) => new Date(s).getTime();
+  const nearest = (target: number) => {
+    let best = 0;
+    let bestD = Infinity;
+    candles.forEach((c, i) => { const d = Math.abs(ts(c.t) - target); if (d < bestD) { bestD = d; best = i; } });
+    return best;
+  };
+  const entryIdx = nearest(ts(chart.opened_at));
+  const exitIdx = nearest(ts(chart.closed_at));
+  const exitGood = exit >= entry;
+
+  const levelLine = (price: number | null, color: string, dash: string) =>
+    price == null || Number.isNaN(price) ? null : (
+      <line x1={padX} x2={W - padX} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
+    );
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+      {candles.map((c, i) => {
+        const up = c.c >= c.o;
+        const color = up ? '#22c55e' : '#ef4444';
+        const bodyTop = y(Math.max(c.o, c.c));
+        const bodyBot = y(Math.min(c.o, c.c));
+        const bw = Math.max(1, colW * 0.6);
+        return (
+          <g key={i}>
+            <line x1={cx(i)} x2={cx(i)} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth="1" />
+            <rect x={cx(i) - bw / 2} y={bodyTop} width={bw} height={Math.max(1, bodyBot - bodyTop)} fill={color} />
+          </g>
+        );
+      })}
+      {levelLine(sl, '#ef4444', '5 4')}
+      {levelLine(tp1, '#22c55e', '5 4')}
+      {levelLine(tp2, '#16a34a', '2 4')}
+      {levelLine(entry, '#9ca3af', '1 0')}
+      <circle cx={cx(entryIdx)} cy={y(entry)} r="4" fill="#e5e7eb" stroke="#0b0e11" strokeWidth="1" />
+      <circle cx={cx(exitIdx)} cy={y(exit)} r="4" fill={exitGood ? '#22c55e' : '#ef4444'} stroke="#0b0e11" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function TradeDetailInline({ tradeId, session }: { tradeId: string; session: DashboardSession }) {
+  const [state, setState] = useState<LoadState<TradeDetail>>(emptyState());
+  useEffect(() => {
+    let active = true;
+    void loadDetail((value) => { if (active) setState(value); }, () => fetchTradeDetail(session, tradeId));
+    return () => { active = false; };
+  }, [tradeId, session]);
+
+  const detail = state.data;
+  return (
+    <div className="trade-inline">
+      {state.loading && <span className="muted">Caricamento dettaglio…</span>}
+      {state.error && <span className="error-text">{state.error}</span>}
+      {detail && (
+        <>
+          <div className="metric-grid">
+            <Metric label="Entry" value={fmtPrice(detail.entry_price)} />
+            <Metric label="Exit" value={fmtPrice(detail.current_or_exit_price)} />
+            <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
+            <Metric label="Motivo" value={detail.close_reason ? (CLOSE_REASON_LABELS[detail.close_reason] ?? detail.close_reason) : '—'} />
+          </div>
+          {detail.chart ? (
+            <div className="trade-chart">
+              <div className="section-head">Grafico del trade <span className="muted">{detail.chart.interval}</span></div>
+              <TradeCandleChart chart={detail.chart} />
+              <div className="chart-legend muted">
+                ⚪ Entry &nbsp; ● Exit &nbsp; <span style={{ color: '#ef4444' }}>- - SL</span> &nbsp; <span style={{ color: '#22c55e' }}>- - TP</span>
+              </div>
+            </div>
+          ) : (
+            <p className="muted">Grafico non disponibile per questo trade (chiuso prima dell'introduzione della funzione).</p>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 function TradeDetailCard({ detail }: { detail: TradeDetail }) {
@@ -1721,9 +1821,11 @@ const CLOSE_REASON_LABELS: Record<string, string> = {
 function TradeHistoryTable({
   trades,
   market,
+  session,
 }: {
   trades: SpotHistoryItem[] | PerpHistoryItem[];
   market: 'spot' | 'perp';
+  session: DashboardSession;
 }) {
   const [search, setSearch] = useState('');
   const [filterSide, setFilterSide] = useState('all');
@@ -1833,7 +1935,7 @@ function TradeHistoryTable({
           </tbody>
         </table>
       </div>
-      {openTrade && <TradeDetailInline tradeId={openTrade} />}
+      {openTrade && <TradeDetailInline tradeId={openTrade} session={session} />}
     </div>
   );
 }

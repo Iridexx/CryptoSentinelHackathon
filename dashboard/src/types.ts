@@ -184,7 +184,30 @@ export type TradeDetail = {
     reasoning?: string | null;
   } | null;
   events: Array<Record<string, unknown>>;
+  chart?: TradeChart | null;
   is_simulated: boolean;
+};
+
+export type TradeChartCandle = {
+  t: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+};
+
+export type TradeChart = {
+  interval: string;
+  market: string;
+  side: string;
+  entry_price: string;
+  exit_price: string;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
+  opened_at: string;
+  closed_at: string;
+  candles: TradeChartCandle[];
 };
 
 export type OperationalStats = {
