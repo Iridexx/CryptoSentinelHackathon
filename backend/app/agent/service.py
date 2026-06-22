@@ -19,6 +19,7 @@ from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMoment
 from backend.app.agent.watchlist import selected_watchlist
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
+from backend.app.data.market_data.cmc import CMCProvider
 from backend.app.execution.models import ExecutionStatus
 from backend.app.execution.perp_base import PerpOrder
 from backend.app.execution.perp_registry import PerpExecutionRegistry, get_perp_execution_registry
@@ -44,6 +45,8 @@ HEARTBEAT_TRADE_ASSET = "ETH"
 HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 # Distanza trailing-stop per il perp (coerente col livello generato dal segnale, 1%).
 PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
+# Sentinel per la lazy-init del resolver token (distingue "non inizializzato" da "None").
+_UNSET = object()
 
 
 class AgentService:
@@ -59,6 +62,7 @@ class AgentService:
         brain: ClaudeMetaController | None = None,
         spot_registry: ExecutionProviderRegistry | None = None,
         perp_registry: PerpExecutionRegistry | None = None,
+        token_resolver: CMCProvider | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.spot_signal = spot_signal or SpotMomentumSignal(self.settings)
@@ -71,6 +75,9 @@ class AgentService:
         self.price_feed = BinanceKlineFeed(
             timeout_seconds=self.settings.market_data_request_timeout_seconds
         )
+        # Resolver indirizzi token (CMC) per lo spot live; lazy, usato solo se serve.
+        self._token_resolver_override = token_resolver
+        self._token_resolver_cached: CMCProvider | None | object = _UNSET
 
     def status(self) -> dict:
         return {
@@ -674,7 +681,7 @@ class AgentService:
             if signal.get("from_asset") and signal.get("to_asset") and signal.get("amount_in_atomic") is not None:
                 swap_params: dict | None = {}
             else:
-                swap_params = self._build_spot_swap_params(signal, size_quote)
+                swap_params = await self._build_spot_swap_params(signal, size_quote)
             if swap_params is None:
                 execution = {"status": "skipped", "reason": "spot_token_not_mapped"}
             else:
@@ -686,24 +693,50 @@ class AgentService:
             asyncio.create_task(self._notify_trade_opened(signal, risk_decision, execution))
         return execution
 
-    def _build_spot_swap_params(self, signal: dict, size_quote: Decimal) -> dict | None:
+    def _token_resolver(self) -> CMCProvider | None:
+        """Resolver CMC per gli indirizzi token (lazy). None se non configurato."""
+        if self._token_resolver_override is not None:
+            return self._token_resolver_override
+        if self._token_resolver_cached is _UNSET:
+            try:
+                self._token_resolver_cached = (
+                    CMCProvider(self.settings) if getattr(self.settings, "cmc_api_key", None) else None
+                )
+            except Exception:
+                self._token_resolver_cached = None
+        return self._token_resolver_cached  # type: ignore[return-value]
+
+    async def _resolve_token_address(self, symbol: str) -> str | None:
+        """Indirizzo BSC del token: mappa statica (override) poi risoluzione CMC."""
+        entry = self.settings.spot_token_map.get(symbol.upper())
+        if entry:
+            address, _, _decimals = entry.partition(":")
+            if address:
+                return address
+        resolver = self._token_resolver()
+        if resolver is not None:
+            return await resolver.resolve_contract_address(symbol)
+        return None
+
+    async def _build_spot_swap_params(self, signal: dict, size_quote: Decimal) -> dict | None:
         """Costruisce from_asset/to_asset/amount_in_atomic per lo swap spot live.
 
-        Usa la mappa token configurata (settings.spot_token_map) e il quote token.
-        Ritorna None se mancano gli indirizzi necessari (spot live disabilitato/non mappato).
+        Indirizzi token: mappa statica (override .env) con fallback automatico a CMC.
+        Ritorna None se non risolvibili (spot live non eseguibile per quell'asset).
         """
-        quote_address = self.settings.spot_quote_token_address
-        if not quote_address:
-            return None
         asset = str(signal.get("asset") or "").upper()
-        token_entry = self.settings.spot_token_map.get(asset)
-        if not token_entry:
+        if not asset:
             return None
-        # Formato valore: "address" oppure "address:decimals".
-        to_address, _, _decimals = token_entry.partition(":")
+        to_address = await self._resolve_token_address(asset)
         if not to_address:
             return None
+        quote_address = self.settings.spot_quote_token_address
         quote_decimals = int(self.settings.spot_quote_token_decimals)
+        if not quote_address:
+            # Quote di default: USDT, risolto via CMC se non configurato esplicitamente.
+            quote_address = await self._resolve_token_address("USDT")
+        if not quote_address:
+            return None
         amount_in_atomic = int(size_quote * (Decimal(10) ** quote_decimals))
         if amount_in_atomic <= 0:
             return None

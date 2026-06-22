@@ -37,6 +37,11 @@ def _identity_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
+# Cache leggera in memoria symbol(BSC) -> (indirizzo|None, scadenza). Nessun archivio su disco.
+_CONTRACT_CACHE: dict[str, tuple[str | None, datetime]] = {}
+_CONTRACT_CACHE_TTL = timedelta(hours=12)
+
+
 class CMCProvider(CachedHttpProvider, MarketDataProvider):
     """Normalize CoinMarketCap REST responses behind MarketDataProvider."""
 
@@ -496,6 +501,53 @@ class CMCProvider(CachedHttpProvider, MarketDataProvider):
             if len(chunk) == 0:
                 break
         return [self._asset(item, currency) for item in items]
+
+    async def resolve_contract_address(
+        self,
+        symbol: str,
+        *,
+        platform_match: str = "BNB Smart Chain",
+    ) -> str | None:
+        """Risolve l'indirizzo del contratto del token sulla chain BSC via /v2/cryptocurrency/info.
+
+        Cache in memoria (TTL 12h) per symbol: nessun archivio persistente.
+        Ritorna None se non configurato, non trovato o in errore (fail-closed).
+        """
+        if not self.api_key:
+            return None
+        key = symbol.upper()
+        cached = _CONTRACT_CACHE.get(key)
+        if cached is not None and cached[1] > datetime.now(UTC):
+            return cached[0]
+        address: str | None = None
+        try:
+            payload = await self._request_json(
+                "/v2/cryptocurrency/info",
+                params={"symbol": key, "skip_invalid": "true", "aux": "platform"},
+                headers=self._headers,
+                estimated_credits=1,
+                cache_ttl_seconds=int(_CONTRACT_CACHE_TTL.total_seconds()),
+            )
+            data = payload.get("data", {})
+            items = data.get(key) or data.get(key.lower()) or []
+            if isinstance(items, dict):
+                items = [items]
+            for item in items:
+                for entry in item.get("contract_address", []) or []:
+                    name = str((entry.get("platform") or {}).get("name", ""))
+                    if platform_match in name or "BEP20" in name:
+                        address = entry.get("contract_address")
+                        break
+                if address is None:
+                    platform = item.get("platform") or {}
+                    if platform_match in str(platform.get("name", "")):
+                        address = platform.get("token_address")
+                if address:
+                    break
+        except ProviderError:
+            return None
+        _CONTRACT_CACHE[key] = (address, datetime.now(UTC) + _CONTRACT_CACHE_TTL)
+        return address
 
     def status(self) -> ProviderRuntimeStatus:
         return ProviderRuntimeStatus(

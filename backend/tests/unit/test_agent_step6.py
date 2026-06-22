@@ -99,6 +99,7 @@ def settings(**overrides):
         spot_quote_token_address=None,
         spot_quote_token_decimals=18,
         spot_token_map={},
+        cmc_api_key=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -525,7 +526,8 @@ async def test_heartbeat_triggers_at_20utc(db) -> None:
     assert trades[0].amount_quote == Decimal("7")
 
 
-def test_build_spot_swap_params_maps_token() -> None:
+@pytest.mark.asyncio
+async def test_build_spot_swap_params_maps_token() -> None:
     service = AgentService(
         settings(
             spot_quote_token_address="0xQUOTE",
@@ -535,28 +537,42 @@ def test_build_spot_swap_params_maps_token() -> None:
         spot_registry=SimpleNamespace(),
         perp_registry=SimpleNamespace(),
     )
-    params = service._build_spot_swap_params({"asset": "ETH"}, Decimal("10"))
+    params = await service._build_spot_swap_params({"asset": "ETH"}, Decimal("10"))
     assert params is not None
     assert params["from_asset"] == "0xQUOTE"
     assert params["to_asset"] == "0xETH"
     assert params["amount_in_atomic"] == 10 * 10**18
 
 
-def test_build_spot_swap_params_skips_when_unmapped_or_no_quote() -> None:
-    # Asset non in mappa => None.
+@pytest.mark.asyncio
+async def test_build_spot_swap_params_skips_when_unmapped_and_no_resolver() -> None:
+    # Asset non in mappa e nessun resolver CMC (api_key None) => None.
     s1 = AgentService(
         settings(spot_quote_token_address="0xQUOTE", spot_token_map={}),
         spot_registry=SimpleNamespace(),
         perp_registry=SimpleNamespace(),
     )
-    assert s1._build_spot_swap_params({"asset": "ETH"}, Decimal("10")) is None
-    # Quote token non configurato => None anche se l'asset e' mappato.
-    s2 = AgentService(
-        settings(spot_quote_token_address=None, spot_token_map={"ETH": "0xETH"}),
+    assert await s1._build_spot_swap_params({"asset": "ETH"}, Decimal("10")) is None
+
+
+@pytest.mark.asyncio
+async def test_build_spot_swap_params_resolves_via_cmc() -> None:
+    # Niente mappa statica: indirizzi risolti dal resolver CMC iniettato.
+    class FakeResolver:
+        async def resolve_contract_address(self, symbol: str, **_: object) -> str:
+            return {"ETH": "0xETHCMC", "USDT": "0xUSDTCMC"}[symbol.upper()]
+
+    service = AgentService(
+        settings(spot_quote_token_address=None, spot_token_map={}),
         spot_registry=SimpleNamespace(),
         perp_registry=SimpleNamespace(),
+        token_resolver=FakeResolver(),
     )
-    assert s2._build_spot_swap_params({"asset": "ETH"}, Decimal("10")) is None
+    params = await service._build_spot_swap_params({"asset": "ETH"}, Decimal("10"))
+    assert params is not None
+    assert params["from_asset"] == "0xUSDTCMC"
+    assert params["to_asset"] == "0xETHCMC"
+    assert params["amount_in_atomic"] == 10 * 10**18
 
 
 @pytest.mark.asyncio
