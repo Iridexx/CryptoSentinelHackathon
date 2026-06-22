@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FC } from 'react';
+import { useCallback, useEffect, useRef, useState, type FC, type TouchEvent as ReactTouchEvent } from 'react';
 import type { Coin } from '../types';
 import type { Currency } from '../hooks/useCurrency';
 import type { FavAlertData } from '../hooks/useFavoritePriceAlerts';
@@ -48,6 +48,8 @@ interface Props {
   rankDelta?: number;
   aiState?: AiState;
   onToggleAi?: (coin: Coin) => void;
+  muted?: boolean;
+  onToggleMute?: (coin: Coin) => void;
 }
 
 const AI_STYLES: Record<AiState, { label: string; className: string; title: string }> = {
@@ -58,7 +60,27 @@ const AI_STYLES: Record<AiState, { label: string; className: string; title: stri
   short: { label: 'PS', className: 'border-accent-red text-accent-red',    title: 'Perp short aperto.' },
 };
 
-const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, onChartTap, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta, aiState, onToggleAi }) => {
+const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, onChartTap, currency, showVolume, timeFrame = '24h', alertPending, onAlertTap, rankDelta, aiState, onToggleAi, muted = false, onToggleMute }) => {
+  // Coin mutata (solo nei preferiti): nessun avviso di movimento, niente bordo arancione.
+  const effectivePending = muted ? undefined : alertPending;
+  // Swipe orizzontale verso destra per attivare/disattivare il muto (solo se abilitato).
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const handleTouchStart = (e: ReactTouchEvent) => {
+    if (!onToggleMute) return;
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY };
+  };
+  const handleTouchEnd = (e: ReactTouchEvent) => {
+    if (!onToggleMute || !swipeStart.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeStart.current.x;
+    const dy = t.clientY - swipeStart.current.y;
+    swipeStart.current = null;
+    if (dx > 60 && Math.abs(dy) < 40) {
+      hapticMedium();
+      onToggleMute(coin);
+    }
+  };
   const displayChange =
     timeFrame === '1h' ? (coin.price_change_percentage_1h_in_currency ?? coin.price_change_percentage_24h ?? 0) :
     timeFrame === '7d' ? (coin.price_change_percentage_7d_in_currency ?? coin.price_change_percentage_24h ?? 0) :
@@ -128,13 +150,18 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
     ? rankFlash > 0
       ? 'bg-[#0c1f0c] ring-2 ring-green-500/60'
       : 'bg-[#1f0c0c] ring-2 ring-red-500/60'
-    : alertPending
+    : effectivePending
       ? 'bg-[#1c1208] ring-2 ring-orange-500/60 hover:bg-[#221508]'
       : 'bg-dark-800 hover:bg-dark-700';
 
   return (
-    <div ref={cardRef} className={`flex items-center gap-3 rounded-xl p-3 transition-colors relative ${cardBg}`}>
-      {alertPending && (
+    <div
+      ref={cardRef}
+      className={`flex items-center gap-3 rounded-xl p-3 transition-colors relative ${cardBg}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {effectivePending && (
         <span className="absolute top-1.5 right-10 w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
       )}
       {rankFlash !== null && (
@@ -147,8 +174,8 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
 
       {/* Tappable area (separata dai bottoni) */}
       <div
-        className={`flex items-center gap-3 flex-1 min-w-0 ${alertPending ? 'cursor-pointer' : ''}`}
-        onClick={alertPending && onAlertTap ? onAlertTap : undefined}
+        className={`flex items-center gap-3 flex-1 min-w-0 ${effectivePending ? 'cursor-pointer' : ''}`}
+        onClick={effectivePending && onAlertTap ? onAlertTap : undefined}
       >
         <span className="text-xs text-white font-mono w-6 text-right flex-shrink-0 tabular-nums">
           {coin.market_cap_rank ?? '—'}
@@ -163,10 +190,17 @@ const CoinCard: FC<Props> = ({ coin, isFavorite, onToggleFavorite, onAddAlert, o
             <span className="font-semibold text-sm text-white truncate">{coin.name}</span>
             <span className="text-xs text-gray-400 uppercase flex-shrink-0">{coin.symbol}</span>
           </div>
-          <div className="text-xs text-gray-400 mt-0.5">
-            {showVolume
-              ? `Vol: ${formatMarketCap(coin.total_volume, currency)}`
-              : `Cap: ${formatMarketCap(coin.market_cap, currency)}`}
+          <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+            <span>
+              {showVolume
+                ? `Vol: ${formatMarketCap(coin.total_volume, currency)}`
+                : `Cap: ${formatMarketCap(coin.market_cap, currency)}`}
+            </span>
+            {muted && (
+              <span className="inline-flex items-center gap-0.5 rounded bg-dark-600 px-1.5 py-0.5 text-[10px] font-semibold text-gray-400">
+                🔕 Mute
+              </span>
+            )}
           </div>
         </div>
 

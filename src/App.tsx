@@ -312,6 +312,32 @@ export default function App() {
     setSelectedFavAlert(null);
   }, []);
 
+  // "Ho capito" globale: azzera tutti gli avvisi pendenti e ricalibra i riferimenti
+  // al prezzo attuale (svuotando la cache: il prossimo sync li reimposta da ora).
+  const handleAckAllFavAlerts = useCallback(() => {
+    setPendingFavAlerts((prev) => {
+      prev.forEach((_, coinId) => dismissFavoritePushAlert(coinId));
+      return new Map();
+    });
+    setSelectedFavAlert(null);
+    try { localStorage.setItem('cs_fav_ref_prices', '{}'); } catch { /* ignore */ }
+  }, []);
+
+  // Mute per-coin nei preferiti: la coin resta nei preferiti ma non genera avvisi di movimento.
+  const [mutedFavorites, setMutedFavorites] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('cs_muted_favorites') ?? '[]') as string[]); }
+    catch { return new Set(); }
+  });
+  const handleToggleMuteFavorite = useCallback((coin: Coin) => {
+    setMutedFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(coin.id)) next.delete(coin.id);
+      else next.add(coin.id);
+      try { localStorage.setItem('cs_muted_favorites', JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
   const handleToggleAiSymbol = useCallback(async (symbol: string) => {
     const normalized = symbol.toUpperCase();
     if (!eligibleSymbols.has(normalized)) return;
@@ -497,10 +523,12 @@ export default function App() {
     const resolvedFavorites = new Map(
       favoriteCoins.map(c => [c.id, { id: c.id, name: c.name, symbol: c.symbol }]),
     );
-    return [...favorites].map(id => (
-      resolvedFavorites.get(id) ?? { id, name: id, symbol: '' }
-    ));
-  }, [favoriteCoins, favorites]);
+    return [...favorites]
+      .filter(id => !mutedFavorites.has(id))  // le coin mutate non vengono monitorate per gli avvisi
+      .map(id => (
+        resolvedFavorites.get(id) ?? { id, name: id, symbol: '' }
+      ));
+  }, [favoriteCoins, favorites, mutedFavorites]);
 
   // Keep favSyncRef up-to-date on every render so the background handler always has fresh data
   useEffect(() => {
@@ -824,6 +852,13 @@ export default function App() {
                         {favoriteSortBy === key && <span className="text-xs">{favoriteSortDesc ? '↓' : '↑'}</span>}
                       </button>
                     ))}
+                    <button
+                      onClick={() => { hapticLight(); handleAckAllFavAlerts(); }}
+                      className="flex-shrink-0 ml-auto flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-dark-700 text-gray-400 hover:text-white border border-transparent transition-colors"
+                      title="Azzera tutti gli avvisi e ricalibra i riferimenti"
+                    >
+                      ✓ Ho capito
+                    </button>
                   </div>
                   <div className="space-y-2">
                     {sortedFavoriteCoins.map((coin) => {
@@ -843,6 +878,8 @@ export default function App() {
                           onAlertTap={() => setSelectedFavAlert(pendingFavAlerts.get(coin.id) ?? null)}
                           aiState={isTradable ? (aiStateMap.get(coin.symbol.toUpperCase()) ?? 'inactive') : undefined}
                           onToggleAi={isTradable ? handleToggleAiCoin : undefined}
+                          muted={mutedFavorites.has(coin.id)}
+                          onToggleMute={handleToggleMuteFavorite}
                         />
                       );
                     })}
