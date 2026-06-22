@@ -194,6 +194,14 @@ const MOBILE_PAGE = 8;
 type SpotHistoryRow = NonNullable<SpotView['history']>[number];
 type PerpHistoryRow = NonNullable<PerpView['history']>[number];
 
+const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> = {
+  stop_loss: { label: 'Stop Loss', className: 'text-accent-red' },
+  take_profit_1: { label: 'Take Profit 1', className: 'text-accent-green' },
+  take_profit_2: { label: 'Take Profit 2', className: 'text-accent-green' },
+  trailing_stop: { label: 'Trailing Stop', className: 'text-accent-green' },
+  time_stop: { label: 'Time Stop', className: 'text-gray-300' },
+};
+
 const TradeHistoryList: FC<{
   trades: SpotHistoryRow[] | PerpHistoryRow[];
   market: 'spot' | 'perp';
@@ -282,7 +290,14 @@ const TradeHistoryList: FC<{
               </div>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
-              <span className="uppercase tracking-wide">{t.status}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="uppercase tracking-wide">{t.status}</span>
+                {t.close_reason && CLOSE_REASON_LABELS[t.close_reason] && (
+                  <span className={`rounded bg-dark-900 px-1.5 py-0.5 font-semibold ${CLOSE_REASON_LABELS[t.close_reason].className}`}>
+                    {CLOSE_REASON_LABELS[t.close_reason].label}
+                  </span>
+                )}
+              </span>
               <span>
                 {new Date(t.timestamp_utc).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -921,7 +936,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <h3 className="text-sm font-semibold text-white">Timeline</h3>
       <p className="text-xs text-gray-500">Open {new Date(detail.opened_at).toLocaleString('it-IT')}</p>
       <p className="text-xs text-gray-500">Close {detail.closed_at ? new Date(detail.closed_at).toLocaleString('it-IT') : '-'}</p>
-      <p className="text-xs text-gray-500">Reason {detail.close_reason ?? '-'}</p>
+      <p className="text-xs text-gray-500">Reason {detail.close_reason ? (CLOSE_REASON_LABELS[detail.close_reason]?.label ?? detail.close_reason) : '-'}</p>
     </section>
   </div>
 );

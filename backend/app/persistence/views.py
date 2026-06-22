@@ -75,6 +75,7 @@ class ViewService:
                     entry_price=_spot_trade_entry_price(t),
                     current_or_exit_price=t.price,
                     status=t.status,
+                    close_reason=_close_reason(t),
                     tx_hash=t.tx_hash,
                     timestamp_utc=t.timestamp_utc.isoformat(),
                     block_timestamp_utc=t.block_timestamp_utc.isoformat() if t.block_timestamp_utc else None,
@@ -133,6 +134,7 @@ class ViewService:
                     current_or_exit_price=t.price,
                     leverage=t.leverage,
                     status=t.status,
+                    close_reason=_close_reason(t),
                     tx_hash=t.tx_hash,
                     timestamp_utc=t.timestamp_utc.isoformat(),
                     block_timestamp_utc=t.block_timestamp_utc.isoformat() if t.block_timestamp_utc else None,
@@ -271,6 +273,20 @@ def _perp_trade_entry_price(t) -> Decimal:
         else:
             return t.price + t.pnl_usd / t.size
     return t.price
+
+
+def _close_reason(trade) -> str | None:
+    """Estrae il motivo di chiusura pulito dalle note (es. 'take_profit_1').
+
+    Le chiusure automatiche salvano notes='auto_close:<reason>' (con '_partial'
+    per le chiusure parziali). Le aperture non hanno un motivo di chiusura.
+    """
+    notes = trade.notes or ""
+    prefix = "auto_close:"
+    if not notes.startswith(prefix):
+        return None
+    reason = notes[len(prefix):].replace("_partial", "")
+    return reason or None
 
 
 def _is_spot_dry_run(trade) -> bool:

@@ -33,6 +33,7 @@ class SpotTradeView(BaseModel):
     entry_price: Decimal | None = None
     current_or_exit_price: Decimal | None = None
     status: str
+    close_reason: str | None = None
     tx_hash: str | None = None
     timestamp_utc: str
     block_timestamp_utc: str | None = None
@@ -80,6 +81,7 @@ class PerpTradeView(BaseModel):
     current_or_exit_price: Decimal | None = None
     leverage: int
     status: str
+    close_reason: str | None = None
     tx_hash: str | None = None
     timestamp_utc: str
     block_timestamp_utc: str | None = None

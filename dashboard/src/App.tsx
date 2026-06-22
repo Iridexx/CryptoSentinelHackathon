@@ -1710,6 +1710,14 @@ const HISTORY_PAGE = 10;
 type SpotHistoryItem = SpotView['history'][number];
 type PerpHistoryItem = PerpView['history'][number];
 
+const CLOSE_REASON_LABELS: Record<string, string> = {
+  stop_loss: 'Stop Loss',
+  take_profit_1: 'Take Profit 1',
+  take_profit_2: 'Take Profit 2',
+  trailing_stop: 'Trailing Stop',
+  time_stop: 'Time Stop',
+};
+
 function TradeHistoryTable({
   trades,
   market,
@@ -1791,6 +1799,7 @@ function TradeHistoryTable({
               <th>PnL $</th>
               <th>PnL %</th>
               <th>Status</th>
+              <th>Motivo</th>
               <th>Time</th>
             </tr>
           </thead>
@@ -1816,6 +1825,7 @@ function TradeHistoryTable({
                   <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_usd ?? '--'}</td>
                   <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_pct ?? '--'}%</td>
                   <td><span className="status-badge">{t.status}</span></td>
+                  <td>{t.close_reason ? (CLOSE_REASON_LABELS[t.close_reason] ?? t.close_reason) : '—'}</td>
                   <td className="date-cell">{shortDate(t.timestamp_utc)}</td>
                 </tr>
               );

@@ -52,6 +52,7 @@ export interface SpotTradeView {
   entry_price?: string | null;
   current_or_exit_price?: string | null;
   status: string;
+  close_reason?: string | null;
   tx_hash?: string | null;
   timestamp_utc: string;
 }
@@ -97,6 +98,7 @@ export interface PerpTradeView {
   current_or_exit_price?: string | null;
   leverage: number;
   status: string;
+  close_reason?: string | null;
   tx_hash?: string | null;
   timestamp_utc: string;
 }

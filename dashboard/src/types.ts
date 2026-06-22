@@ -26,6 +26,7 @@ export type SpotTrade = {
   entry_price?: string | null;
   current_or_exit_price?: string | null;
   status: string;
+  close_reason?: string | null;
   timestamp_utc: string;
   is_simulated?: boolean;
 };
@@ -72,6 +73,7 @@ export type PerpTrade = {
   current_or_exit_price?: string | null;
   leverage: number;
   status: string;
+  close_reason?: string | null;
   timestamp_utc: string;
   is_simulated?: boolean;
 };

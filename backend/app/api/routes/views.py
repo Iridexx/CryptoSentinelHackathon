@@ -12,7 +12,7 @@ from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
-from backend.app.persistence.views import ViewService
+from backend.app.persistence.views import ViewService, _close_reason
 from backend.app.schemas.views import GlobalView, PerpView, SpotView
 
 router = APIRouter(prefix="/api/v1/views", tags=["views"])
@@ -262,7 +262,7 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
         "opened_at": trade.timestamp_utc.isoformat(),
         "closed_at": trade.block_timestamp_utc.isoformat() if trade.block_timestamp_utc else None,
         "duration_seconds": None,
-        "close_reason": trade.notes,
+        "close_reason": _close_reason(trade),
         "decision": _decision_payload(decision),
         "events": [],
         "is_simulated": trade.trade_id.startswith("dry_") or trade.provider == "dry_run",
@@ -293,7 +293,7 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "opened_at": trade.timestamp_utc.isoformat(),
         "closed_at": trade.block_timestamp_utc.isoformat() if trade.block_timestamp_utc else None,
         "duration_seconds": None,
-        "close_reason": trade.notes,
+        "close_reason": _close_reason(trade),
         "decision": _decision_payload(decision),
         "events": [{"name": "tp1", "reached": position.tp1_reached}] if position else [],
         "is_simulated": trade.trade_id.startswith("dry_") or trade.venue == "dry_run",
