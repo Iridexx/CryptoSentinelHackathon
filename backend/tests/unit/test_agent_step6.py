@@ -21,6 +21,7 @@ from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.agent.watchlist import set_selected_watchlist
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
+from backend.app.persistence.repositories.positions import SpotPositionRepository
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import SpotPosition
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
@@ -519,6 +520,23 @@ async def test_heartbeat_triggers_at_20utc(db) -> None:
     assert trades[0].asset == "ETH"
     assert trades[0].notes == "dry_run_step6"
     assert trades[0].amount_quote == Decimal("7")
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_skips_when_eth_already_open(db) -> None:
+    service = AgentService(
+        settings(eligible_tokens=["ETH"] + [f"TOKEN_{i}" for i in range(148)]),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime(2026, 6, 22, 20, 0, tzinfo=UTC)
+    async with get_session_factory()() as session:
+        await SpotPositionRepository(session).save(_spot_position(0, asset="ETH"))
+        result = await service.slow_tick(session, now=now)
+
+    heartbeat_result = result["daily_trade_heartbeat"]
+    assert heartbeat_result["status"] == "satisfied"
+    assert heartbeat_result["reason"] == "asset_already_open"
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from backend.app.agent.signals.base import SignalModule, SignalPayload, SignalResult
 from backend.app.agent.signals.common.indicators import (
     Candle,
@@ -13,7 +15,7 @@ from backend.app.agent.signals.common.indicators import (
     sanitize_candles,
     vwap,
 )
-from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, get_kline_cache_entry
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 
@@ -22,6 +24,8 @@ MIN_SPOT_CANDLES = 50
 SPOT_WARMUP_CANDLES = 100
 # Distanza minima dello stop-loss dall'entry: evita stop troppo stretti quando l'ATR su 5m e' minimo.
 SPOT_MIN_STOP_DISTANCE_PCT = 1.0
+# TTL della cache klines per il warmup dello scanner: evita un fetch HTTP per ogni asset a ogni slow tick.
+SPOT_WARMUP_CACHE_TTL_SECONDS = 240
 
 
 class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
@@ -146,6 +150,12 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
         if not symbol:
             logger.info("spot_ohlcv_warmup_skipped", reason="symbol_unavailable", existing_count=existing_count)
             return existing
+        # Riusa la cache klines se sufficiente e fresca: evita un fetch HTTP per ogni scan.
+        cached = get_kline_cache_entry(market="spot", symbol=symbol, interval="5m")
+        if cached and len(cached.candles) >= MIN_SPOT_CANDLES:
+            age = (datetime.now(UTC) - cached.updated_at).total_seconds()
+            if age <= SPOT_WARMUP_CACHE_TTL_SECONDS:
+                return cached.candles
         try:
             candles = await self.feed.fetch(
                 symbol=symbol,

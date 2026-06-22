@@ -826,14 +826,45 @@ class AgentService:
                 "reason": self.risk.kill_switch.value,
                 "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
             }
+        # Dedup: se ETH e' gia' in posizione (spot o perp), non forzare un secondo trade.
+        open_spot = await SpotPositionRepository(session).open_for_user(user_id)
+        open_perp = await PerpPositionRepository(session).open_for_user(user_id)
+        if any(p.asset.upper() == HEARTBEAT_TRADE_ASSET for p in (*open_spot, *open_perp)):
+            return {
+                "status": "satisfied",
+                "trades_today": trades_today,
+                "reason": "asset_already_open",
+                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
+            }
+        # Prezzo live via feed riusato; SL/TP derivati dal segnale momentum reale.
         heartbeat_price = HEARTBEAT_TRADE_PRICE_USD_FALLBACK
         try:
-            feed = BinanceKlineFeed()
-            candles = await feed.fetch(symbol=f"{HEARTBEAT_TRADE_ASSET}USDT", interval="1m", limit=1, market="spot")
-            if candles:
-                heartbeat_price = Decimal(str(candles[-1].close))
+            ticker = await self.price_feed.fetch_prices(
+                symbols=[f"{HEARTBEAT_TRADE_ASSET}USDT"], market="spot"
+            )
+            heartbeat_price = ticker.get(f"{HEARTBEAT_TRADE_ASSET}USDT", heartbeat_price)
         except Exception:
             pass
+        sl = tp1 = tp2 = trailing = None
+        try:
+            momentum = await self.spot_signal.evaluate(_scanner_payload(HEARTBEAT_TRADE_ASSET, "spot"))
+            if momentum.get("price"):
+                heartbeat_price = Decimal(str(momentum["price"]))
+            sl = _optional_decimal(momentum.get("stop_loss"))
+            tp1 = _optional_decimal(momentum.get("take_profit_1"))
+            tp2 = _optional_decimal(momentum.get("take_profit_2"))
+            trailing = _optional_decimal(momentum.get("trailing_stop"))
+        except Exception:
+            pass
+        # Fallback: livelli di default se il segnale non li ha forniti (es. storico insufficiente).
+        if sl is None:
+            sl = heartbeat_price * Decimal("0.98")
+        if tp1 is None:
+            tp1 = heartbeat_price * Decimal("1.03")
+        if tp2 is None:
+            tp2 = heartbeat_price * Decimal("1.06")
+        if trailing is None:
+            trailing = heartbeat_price * Decimal("0.98")
         signal = {
             "signal_id": f"heartbeat_{now.date().isoformat()}",
             "market": "spot",
@@ -842,6 +873,10 @@ class AgentService:
             "quality": 0.86,
             "confidence": 0.86,
             "price": heartbeat_price,
+            "stop_loss": sl,
+            "take_profit_1": tp1,
+            "take_profit_2": tp2,
+            "trailing_stop": trailing,
             "quote_equity": Decimal(str(self.settings.dry_run_capital_usd)),
             "heartbeat_trade": True,
         }
