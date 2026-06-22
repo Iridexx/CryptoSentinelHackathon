@@ -408,6 +408,19 @@ export function fetchExecutionWallets(): Promise<ExecutionWalletsResponse> {
   return request<ExecutionWalletsResponse>('/api/v1/execution/wallets');
 }
 
+export interface ClaudeUsageView {
+  call_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_cost_usd: number;
+  budget_usd: number;
+  budget_pct: number;
+}
+
+export function fetchClaudeUsage(): Promise<ClaudeUsageView> {
+  return request<ClaudeUsageView>('/api/v1/agent/claude-usage');
+}
+
 export function setKillSwitch(state: KillSwitchState, adminToken: string): Promise<AgentStatus> {
   return request<AgentStatus>('/api/v1/agent/kill-switch', {
     method: 'PUT',
