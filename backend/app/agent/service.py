@@ -677,11 +677,14 @@ class AgentService:
 
     async def _handle_signal(self, signal: dict, session: AsyncSession) -> dict:
         if signal.get("action") == "skip":
+            skip_reasoning = _build_skip_reasoning(signal, self.settings)
             risk_decision = RiskDecision(False, f"signal_skipped:{signal.get('reason') or 'skip'}")
             brain_decision = self.brain._local_fallback(
                 signal, risk_decision.__dict__, reason_prefix="no_signal_skip"
             )
-            decision = await self._record_decision(session, signal, risk_decision, brain_decision)
+            decision = await self._record_decision(
+                session, signal, risk_decision, brain_decision, override_reasoning=skip_reasoning
+            )
             return {
                 "signal": signal,
                 "risk": risk_decision.__dict__,
@@ -773,7 +776,16 @@ class AgentService:
             last_ts = last_ts.replace(tzinfo=UTC)
         return (now - last_ts) < timedelta(minutes=minutes)
 
-    async def _record_decision(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> AgentDecision:
+    async def _record_decision(
+        self,
+        session: AsyncSession,
+        signal: dict,
+        risk_decision,
+        brain_decision,
+        *,
+        override_reasoning: str | None = None,
+    ) -> AgentDecision:
+        reasoning = override_reasoning if override_reasoning is not None else f"{brain_decision.reasoning}; risk={risk_decision.reason}"
         decision = AgentDecision(
             decision_id=f"dec_{uuid4().hex}",
             user_id=str(self.settings.default_user_id),
@@ -783,7 +795,7 @@ class AgentService:
             signal_quality=Decimal(str(signal.get("quality", 0))),
             confidence=brain_decision.confidence,
             action=brain_decision.action,
-            reasoning=f"{brain_decision.reasoning}; risk={risk_decision.reason}",
+            reasoning=reasoning,
             execution_result=None,
             trade_id=None,
         )
@@ -1254,6 +1266,65 @@ def _scanner_summary(result: dict) -> dict:
         "risk_allowed": risk.get("allowed"),
         "execution_status": execution.get("status"),
     }
+
+
+def _build_skip_reasoning(signal: dict, settings) -> str:
+    """Costruisce un reasoning leggibile per i segnali skippati, con valori reali e threshold."""
+    reason = signal.get("reason") or "skip"
+    components = signal.get("components") or {}
+    quality = float(signal.get("quality") or 0)
+    price = float(signal.get("price") or 0)
+
+    def _ok(cond: bool) -> str:
+        return "✓" if cond else "✗"
+
+    if reason == "spot_filters_not_satisfied":
+        trend = float(components.get("trend_structure") or 0)
+        rvol = float(components.get("relative_volume") or 0)
+        vol_pct = float(components.get("volatility_pct") or 0)
+        rsi_v = components.get("rsi")
+        ext = float(components.get("vwap_atr_extension") or 0)
+        ext_ok = bool(components.get("extension_ok", True))
+        thr_rvol = float(settings.spot_relative_volume_threshold)
+        thr_vol = float(settings.spot_volatility_trigger_pct)
+        thr_ext = float(settings.spot_vwap_atr_extension_limit)
+        thr_q = float(settings.spot_confidence_threshold)
+        parts = [
+            f"trend={trend:.2f}{_ok(trend >= 0.45)}",
+            f"rvol={rvol:.2f}{_ok(rvol >= thr_rvol)}(≥{thr_rvol})",
+            f"vol%={vol_pct:.2f}{_ok(vol_pct >= thr_vol)}(≥{thr_vol})",
+            f"ext={ext:.2f}{_ok(ext_ok)}(≤{thr_ext})",
+        ]
+        if rsi_v is not None:
+            parts.append(f"rsi={float(rsi_v):.0f}{_ok(45 <= float(rsi_v) <= 72)}(45-72)")
+        parts.append(f"q={quality:.2f}{_ok(quality >= thr_q)}(≥{thr_q})")
+        return "spot_skip: " + " | ".join(parts)
+
+    if reason == "perp_filters_not_satisfied":
+        poc = components.get("poc")
+        vah = components.get("vah")
+        val = components.get("val")
+        vwap_v = components.get("vwap")
+        trend_bias = components.get("trend_bias", "?")
+        side = signal.get("side")
+        parts = [
+            f"price={price:.5g}",
+            f"poc={poc:.5g}" if poc else "poc=?",
+            f"val={val:.5g}" if val else "val=?",
+            f"vah={vah:.5g}" if vah else "vah=?",
+            f"vwap={vwap_v:.5g}" if vwap_v else "vwap=?",
+            f"bias={trend_bias}",
+            f"side={side or 'none'}",
+            f"q={quality:.2f}(≥0.60)",
+        ]
+        return "perp_skip: " + " | ".join(parts)
+
+    if reason == "insufficient_ohlcv_history":
+        count = components.get("candle_count", "?")
+        req = components.get("required_candles", "?")
+        return f"skip: {count}/{req} candele disponibili"
+
+    return f"skip: {reason}"
 
 
 def _coverage_item(
