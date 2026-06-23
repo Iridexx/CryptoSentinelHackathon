@@ -834,3 +834,11 @@ async def test_bitget_spot_kline_parsing() -> None:
     assert len(candles) == 1
     c = candles[0]
     assert (c.open, c.high, c.low, c.close) == (100.0, 110.0, 95.0, 105.0)
+
+
+def test_estimate_liquidation_price() -> None:
+    from backend.app.agent.service import _estimate_liquidation_price
+
+    assert _estimate_liquidation_price(Decimal("100"), 2, "long") == Decimal("50.00000000")
+    assert _estimate_liquidation_price(Decimal("100"), 2, "short") == Decimal("150.00000000")
+    assert _estimate_liquidation_price(Decimal("100"), 0, "long") is None

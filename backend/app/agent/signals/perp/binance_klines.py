@@ -130,6 +130,27 @@ class BinanceKlineFeed:
         return result
 
 
+    async def fetch_funding_rates(self, *, assets: list[str]) -> dict[str, Decimal]:
+        """lastFundingRate per asset dai futures Binance (premiumIndex). Best-effort."""
+        if not assets:
+            return {}
+        wanted = {f"{a.upper()}USDT": a.upper() for a in assets}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.get(f"{self.futures_base_url}/fapi/v1/premiumIndex")
+            if response.status_code >= 400:
+                return {}
+            out: dict[str, Decimal] = {}
+            for row in response.json():
+                sym = str(row.get("symbol", "")).upper()
+                rate = row.get("lastFundingRate")
+                if sym in wanted and rate is not None:
+                    out[wanted[sym]] = Decimal(str(rate))
+            return out
+        except Exception:
+            return {}
+
+
 def get_kline_cache_entry(*, market: BinanceMarket, symbol: str, interval: str = "5m") -> BinanceKlineCacheEntry | None:
     """Return the latest in-memory kline cache entry for coverage diagnostics."""
 

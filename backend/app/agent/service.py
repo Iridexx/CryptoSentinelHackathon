@@ -56,6 +56,18 @@ PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
 _UNSET = object()
 
 
+def _estimate_liquidation_price(entry: Decimal, leverage: int, side: str) -> Decimal | None:
+    """Stima il prezzo di liquidazione (cross, senza maintenance margin).
+
+    long: entry * (1 - 1/leva); short: entry * (1 + 1/leva).
+    """
+    if leverage <= 0 or entry <= 0:
+        return None
+    frac = Decimal(1) / Decimal(leverage)
+    liq = entry * (Decimal(1) - frac) if side == "long" else entry * (Decimal(1) + frac)
+    return liq.quantize(Decimal("0.00000001"))
+
+
 def _auto_chart_interval(duration_min: int) -> tuple[str, int]:
     """Intervallo candele in base alla durata del trade -> (interval, minuti per candela)."""
     if duration_min <= 6 * 60:
@@ -223,14 +235,31 @@ class AgentService:
             except Exception:
                 pass
 
+        # Funding rate live (best-effort) per le posizioni perp aperte.
+        funding_rates: dict[str, Decimal] = {}
+        if perp_assets:
+            try:
+                funding_rates = await self.price_feed.fetch_funding_rates(assets=perp_assets)
+            except Exception:
+                pass
+
         updated = False
         for pos in perp_positions:
+            funding = funding_rates.get(pos.asset)
+            if funding is not None:
+                pos.funding_rate = funding
+                pos.updated_at = now
+                session.add(pos)
+                updated = True
             price = perp_prices.get(pos.asset)
             if price is None:
                 continue
             pnl = (price - pos.entry_price) * pos.size if pos.side == "long" else (pos.entry_price - price) * pos.size
             pos.current_price = price
             pos.pnl_unrealized = pnl
+            # Aggiorna anche il liq price se mancante (posizioni aperte prima del fix).
+            if pos.liquidation_price is None:
+                pos.liquidation_price = _estimate_liquidation_price(pos.entry_price, pos.leverage, pos.side)
             pos.updated_at = now
             session.add(pos)
             updated = True
@@ -870,6 +899,9 @@ class AgentService:
                     take_profit_1=_optional_decimal(signal.get("take_profit_1")),
                     take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                     trailing_stop=_optional_decimal(signal.get("trailing_stop")),
+                    liquidation_price=_estimate_liquidation_price(
+                        price, int(signal.get("leverage") or self.settings.perp_default_leverage), side
+                    ),
                     venue="dry_run",
                     open_trade_id=trade_id,
                     opened_at=now,
