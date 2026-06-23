@@ -372,11 +372,10 @@ class AgentService:
             pnl_usd=pnl,
         )
         await SpotTradeRepository(session).save(close_trade)
-        if not partial:
-            await self._snapshot_closed_trade(
-                session, pos, market="spot", exit_price=exit_price,
-                close_trade_id=close_trade.trade_id, now=now,
-            )
+        await self._snapshot_closed_trade(
+            session, pos, market="spot", exit_price=exit_price,
+            close_trade_id=close_trade.trade_id, now=now,
+        )
         logger.info("spot_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
 
@@ -425,11 +424,10 @@ class AgentService:
             pnl_usd=pnl,
         )
         await PerpTradeRepository(session).save(close_trade)
-        if not partial:
-            await self._snapshot_closed_trade(
-                session, pos, market="perp", exit_price=exit_price,
-                close_trade_id=close_trade.trade_id, now=now,
-            )
+        await self._snapshot_closed_trade(
+            session, pos, market="perp", exit_price=exit_price,
+            close_trade_id=close_trade.trade_id, now=now,
+        )
         logger.info("perp_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
 
