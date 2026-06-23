@@ -1171,6 +1171,30 @@ interface AgentTabProps {
   onToggleAiSymbol: (symbol: string) => void;
 }
 
+// Cache a livello di modulo: conserva l'ultimo stato dell'agente tra unmount/mount
+// (es. quando si cambia tab e si torna). Al rientro lo stato si inizializza con gli
+// ultimi valori noti e l'aggiornamento avviene in silenzio, invece di mostrare i
+// valori a 0 durante il primo fetch.
+const agentCache: {
+  pane: AgentPane;
+  status: AgentStatus | null;
+  spot: SpotView | null;
+  perp: PerpView | null;
+  global: GlobalView | null;
+  equity: EquityCurveResponse | null;
+  equityRange: EquityRange;
+  decisions: AgentDecisionResponse | null;
+  assetBreakdown: AssetBreakdownResponse | null;
+  settings: AgentMobileSettings | null;
+  execWallets: ExecutionWalletsResponse | null;
+  claudeUsage: ClaudeUsageView | null;
+  loaded: boolean;
+} = {
+  pane: 'spot', status: null, spot: null, perp: null, global: null, equity: null,
+  equityRange: '24h', decisions: null, assetBreakdown: null, settings: null,
+  execWallets: null, claudeUsage: null, loaded: false,
+};
+
 const AgentTab: FC<AgentTabProps> = ({
   adminToken,
   onAdminToken,
@@ -1180,30 +1204,30 @@ const AgentTab: FC<AgentTabProps> = ({
   watchlistError,
   onToggleAiSymbol,
 }) => {
-  const [pane, setPane] = useState<AgentPane>('spot');
-  const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [spot, setSpot] = useState<SpotView | null>(null);
-  const [perp, setPerp] = useState<PerpView | null>(null);
-  const [global, setGlobal] = useState<GlobalView | null>(null);
-  const [equity, setEquity] = useState<EquityCurveResponse | null>(null);
-  const [equityRange, setEquityRange] = useState<EquityRange>('24h');
+  const [pane, setPane] = useState<AgentPane>(agentCache.pane);
+  const [status, setStatus] = useState<AgentStatus | null>(agentCache.status);
+  const [spot, setSpot] = useState<SpotView | null>(agentCache.spot);
+  const [perp, setPerp] = useState<PerpView | null>(agentCache.perp);
+  const [global, setGlobal] = useState<GlobalView | null>(agentCache.global);
+  const [equity, setEquity] = useState<EquityCurveResponse | null>(agentCache.equity);
+  const [equityRange, setEquityRange] = useState<EquityRange>(agentCache.equityRange);
   const equityRangeRef = useRef<EquityRange>(equityRange);
   equityRangeRef.current = equityRange;
-  const [decisions, setDecisions] = useState<AgentDecisionResponse | null>(null);
-  const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(null);
+  const [decisions, setDecisions] = useState<AgentDecisionResponse | null>(agentCache.decisions);
+  const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(agentCache.assetBreakdown);
   const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
-  const [settings, setSettings] = useState<AgentMobileSettings>(defaultSettings);
-  const [execWallets, setExecWallets] = useState<ExecutionWalletsResponse | null>(null);
-  const [claudeUsage, setClaudeUsage] = useState<ClaudeUsageView | null>(null);
+  const [settings, setSettings] = useState<AgentMobileSettings>(agentCache.settings ?? defaultSettings);
+  const [execWallets, setExecWallets] = useState<ExecutionWalletsResponse | null>(agentCache.execWallets);
+  const [claudeUsage, setClaudeUsage] = useState<ClaudeUsageView | null>(agentCache.claudeUsage);
   const [validation, setValidation] = useState<CredentialValidationResponse | null>(null);
-  const [refreshing, setRefreshing] = useState(true);
+  const [refreshing, setRefreshing] = useState(!agentCache.loaded);
   const [justSynced, setJustSynced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
     // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
     // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
     const results = await Promise.allSettled([
@@ -1220,12 +1244,34 @@ const AgentTab: FC<AgentTabProps> = ({
     const failed = results.filter((r) => r.status === 'rejected').length;
     setError(failed > 0 ? `${failed} endpoint non raggiungibili` : '');
     setRefreshing(false);
-    setJustSynced(true);
-    window.setTimeout(() => setJustSynced(false), 2500);
+    if (!silent) {
+      setJustSynced(true);
+      window.setTimeout(() => setJustSynced(false), 2500);
+    }
   }, []);
 
+  // Mirror dello stato nella cache di modulo: al prossimo mount (rientro nella tab)
+  // i valori vengono ripristinati senza azzeramenti.
   useEffect(() => {
-    refresh();
+    agentCache.pane = pane;
+    agentCache.status = status;
+    agentCache.spot = spot;
+    agentCache.perp = perp;
+    agentCache.global = global;
+    agentCache.equity = equity;
+    agentCache.equityRange = equityRange;
+    agentCache.decisions = decisions;
+    agentCache.assetBreakdown = assetBreakdown;
+    agentCache.settings = settings;
+    agentCache.execWallets = execWallets;
+    agentCache.claudeUsage = claudeUsage;
+    if (status || spot || perp || global || equity) agentCache.loaded = true;
+  }, [pane, status, spot, perp, global, equity, equityRange, decisions, assetBreakdown, settings, execWallets, claudeUsage]);
+
+  useEffect(() => {
+    // Al primo mount in assoluto mostra l'indicatore; ai rientri (cache popolata)
+    // aggiorna in silenzio mantenendo i valori precedenti.
+    refresh(agentCache.loaded);
   }, [refresh]);
 
   useEffect(() => {
