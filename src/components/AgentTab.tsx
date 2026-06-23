@@ -1367,7 +1367,7 @@ const AgentTab: FC<AgentTabProps> = ({
             <p className="truncate text-xs text-gray-500">{status?.mode ?? settings.mode} - {status?.execution_mode ?? settings.execution_mode}</p>
           </div>
           <button
-            onClick={refresh}
+            onClick={() => void refresh()}
             disabled={refreshing}
             aria-label="Aggiorna"
             className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-dark-700 text-gray-300 disabled:opacity-70"
