@@ -14,6 +14,7 @@ from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
 from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
+from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.views import ViewService, _close_reason
 from backend.app.schemas.views import GlobalView, PerpView, SpotView
@@ -74,7 +75,8 @@ async def equity_curve(
         stmt = stmt.where(PnlSnapshot.timestamp_utc >= since)
     stmt = stmt.order_by(PnlSnapshot.timestamp_utc.asc())
     snapshots = list((await session.execute(stmt)).scalars().all())
-    initial = _initial_equity(snapshots, settings)
+    portfolio = await PnlRepository(session).get_portfolio(user_id)
+    initial = _initial_equity(snapshots, settings, portfolio, market)
     benchmark = await _btc_benchmark(snapshots)
     items = []
     for snapshot in snapshots:
@@ -275,9 +277,19 @@ async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
     return out
 
 
-def _initial_equity(snapshots: list[PnlSnapshot], settings) -> Decimal:
+def _initial_equity(snapshots: list[PnlSnapshot], settings, portfolio=None, market: str = "global") -> Decimal:
+    """Baseline per il PnL cumulato del grafico.
+
+    Per il market 'global' usa il capitale iniziale configurato
+    (portfolio.initial_equity_usd), cosi' il "PnL cumulato" del grafico
+    combacia con la "PnL %" della scheda Global. In assenza usa il primo
+    snapshot disponibile come fallback. Per spot/perp usa l'equity del primo
+    snapshot del mercato specifico.
+    """
+    if market == "global" and portfolio is not None and portfolio.initial_equity_usd:
+        return Decimal(portfolio.initial_equity_usd)
     if snapshots:
-        return Decimal(snapshots[0].total_equity_usd)
+        return Decimal(_market_equity(snapshots[0], market))
     return Decimal(str(settings.dry_run_capital_usd))
 
 
