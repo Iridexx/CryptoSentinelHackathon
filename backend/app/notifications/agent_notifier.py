@@ -113,11 +113,14 @@ class AgentNotifier:
         pnl_usd: Decimal,
         pnl_pct: Decimal,
         close_reason: str,
+        is_dry_run: bool = False,
     ) -> bool:
         """Push ad alta priorità per chiusura posizione con PnL."""
         prefs = self.get_preferences(user_id)
         pref_key = "spot_trades" if market == "spot" else "perp_trades"
         if not getattr(prefs, pref_key, True):
+            return False
+        if is_dry_run and not self.settings.notify_dry_run_trades:
             return False
 
         topic = (

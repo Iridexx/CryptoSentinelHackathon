@@ -144,7 +144,7 @@ async def test_notify_trade_opened_perp():
 
 @pytest.mark.asyncio
 async def test_notify_dry_run_blocked():
-    """dry_run non genera notifica se notify_dry_run_trades=False."""
+    """dry_run non genera notifica (né apertura né chiusura) se notify_dry_run_trades=False."""
     settings = _make_settings(notify_dry_run_trades=False)
     notifier, mock_fcm, mock_svc = _notifier_with_mocks(settings=settings)
 
@@ -153,7 +153,7 @@ async def test_notify_dry_run_blocked():
         patch("backend.app.notifications.agent_notifier.set_runtime_value"),
         patch("backend.app.notifications.agent_notifier.get_notification_service", return_value=mock_svc),
     ):
-        result = await notifier.notify_trade_opened(
+        open_result = await notifier.notify_trade_opened(
             user_id=USER_ID,
             trade_id="dry_001",
             asset="BTC",
@@ -164,8 +164,19 @@ async def test_notify_dry_run_blocked():
             stop_loss=None,
             is_dry_run=True,
         )
+        close_result = await notifier.notify_trade_closed(
+            user_id=USER_ID,
+            trade_id="dry_cls_001",
+            asset="BTC",
+            market="spot",
+            pnl_usd=Decimal("5"),
+            pnl_pct=Decimal("5"),
+            close_reason="take_profit_1",
+            is_dry_run=True,
+        )
 
-    assert result is False
+    assert open_result is False
+    assert close_result is False
     mock_fcm.send.assert_not_called()
 
 

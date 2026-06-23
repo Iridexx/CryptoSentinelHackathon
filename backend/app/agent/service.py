@@ -484,6 +484,7 @@ class AgentService:
                         pnl_usd=pnl,
                         pnl_pct=pnl_pct,
                         close_reason=reason,
+                        is_dry_run=self.settings.execution_mode == "dry_run",
                     )
                 )
 
@@ -547,6 +548,7 @@ class AgentService:
                         pnl_usd=pnl,
                         pnl_pct=pnl_pct,
                         close_reason=reason,
+                        is_dry_run=self.settings.execution_mode == "dry_run",
                     )
                 )
 
