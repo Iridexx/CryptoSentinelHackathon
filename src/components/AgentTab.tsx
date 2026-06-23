@@ -48,6 +48,20 @@ const fmtPrice = (value: string | number | null | undefined): string => {
   return `$${sig.toString()}`;
 };
 
+const fmtPriceFull = (value: string | number | null | undefined): string => {
+  if (value == null || value === '') return '-';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '-';
+  if (n === 0) return '$0';
+  const s = String(value);
+  const dotIdx = s.indexOf('.');
+  const intStr = Math.trunc(Math.abs(n)).toLocaleString('en-US');
+  const sign = n < 0 ? '-' : '';
+  if (dotIdx === -1) return `${sign}$${intStr}`;
+  const decStr = s.slice(dotIdx + 1).replace(/0+$/, '');
+  return decStr ? `${sign}$${intStr}.${decStr}` : `${sign}$${intStr}`;
+};
+
 const fmtPct = (value: string | number | null | undefined) => {
   const n = Number(value ?? 0);
   return `${n.toFixed(2)}%`;
@@ -1148,7 +1162,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       ].map(([label, value]) => (
         <div key={label} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
           <span className="text-gray-500">{label}</span>
-          <span className="text-white">{value ? fmtUsd(value) : '-'}</span>
+          <span className="text-white">{value ? fmtPriceFull(value) : '-'}</span>
         </div>
       ))}
     </section>
