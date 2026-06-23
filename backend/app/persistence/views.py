@@ -109,7 +109,7 @@ class ViewService:
                     current_price=p.current_price,
                     leverage=p.leverage,
                     pnl_unrealized=p.pnl_unrealized,
-                    pnl_pct=_position_pnl_pct(p.pnl_unrealized, p.entry_price, p.size),
+                    pnl_pct=_position_pnl_pct(p.pnl_unrealized, p.entry_price, p.size, p.leverage),
                     stop_loss=p.stop_loss,
                     take_profit_1=p.take_profit_1,
                     take_profit_2=p.take_profit_2,
@@ -129,7 +129,7 @@ class ViewService:
                     size=t.size,
                     price=t.price,
                     pnl_usd=_fmt_pnl(t.pnl_usd),
-                    pnl_pct=_pnl_pct_str(t.pnl_usd, _perp_trade_entry_price(t), t.size),
+                    pnl_pct=_pnl_pct_str(t.pnl_usd, _perp_trade_entry_price(t), t.size, t.leverage or 1),
                     entry_price=_perp_trade_entry_price(t),
                     current_or_exit_price=t.price,
                     leverage=t.leverage,
@@ -235,22 +235,22 @@ def _fmt_pnl(pnl: Decimal | None) -> str:
     return f"{sign}{pnl:.2f}"
 
 
-def _pnl_pct_str(pnl: Decimal | None, price: Decimal, size: Decimal) -> str:
+def _pnl_pct_str(pnl: Decimal | None, price: Decimal, size: Decimal, leverage: int = 1) -> str:
     if pnl is None or price <= 0 or size <= 0:
         return "+0.00"
-    exposure = price * size
-    return _format_signed_pct(pnl / exposure * 100)
+    margin = price * size / Decimal(leverage)
+    return _format_signed_pct(pnl / margin * 100)
 
 
 def _format_signed_pct(value: Decimal) -> str:
     return f"{value.quantize(Decimal('0.01')):+.2f}"
 
 
-def _position_pnl_pct(pnl: Decimal, entry_price: Decimal, size: Decimal) -> str:
-    exposure = entry_price * size
-    if exposure <= 0:
+def _position_pnl_pct(pnl: Decimal, entry_price: Decimal, size: Decimal, leverage: int = 1) -> str:
+    margin = entry_price * size / Decimal(leverage)
+    if margin <= 0:
         return "+0.00"
-    return _format_signed_pct(pnl / exposure * Decimal("100"))
+    return _format_signed_pct(pnl / margin * Decimal("100"))
 
 
 def _spot_trade_entry_price(t) -> Decimal:

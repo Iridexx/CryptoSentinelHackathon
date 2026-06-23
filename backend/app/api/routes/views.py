@@ -251,11 +251,11 @@ def _signed(value: str) -> str:
     return f"{decimal:+.2f}"
 
 
-def _pnl_pct(pnl: Decimal, entry: Decimal, size: Decimal) -> str:
-    exposure = entry * size
-    if exposure <= 0:
+def _pnl_pct(pnl: Decimal, entry: Decimal, size: Decimal, leverage: int = 1) -> str:
+    margin = entry * size / Decimal(leverage)
+    if margin <= 0:
         return "+0.00"
-    return _signed(_q2(pnl / exposure * Decimal("100")))
+    return _signed(_q2(pnl / margin * Decimal("100")))
 
 
 def _decision_payload(decision: AgentDecision | None) -> dict | None:
@@ -390,7 +390,7 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "entry_price": _q2(entry),
         "current_or_exit_price": _q2(current),
         "pnl_usd": _signed(_q2(pnl)),
-        "pnl_pct": _pnl_pct(pnl, entry, size),
+        "pnl_pct": _pnl_pct(pnl, entry, size, leverage or 1),
         "stop_loss": _level(position, "stop_loss", chart, "stop_loss"),
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),

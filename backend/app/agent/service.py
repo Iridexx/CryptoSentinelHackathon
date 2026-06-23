@@ -866,6 +866,9 @@ class AgentService:
             return {"status": "skipped", "reason": "price_unavailable"}
         if signal.get("market") == "perp":
             side = str(signal.get("side") or "long")
+            leverage = int(signal.get("leverage") or self.settings.perp_default_leverage)
+            # size rappresenta i contratti controllati: capitale * leva / prezzo
+            leveraged_size = size_quote * Decimal(leverage) / price
             await PerpTradeRepository(session).save(
                 PerpTrade(
                     trade_id=trade_id,
@@ -873,9 +876,9 @@ class AgentService:
                     asset=str(signal.get("asset")),
                     side=side,
                     direction="open",
-                    size=size_quote / price,
+                    size=leveraged_size,
                     price=price,
-                    leverage=int(signal.get("leverage") or self.settings.perp_default_leverage),
+                    leverage=leverage,
                     status=ExecutionStatus.PREPARED.value,
                     timestamp_utc=now,
                     venue="dry_run",
@@ -889,10 +892,10 @@ class AgentService:
                     user_id=str(self.settings.default_user_id),
                     asset=str(signal.get("asset")),
                     side=side,
-                    size=size_quote / price,
+                    size=leveraged_size,
                     entry_price=price,
                     current_price=price,
-                    leverage=int(signal.get("leverage") or self.settings.perp_default_leverage),
+                    leverage=leverage,
                     stop_loss=_optional_decimal(signal.get("stop_loss")),
                     take_profit_1=_optional_decimal(signal.get("take_profit_1")),
                     take_profit_2=_optional_decimal(signal.get("take_profit_2")),
