@@ -44,7 +44,7 @@ class ViewService:
         trades = await trade_repo.list_for_user(user_id, limit=100)
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
-        realized = sum((t.pnl_usd for t in trades if t.pnl_usd is not None), Decimal("0"))
+        realized = await trade_repo.sum_realized_pnl(user_id)
         return SpotView(
             open_positions=[
                 SpotPositionView(
@@ -96,7 +96,7 @@ class ViewService:
         trades = await trade_repo.list_for_user(user_id, limit=100)
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
-        realized = sum((t.pnl_usd for t in trades if t.pnl_usd is not None), Decimal("0"))
+        realized = await trade_repo.sum_realized_pnl(user_id)
         history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
         return PerpView(
             open_positions=[
