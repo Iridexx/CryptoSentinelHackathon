@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import {
   fetchAgentSettings,
   fetchAgentStatus,
@@ -21,6 +21,7 @@ import {
   type AssetBreakdownResponse,
   type CredentialValidationResponse,
   type EquityCurveResponse,
+  type EquityRange,
   type ExecutionWalletsResponse,
   type GlobalView,
   type KillSwitchState,
@@ -100,22 +101,158 @@ const Stat: FC<{ label: string; value: string; tone?: 'good' | 'bad' | 'neutral'
   </div>
 );
 
-const MiniSparkline: FC<{ values: number[] }> = ({ values }) => {
-  if (values.length === 0) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(max - min, 1);
-  const points = values
-    .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * 100;
-      const y = 42 - ((value - min) / range) * 40;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
+const EQUITY_RANGES: { id: EquityRange; label: string }[] = [
+  { id: '24h', label: '24h' },
+  { id: '7d', label: '7g' },
+  { id: 'all', label: 'Tutto' },
+];
+
+const PNL_COLOR = '#F0B90B'; // oro (PnL cumulato)
+const BTC_COLOR = '#3B82F6'; // blu (benchmark BTC)
+
+const fmtSignedPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+
+const EquityChart: FC<{
+  equity: EquityCurveResponse | null;
+  range: EquityRange;
+  onRange: (r: EquityRange) => void;
+}> = ({ equity, range, onRange }) => {
+  const items = equity?.items ?? [];
+  const n = items.length;
+
+  const pnl = items.map((i) => Number(i.pnl_pct));
+  const btc = items.map((i) => (i.btc_pct != null ? Number(i.btc_pct) : null));
+  const hasBtc = (equity?.benchmark_available ?? false) && btc.some((v) => v != null);
+
+  const lastPnl = n > 0 ? pnl[n - 1] : 0;
+  const lastBtc = hasBtc ? (btc[n - 1] ?? 0) : null;
+
+  // Dominio Y: include sempre lo 0% (breakeven) e un po' di margine.
+  const pool = [...pnl, ...(hasBtc ? (btc.filter((v) => v != null) as number[]) : []), 0];
+  let lo = Math.min(...pool);
+  let hi = Math.max(...pool);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) { lo = -1; hi = 1; }
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const padY = (hi - lo) * 0.12;
+  lo -= padY; hi += padY;
+
+  const W = 320, H = 170, padL = 40, padR = 14, padT = 10, padB = 22;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const xAt = (idx: number) => (n <= 1 ? padL + plotW / 2 : padL + (idx / (n - 1)) * plotW);
+  const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
+  const y0 = yAt(0);
+
+  const polyline = (vals: (number | null)[]) =>
+    vals
+      .map((v, i) => (v == null ? null : `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`))
+      .filter(Boolean)
+      .join(' ');
+
+  const pnlLine = polyline(pnl);
+  const btcLine = hasBtc ? polyline(btc) : '';
+  const areaPath =
+    n > 0
+      ? `M ${xAt(0).toFixed(1)},${y0.toFixed(1)} ` +
+        pnl.map((v, i) => `L ${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`).join(' ') +
+        ` L ${xAt(n - 1).toFixed(1)},${y0.toFixed(1)} Z`
+      : '';
+
+  const gridVals = [hi, (hi + lo) / 2, lo];
+
+  const fmtX = (iso: string) => {
+    const d = new Date(iso);
+    return range === '24h'
+      ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+  };
+
   return (
-    <svg className="h-16 w-full" viewBox="0 0 100 44" role="img" aria-label="Equity curve">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.5" className="text-accent-blue" />
-    </svg>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase text-gray-500">PnL cumulato</h3>
+        <div className="flex gap-1">
+          {EQUITY_RANGES.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => { hapticLight(); onRange(r.id); }}
+              className={`rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
+                range === r.id ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-6">
+        <div>
+          <div className={`text-2xl font-bold ${lastPnl >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+            {fmtSignedPct(lastPnl)}
+          </div>
+          <div className="text-[11px] text-gray-400">
+            <span style={{ color: PNL_COLOR }}>●</span> PnL cumulato
+          </div>
+        </div>
+        {hasBtc && lastBtc != null && (
+          <div>
+            <div className={`text-2xl font-bold ${lastBtc >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+              {fmtSignedPct(lastBtc)}
+            </div>
+            <div className="text-[11px] text-gray-400">
+              <span style={{ color: BTC_COLOR }}>●</span> BTC trend
+            </div>
+          </div>
+        )}
+      </div>
+
+      {n === 0 ? (
+        <div className="py-6 text-center text-xs text-gray-500">Nessun dato nel periodo selezionato</div>
+      ) : (
+        <>
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img" aria-label="Curva PnL cumulato">
+            <defs>
+              <linearGradient id="pnlFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.28" />
+                <stop offset="100%" stopColor={PNL_COLOR} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {/* griglia + label Y */}
+            {gridVals.map((v, i) => (
+              <g key={i}>
+                <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke="#ffffff" strokeOpacity="0.06" strokeWidth="1" />
+                <text x={padL - 4} y={yAt(v) + 3} textAnchor="end" fontSize="9" fill="#6b7280">
+                  {v.toFixed(2)}%
+                </text>
+              </g>
+            ))}
+
+            {/* baseline 0% (breakeven) */}
+            <line x1={padL} y1={y0} x2={W - padR} y2={y0} stroke="#9ca3af" strokeOpacity="0.5" strokeWidth="1" strokeDasharray="3 3" />
+
+            {/* area sotto PnL */}
+            {areaPath && <path d={areaPath} fill="url(#pnlFill)" />}
+
+            {/* linea BTC */}
+            {btcLine && <polyline points={btcLine} fill="none" stroke={BTC_COLOR} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+
+            {/* linea PnL */}
+            {pnlLine && <polyline points={pnlLine} fill="none" stroke={PNL_COLOR} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
+
+            {/* dot finali */}
+            {hasBtc && lastBtc != null && <circle cx={xAt(n - 1)} cy={yAt(lastBtc)} r="3" fill={BTC_COLOR} />}
+            {n > 0 && <circle cx={xAt(n - 1)} cy={yAt(lastPnl)} r="3.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1" />}
+          </svg>
+
+          <div className="flex justify-between px-1 text-[10px] text-gray-500">
+            <span>{fmtX(items[0].timestamp_utc)}</span>
+            <span>{fmtX(items[n - 1].timestamp_utc)}</span>
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 
@@ -425,10 +562,12 @@ const GlobalPane: FC<{
   data: GlobalView | null;
   status: AgentStatus | null;
   equity: EquityCurveResponse | null;
+  equityRange: EquityRange;
+  onEquityRange: (r: EquityRange) => void;
   decisions: AgentDecisionResponse | null;
   assetBreakdown: AssetBreakdownResponse | null;
   claudeUsage: ClaudeUsageView | null;
-}> = ({ data, status, equity, decisions, assetBreakdown, claudeUsage }) => {
+}> = ({ data, status, equity, equityRange, onEquityRange, decisions, assetBreakdown, claudeUsage }) => {
   const hasHistory = (data?.pnl_history.length ?? 0) > 0;
   const hasPortfolio = Number(data?.total_equity_usd ?? 0) > 0 || Number(data?.initial_equity_usd ?? 0) > 0;
   const hasTradesToday = Number(data?.trades_today ?? 0) > 0;
@@ -460,8 +599,7 @@ const GlobalPane: FC<{
       )}
       {hasHistory ? (
         <div className="rounded-xl bg-dark-800 px-4 py-3">
-          <h3 className="text-xs font-semibold uppercase text-gray-500">Equity snapshots</h3>
-          <MiniSparkline values={(equity?.items ?? data!.pnl_history).slice(-24).map((point) => Number('equity_usd' in point ? point.equity_usd : point.total_equity_usd))} />
+          <EquityChart equity={equity} range={equityRange} onRange={onEquityRange} />
         </div>
       ) : hasPortfolio && (
         <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
@@ -1048,6 +1186,9 @@ const AgentTab: FC<AgentTabProps> = ({
   const [perp, setPerp] = useState<PerpView | null>(null);
   const [global, setGlobal] = useState<GlobalView | null>(null);
   const [equity, setEquity] = useState<EquityCurveResponse | null>(null);
+  const [equityRange, setEquityRange] = useState<EquityRange>('24h');
+  const equityRangeRef = useRef<EquityRange>(equityRange);
+  equityRangeRef.current = equityRange;
   const [decisions, setDecisions] = useState<AgentDecisionResponse | null>(null);
   const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(null);
   const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
@@ -1072,7 +1213,7 @@ const AgentTab: FC<AgentTabProps> = ({
       fetchGlobalView().then(setGlobal),
       fetchAgentSettings().then((r) => setSettings(r.settings)),
       fetchExecutionWallets().then(setExecWallets),
-      fetchEquityCurve().then(setEquity),
+      fetchEquityCurve(equityRangeRef.current).then(setEquity),
       fetchAgentDecisions().then(setDecisions),
       fetchAssetBreakdown().then(setAssetBreakdown),
     ]);
@@ -1093,6 +1234,12 @@ const AgentTab: FC<AgentTabProps> = ({
     }, AGENT_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [refresh]);
+
+  // Refetch immediato della curva quando l'utente cambia il range (24h/7g/Tutto),
+  // senza ricaricare tutte le altre schede.
+  useEffect(() => {
+    fetchEquityCurve(equityRange).then(setEquity).catch(() => {});
+  }, [equityRange]);
 
   // Spesa API Claude: la carichiamo SOLO quando il pane Global e' attivo e con
   // cadenza ridotta (non cambia di secondo in secondo). Cosi' non appesantisce
@@ -1218,7 +1365,7 @@ const AgentTab: FC<AgentTabProps> = ({
       )}
       {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
-      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} decisions={decisions} assetBreakdown={assetBreakdown} claudeUsage={claudeUsage} />}
+      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} equityRange={equityRange} onEquityRange={setEquityRange} decisions={decisions} assetBreakdown={assetBreakdown} claudeUsage={claudeUsage} />}
       {pane === 'wallet' && <WalletPane execWallets={execWallets} spot={spot} perp={perp} />}
       {pane === 'coins' && (
         <CoinsPane

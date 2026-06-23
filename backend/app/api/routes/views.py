@@ -75,21 +75,30 @@ async def equity_curve(
     stmt = stmt.order_by(PnlSnapshot.timestamp_utc.asc())
     snapshots = list((await session.execute(stmt)).scalars().all())
     initial = _initial_equity(snapshots, settings)
+    benchmark = await _btc_benchmark(snapshots)
     items = []
     for snapshot in snapshots:
         equity = _market_equity(snapshot, market)
         pnl_usd = equity - initial
         pnl_pct = (pnl_usd / initial * Decimal("100")) if initial > 0 else Decimal("0")
-        items.append(
-            {
-                "timestamp_utc": snapshot.timestamp_utc.isoformat(),
-                "equity_usd": _q2(equity),
-                "pnl_usd": _signed(_q2(pnl_usd)),
-                "pnl_pct": _signed(_q2(pnl_pct)),
-                "drawdown_pct": _signed(_q2(snapshot.drawdown_pct)),
-            }
-        )
-    return {"market": market, "range": range, "initial_equity_usd": _q2(initial), "items": items}
+        item = {
+            "timestamp_utc": snapshot.timestamp_utc.isoformat(),
+            "equity_usd": _q2(equity),
+            "pnl_usd": _signed(_q2(pnl_usd)),
+            "pnl_pct": _signed(_q2(pnl_pct)),
+            "drawdown_pct": _signed(_q2(snapshot.drawdown_pct)),
+        }
+        btc_pct = benchmark.get(snapshot.timestamp_utc.isoformat())
+        if btc_pct is not None:
+            item["btc_pct"] = _signed(_q2(btc_pct))
+        items.append(item)
+    return {
+        "market": market,
+        "range": range,
+        "initial_equity_usd": _q2(initial),
+        "benchmark_available": bool(benchmark),
+        "items": items,
+    }
 
 
 @router.get("/asset-breakdown")
@@ -226,6 +235,44 @@ def _range_since(value: str) -> datetime | None:
     if value == "7d":
         return now - timedelta(days=7)
     return None
+
+
+async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
+    """Andamento cumulato % di BTC allineato agli snapshot, per confronto sul grafico equity.
+
+    L'ambiente dry-run usa un clock simulato che non corrisponde alle klines reali
+    di Binance: per questo NON allineiamo per timestamp assoluto ma per *offset orario*
+    dal primo snapshot (gli snapshot sono orari). Best-effort: se BTC non e' raggiungibile
+    ritorna {} e il grafico mostra la sola curva PnL.
+    """
+    if len(snapshots) < 2:
+        return {}
+    from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+
+    first_ts = snapshots[0].timestamp_utc
+    last_ts = snapshots[-1].timestamp_utc
+    span_hours = int(round((last_ts - first_ts).total_seconds() / 3600))
+    if span_hours < 1:
+        span_hours = 1
+    limit = min(1000, span_hours + 2)
+    try:
+        candles = await BinanceKlineFeed().fetch(
+            symbol="BTCUSDT", interval="1h", limit=limit, market="spot"
+        )
+    except Exception:
+        return {}
+    if not candles:
+        return {}
+    base = Decimal(str(candles[0].close))
+    if base <= 0:
+        return {}
+    out: dict[str, Decimal] = {}
+    for snapshot in snapshots:
+        offset = int(round((snapshot.timestamp_utc - first_ts).total_seconds() / 3600))
+        idx = max(0, min(offset, len(candles) - 1))
+        close = Decimal(str(candles[idx].close))
+        out[snapshot.timestamp_utc.isoformat()] = (close / base - Decimal("1")) * Decimal("100")
+    return out
 
 
 def _initial_equity(snapshots: list[PnlSnapshot], settings) -> Decimal:

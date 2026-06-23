@@ -135,16 +135,20 @@ export interface GlobalView {
   pnl_history: PnlPoint[];
 }
 
+export type EquityRange = '24h' | '7d' | 'all';
+
 export interface EquityCurveResponse {
   market: 'spot' | 'perp' | 'global';
-  range: '24h' | '7d' | 'all';
+  range: EquityRange;
   initial_equity_usd: string;
+  benchmark_available?: boolean;
   items: Array<{
     timestamp_utc: string;
     equity_usd: string;
     pnl_usd: string;
     pnl_pct: string;
     drawdown_pct: string;
+    btc_pct?: string;
   }>;
 }
 
@@ -390,8 +394,8 @@ export function fetchGlobalView(): Promise<GlobalView> {
   return request<GlobalView>('/api/v1/views/global');
 }
 
-export function fetchEquityCurve(): Promise<EquityCurveResponse> {
-  return request<EquityCurveResponse>('/api/v1/views/equity-curve?market=global&range=24h');
+export function fetchEquityCurve(range: EquityRange = '24h'): Promise<EquityCurveResponse> {
+  return request<EquityCurveResponse>(`/api/v1/views/equity-curve?market=global&range=${range}`);
 }
 
 export function fetchAgentDecisions(): Promise<AgentDecisionResponse> {
