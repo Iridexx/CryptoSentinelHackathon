@@ -834,7 +834,7 @@ function AnalyticsPanel({
                         <td>{item.signal_quality}</td>
                         <td>{item.action}</td>
                         <td>{item.execution_result ?? '--'}</td>
-                        <td className="reasoning-cell">{item.reasoning ?? '--'}</td>
+                        <td className="reasoning-cell"><ReasoningCell reasoning={item.reasoning} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -1950,6 +1950,57 @@ function TradeHistoryTable({
         </table>
       </div>
       {openTrade && <TradeDetailInline tradeId={openTrade} session={session} />}
+    </div>
+  );
+}
+
+const RISK_LABELS: Record<string, string> = {
+  daily_loss_limit: 'Daily loss cap',
+  drawdown_cap: 'Drawdown cap',
+  exposure_cap: 'Exposure cap',
+  max_positions: 'Max positions',
+  max_open_positions: 'Max positions',
+  kill_switch: 'Kill switch',
+  hard_stop: 'Hard stop',
+};
+
+function parseReasoning(raw: string | null | undefined): { brain: string; risk: string | null } {
+  if (!raw) return { brain: '--', risk: null };
+  const riskMatch = raw.match(/;\s*risk=(.+)$/);
+  let brain = riskMatch ? raw.slice(0, riskMatch.index).trim() : raw;
+  const risk = riskMatch ? riskMatch[1].trim() : null;
+  brain = brain
+    .replace(/^claude_not_configured_dry_run;\s*/i, '')
+    .replace(/^claude_unavailable_dry_run;\s*/i, '')
+    .replace(/\.$/, '')
+    .trim();
+  return { brain: brain || raw, risk };
+}
+
+function ReasoningCell({ reasoning }: { reasoning: string | null | undefined }) {
+  const [expanded, setExpanded] = useState(false);
+  const { brain, risk } = parseReasoning(reasoning);
+  const MAX_LEN = 90;
+  const isLong = brain.length > MAX_LEN;
+  const displayText = isLong && !expanded ? brain.slice(0, MAX_LEN) + '…' : brain;
+  const riskOk = !risk || risk === 'ok' || risk === 'allowed' || risk === 'pass';
+  const riskLabel = risk ? (RISK_LABELS[risk] ?? risk.replace(/_/g, ' ')) : null;
+  return (
+    <div className="reasoning-content">
+      <span className="reasoning-brain">{displayText}</span>
+      {isLong && (
+        <button
+          className="reasoning-expand"
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+        >
+          {expanded ? '▲ meno' : '▼ altro'}
+        </button>
+      )}
+      {riskLabel && (
+        <span className={`risk-badge ${riskOk ? 'risk-ok' : 'risk-block'}`}>
+          {riskOk ? 'risk OK' : riskLabel}
+        </span>
+      )}
     </div>
   );
 }
