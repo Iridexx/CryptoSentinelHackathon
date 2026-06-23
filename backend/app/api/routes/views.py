@@ -332,9 +332,9 @@ def _decision_payload(decision: AgentDecision | None) -> dict | None:
 def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
     """Livello (SL/TP) dalla posizione, con fallback ai dati congelati nello snapshot."""
     if position is not None and getattr(position, attr, None):
-        return _q2(getattr(position, attr))
+        return str(Decimal(str(getattr(position, attr))).normalize())
     if chart and chart.get(key):
-        return _q2(Decimal(str(chart[key])))
+        return str(Decimal(str(chart[key])).normalize())
     return None
 
 
@@ -399,7 +399,7 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
         "stop_loss": _level(position, "stop_loss", chart, "stop_loss"),
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
-        "trailing_stop": _q2(position.trailing_stop) if position and position.trailing_stop else None,
+        "trailing_stop": str(Decimal(str(position.trailing_stop)).normalize()) if position and position.trailing_stop else None,
         "size": _q2(size),
         "leverage": None,
         "exposure_usd": _q2(size * entry),
@@ -453,7 +453,7 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "stop_loss": _level(position, "stop_loss", chart, "stop_loss"),
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
-        "trailing_stop": _q2(position.trailing_stop) if position and position.trailing_stop else None,
+        "trailing_stop": str(Decimal(str(position.trailing_stop)).normalize()) if position and position.trailing_stop else None,
         "size": _q2(size),
         "leverage": leverage,
         "exposure_usd": _q2(size * entry * (leverage or 1)),
