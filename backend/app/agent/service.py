@@ -655,9 +655,15 @@ class AgentService:
         scanner_results = []
         for asset in selected_assets:
             if "spot" in markets and asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
-                scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
+                try:
+                    scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
+                except Exception as exc:
+                    logger.warning("scanner_spot_asset_error", asset=asset, error=str(exc))
             if "perp" in markets:
-                scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
+                try:
+                    scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
+                except Exception as exc:
+                    logger.warning("scanner_perp_asset_error", asset=asset, error=str(exc))
         try:
             await self._snapshot_portfolio_hourly(session, _now)
         except Exception as exc:
