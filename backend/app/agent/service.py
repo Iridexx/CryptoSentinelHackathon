@@ -658,8 +658,14 @@ class AgentService:
                 scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
             if "perp" in markets:
                 scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
-        await self._snapshot_portfolio_hourly(session, _now)
-        await self._maybe_send_daily_summary(session, _now)
+        try:
+            await self._snapshot_portfolio_hourly(session, _now)
+        except Exception as exc:
+            logger.warning("snapshot_portfolio_hourly_failed", error=str(exc))
+        try:
+            await self._maybe_send_daily_summary(session, _now)
+        except Exception as exc:
+            logger.warning("daily_summary_failed", error=str(exc))
         return {
             "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",
             "reason": "watchlist_empty" if not selected_assets else "watchlist_scanned",
