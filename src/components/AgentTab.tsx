@@ -309,18 +309,28 @@ const NumberInput: FC<{
   value: number;
   step?: number;
   onChange: (value: number) => void;
-}> = ({ label, value, step = 1, onChange }) => (
-  <label className="block">
-    <span className="text-xs text-gray-500">{label}</span>
-    <input
-      type="number"
-      step={step}
-      value={value}
-      onChange={(event) => onChange(Number(event.target.value))}
-      className="mt-1 w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
-    />
-  </label>
-);
+}> = ({ label, value, step = 1, onChange }) => {
+  const [raw, setRaw] = useState(String(value));
+  useEffect(() => { setRaw(String(value)); }, [value]);
+  return (
+    <label className="block">
+      <span className="text-xs text-gray-500">{label}</span>
+      <input
+        type="number"
+        step={step}
+        value={raw}
+        onChange={(e) => {
+          const s = e.target.value;
+          setRaw(s);
+          const n = parseFloat(s);
+          if (!Number.isNaN(n)) onChange(n);
+        }}
+        onBlur={() => setRaw(String(value))}
+        className="mt-1 w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
+      />
+    </label>
+  );
+};
 
 const SelectInput: FC<{
   label: string;
