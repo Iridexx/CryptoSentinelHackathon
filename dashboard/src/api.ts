@@ -83,8 +83,8 @@ export function fetchOperationalStats(session: DashboardSession) {
   return requestJson<OperationalStats>(session, '/api/v1/views/operational-stats');
 }
 
-export function fetchAgentDecisions(session: DashboardSession, market?: 'spot' | 'perp') {
-  const params = new URLSearchParams({ limit: '200' });
+export function fetchAgentDecisions(session: DashboardSession, market?: 'spot' | 'perp', offset = 0) {
+  const params = new URLSearchParams({ limit: '200', offset: String(offset) });
   if (market) params.set('market', market);
   return requestJson<AgentDecisionResponse>(session, `/api/v1/agent/decisions?${params.toString()}`);
 }

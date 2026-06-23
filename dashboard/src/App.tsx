@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   addExecutionWallet,
@@ -128,6 +128,8 @@ export default function App() {
   const [global, setGlobal] = useState<LoadState<GlobalView>>(emptyState());
   const [equity, setEquity] = useState<LoadState<EquityCurveResponse>>(emptyState());
   const [decisions, setDecisions] = useState<LoadState<AgentDecisionResponse>>(emptyState());
+  const [decisionsOffset, setDecisionsOffset] = useState(0);
+  const decisionsOffsetRef = useRef(0);
   const [assetBreakdown, setAssetBreakdown] = useState<LoadState<AssetBreakdownResponse>>(emptyState());
   const [operationalStats, setOperationalStats] = useState<LoadState<OperationalStats>>(emptyState());
   const [agent, setAgent] = useState<LoadState<AgentStatus>>(emptyState());
@@ -194,7 +196,7 @@ export default function App() {
       canRead ? fetch(setPerp, () => fetchPerp(session)) : Promise.resolve(null),
       canRead ? fetch(setGlobal, () => fetchGlobal(session)) : Promise.resolve(null),
       canRead ? fetch(setEquity, () => fetchEquityCurve(session, 'global', '24h')) : Promise.resolve(null),
-      canRead ? fetch(setDecisions, () => fetchAgentDecisions(session)) : Promise.resolve(null),
+      canRead ? fetch(setDecisions, () => fetchAgentDecisions(session, undefined, decisionsOffsetRef.current)) : Promise.resolve(null),
       canRead ? fetch(setAssetBreakdown, () => fetchAssetBreakdown(session, 'spot')) : Promise.resolve(null),
       canRead ? fetch(setOperationalStats, () => fetchOperationalStats(session)) : Promise.resolve(null),
       canRead ? fetch(setAgent, () => fetchAgentStatus(session)) : Promise.resolve(null),
@@ -204,6 +206,13 @@ export default function App() {
       canRead ? fetch(setWallets, () => fetchExecutionWallets(session)) : Promise.resolve(null),
       canRead ? fetch(setCoverage, () => fetchDataCoverage(session)) : Promise.resolve(null),
     ]);
+  }
+
+  async function loadDecisionsPage(newOffset: number) {
+    if (!canRead) return;
+    decisionsOffsetRef.current = newOffset;
+    setDecisionsOffset(newOffset);
+    await load(setDecisions, () => fetchAgentDecisions(session, undefined, newOffset));
   }
 
   async function refreshLogs() {
@@ -459,6 +468,8 @@ export default function App() {
           <AnalyticsPanel
             equity={equity}
             decisions={decisions}
+            decisionsOffset={decisionsOffset}
+            onDecisionsPage={(offset) => void loadDecisionsPage(offset)}
             assetBreakdown={assetBreakdown}
             operationalStats={operationalStats}
             onTradeDetail={(tradeId) => fetchTradeDetail(session, tradeId)}
@@ -676,15 +687,21 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
   );
 }
 
+const DECISIONS_PAGE_SIZE = 200;
+
 function AnalyticsPanel({
   equity,
   decisions,
+  decisionsOffset,
+  onDecisionsPage,
   assetBreakdown,
   operationalStats,
   onTradeDetail,
 }: {
   equity: LoadState<EquityCurveResponse>;
   decisions: LoadState<AgentDecisionResponse>;
+  decisionsOffset: number;
+  onDecisionsPage: (offset: number) => void;
   assetBreakdown: LoadState<AssetBreakdownResponse>;
   operationalStats: LoadState<OperationalStats>;
   onTradeDetail: (tradeId: string) => Promise<TradeDetail>;
@@ -790,7 +807,27 @@ function AnalyticsPanel({
       </Panel>
     </div>
 
-    <Panel title="Decision Log" className="wide">
+    <Panel
+      title="Decision Log"
+      className="wide"
+      action={
+        <div className="pager-controls">
+          <button
+            className="pager-btn"
+            disabled={decisionsOffset === 0 || decisions.loading}
+            onClick={() => onDecisionsPage(Math.max(0, decisionsOffset - DECISIONS_PAGE_SIZE))}
+          >‹ Prec</button>
+          <span className="pager-info">
+            {decisions.loading ? '…' : `${decisionsOffset + 1}–${decisionsOffset + (decisions.data?.items.length ?? 0)}`}
+          </span>
+          <button
+            className="pager-btn"
+            disabled={(decisions.data?.items.length ?? 0) < DECISIONS_PAGE_SIZE || decisions.loading}
+            onClick={() => onDecisionsPage(decisionsOffset + DECISIONS_PAGE_SIZE)}
+          >Succ ›</button>
+        </div>
+      }
+    >
         <StateBlock state={decisions} empty="No agent decisions loaded" />
         {decisions.data && (
           <>
