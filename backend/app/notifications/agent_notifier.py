@@ -88,7 +88,7 @@ class AgentNotifier:
             user_id=user_id,
             title=title,
             body=body,
-            severity="high",
+            severity="critical",
             data={
                 "topic": topic,
                 "trade_id": trade_id,
