@@ -1055,39 +1055,32 @@ const AgentTab: FC<AgentTabProps> = ({
   const [execWallets, setExecWallets] = useState<ExecutionWalletsResponse | null>(null);
   const [claudeUsage, setClaudeUsage] = useState<ClaudeUsageView | null>(null);
   const [validation, setValidation] = useState<CredentialValidationResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(true);
+  const [justSynced, setJustSynced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    const [statusRes, spotRes, perpRes, globalRes, settingsRes, execWalletsRes, equityRes, decisionsRes, breakdownRes] = await Promise.allSettled([
-      fetchAgentStatus(),
-      fetchSpotView(),
-      fetchPerpView(),
-      fetchGlobalView(),
-      fetchAgentSettings(),
-      fetchExecutionWallets(),
-      fetchEquityCurve(),
-      fetchAgentDecisions(),
-      fetchAssetBreakdown(),
+    setRefreshing(true);
+    // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
+    // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
+    const results = await Promise.allSettled([
+      fetchAgentStatus().then(setStatus),
+      fetchSpotView().then(setSpot),
+      fetchPerpView().then(setPerp),
+      fetchGlobalView().then(setGlobal),
+      fetchAgentSettings().then((r) => setSettings(r.settings)),
+      fetchExecutionWallets().then(setExecWallets),
+      fetchEquityCurve().then(setEquity),
+      fetchAgentDecisions().then(setDecisions),
+      fetchAssetBreakdown().then(setAssetBreakdown),
     ]);
-    if (statusRes.status === 'fulfilled') setStatus(statusRes.value);
-    if (spotRes.status === 'fulfilled') setSpot(spotRes.value);
-    if (perpRes.status === 'fulfilled') setPerp(perpRes.value);
-    if (globalRes.status === 'fulfilled') setGlobal(globalRes.value);
-    if (settingsRes.status === 'fulfilled') setSettings(settingsRes.value.settings);
-    if (execWalletsRes.status === 'fulfilled') setExecWallets(execWalletsRes.value);
-    if (equityRes.status === 'fulfilled') setEquity(equityRes.value);
-    if (decisionsRes.status === 'fulfilled') setDecisions(decisionsRes.value);
-    if (breakdownRes.status === 'fulfilled') setAssetBreakdown(breakdownRes.value);
-    const failed = [statusRes, spotRes, perpRes, globalRes, settingsRes, execWalletsRes, equityRes, decisionsRes, breakdownRes]
-      .filter(r => r.status === 'rejected').length;
-    if (failed > 0) setError(`${failed} endpoint non raggiungibili`);
-    else setError('');
-    setLoading(false);
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    setError(failed > 0 ? `${failed} endpoint non raggiungibili` : '');
+    setRefreshing(false);
+    setJustSynced(true);
+    window.setTimeout(() => setJustSynced(false), 2500);
   }, []);
 
   useEffect(() => {
@@ -1180,8 +1173,26 @@ const AgentTab: FC<AgentTabProps> = ({
             <p className="text-sm font-semibold text-white">AI Agent</p>
             <p className="truncate text-xs text-gray-500">{status?.mode ?? settings.mode} - {status?.execution_mode ?? settings.execution_mode}</p>
           </div>
-          <button onClick={refresh} disabled={loading} className="rounded-lg bg-dark-700 px-3 py-1.5 text-xs font-semibold text-gray-300 disabled:opacity-40">
-            {loading ? 'Loading' : 'Refresh'}
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            aria-label="Aggiorna"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-dark-700 text-gray-300 disabled:opacity-70"
+          >
+            {refreshing ? (
+              <svg className="h-4 w-4 animate-spin text-accent-blue" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z" />
+              </svg>
+            ) : justSynced ? (
+              <svg className="h-4 w-4 text-accent-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M5 9a7 7 0 0112-3m2 9a7 7 0 01-12 3" />
+              </svg>
+            )}
           </button>
         </div>
         <div className="mt-3 flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2">
