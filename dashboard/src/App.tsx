@@ -561,7 +561,15 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
           {data.pnl_history.length === 0 ? (
             <Empty title="No PnL history" detail="Global tracking is ready and waiting for confirmed activity." />
           ) : (
-            <Sparkline points={data.pnl_history.map((point) => Number(point.total_equity_usd))} />
+            <EquityLineChart
+              points={data.pnl_history.map((pt) => {
+                const base = Number(data.pnl_history[0].total_equity_usd);
+                const pct = base > 0 ? ((Number(pt.total_equity_usd) - base) / base) * 100 : 0;
+                const d = new Date(pt.timestamp_utc);
+                const label = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                return { pct, label };
+              })}
+            />
           )}
         </>
       )}
@@ -729,7 +737,12 @@ function AnalyticsPanel({
         <StateBlock state={equity} empty="No equity curve data" />
         {equity.data && equity.data.items.length > 0 ? (
           <>
-            <Sparkline points={equity.data.items.map((point) => Number(point.equity_usd))} />
+            <EquityLineChart
+              points={equity.data.items.map((pt) => ({
+                pct: Number(pt.pnl_pct),
+                label: new Date(pt.timestamp_utc).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+              }))}
+            />
             <Table
               columns={['Time', 'Equity', 'PnL', 'ROI', 'Drawdown']}
               rows={equity.data.items.slice(-12).map((item) => [
@@ -2031,22 +2044,61 @@ function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   );
 }
 
-function Sparkline({ points }: { points: number[] }) {
-  const width = 420;
-  const height = 120;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = Math.max(max - min, 1);
-  const path = points
-    .map((point, index) => {
-      const x = (index / Math.max(points.length - 1, 1)) * width;
-      const y = height - ((point - min) / range) * height;
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
+function EquityLineChart({ points }: { points: { pct: number; label: string }[] }) {
+  const n = points.length;
+  if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
+
+  const PNL_COLOR = '#F0B90B';
+  const W = 520, H = 180, padL = 48, padR = 16, padT = 12, padB = 24;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const vals = points.map((p) => p.pct);
+  let lo = Math.min(...vals, 0);
+  let hi = Math.max(...vals, 0);
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.12;
+  lo -= pad; hi += pad;
+
+  const xAt = (i: number) => padL + (i / (n - 1)) * plotW;
+  const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
+  const y0 = yAt(0);
+
+  const pnlLine = points.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.pct).toFixed(1)}`).join(' ');
+  const areaPath =
+    `M ${xAt(0).toFixed(1)},${y0.toFixed(1)} ` +
+    points.map((p, i) => `L ${xAt(i).toFixed(1)},${yAt(p.pct).toFixed(1)}`).join(' ') +
+    ` L ${xAt(n - 1).toFixed(1)},${y0.toFixed(1)} Z`;
+
+  const gridVals = [hi, (hi + lo) / 2, lo];
+  const xIdxs = n <= 4 ? points.map((_, i) => i) : [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
+  const lastPct = vals[n - 1];
+
   return (
-    <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Equity line">
-      <path d={path} />
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="Equity curve">
+      <defs>
+        <linearGradient id="dashPnlFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={PNL_COLOR} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {gridVals.map((v, i) => (
+        <g key={i}>
+          <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke="#ffffff" strokeOpacity="0.07" strokeWidth="1" />
+          <text x={padL - 4} y={yAt(v) + 3} textAnchor="end" fontSize="9" fill="#6b7280">
+            {v >= 0 ? '+' : ''}{v.toFixed(1)}%
+          </text>
+        </g>
+      ))}
+      <line x1={padL} y1={y0} x2={W - padR} y2={y0} stroke="#9ca3af" strokeOpacity="0.5" strokeWidth="1" strokeDasharray="4 3" />
+      <path d={areaPath} fill="url(#dashPnlFill)" />
+      <polyline points={pnlLine} fill="none" stroke={PNL_COLOR} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={xAt(n - 1)} cy={yAt(lastPct)} r="3.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1.5" />
+      {xIdxs.map((idx) => (
+        <text key={idx} x={xAt(idx)} y={H - 4} textAnchor="middle" fontSize="9" fill="#6b7280">
+          {points[idx].label}
+        </text>
+      ))}
     </svg>
   );
 }
