@@ -84,7 +84,7 @@ export function fetchOperationalStats(session: DashboardSession) {
 }
 
 export function fetchAgentDecisions(session: DashboardSession, market?: 'spot' | 'perp') {
-  const params = new URLSearchParams({ limit: '50' });
+  const params = new URLSearchParams({ limit: '200' });
   if (market) params.set('market', market);
   return requestJson<AgentDecisionResponse>(session, `/api/v1/agent/decisions?${params.toString()}`);
 }
