@@ -58,10 +58,15 @@ pip-wheel-metadata/
 *.sqlite
 *.sqlite3
 backend/*.db
+backend/*.db-shm
+backend/*.db-wal
 backend/*.sqlite
 backend/*.sqlite3
 backend/local.db
 backend/storage/
+
+# Build artifacts
+**/tsconfig.tsbuildinfo
 
 # Editor directories and files
 .vscode/*
