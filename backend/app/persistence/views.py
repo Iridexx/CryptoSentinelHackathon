@@ -159,6 +159,12 @@ class ViewService:
         open_spot = await spot_pos.open_for_user(user_id)
         open_perp = await perp_pos.open_for_user(user_id)
 
+        spot_exposure_usd = sum(
+            (Decimal(p.entry_price) * Decimal(p.size) for p in open_spot), Decimal("0")
+        )
+        perp_exposure_usd = sum(
+            (Decimal(p.entry_price) * Decimal(p.size) for p in open_perp), Decimal("0")
+        )
         unrealized = (
             sum((p.pnl_unrealized for p in open_spot), Decimal("0"))
             + sum((p.pnl_unrealized for p in open_perp), Decimal("0"))
@@ -181,6 +187,8 @@ class ViewService:
                 sharpe_ratio=None,
                 drawdown_cap_pct=self._drawdown_cap_pct,
                 exposure_pct=Decimal("0"),
+                spot_exposure_usd=spot_exposure_usd,
+                perp_exposure_usd=perp_exposure_usd,
                 daily_pnl_usd=Decimal("0"),
                 agent_status="idle",
                 trades_today=0,
@@ -212,6 +220,8 @@ class ViewService:
             sharpe_ratio=sharpe["ratio"],
             drawdown_cap_pct=self._drawdown_cap_pct,
             exposure_pct=portfolio.exposure_pct,
+            spot_exposure_usd=spot_exposure_usd,
+            perp_exposure_usd=perp_exposure_usd,
             daily_pnl_usd=portfolio.daily_pnl_usd,
             agent_status=portfolio.agent_status,
             trades_today=portfolio.trades_today,

@@ -562,6 +562,8 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
             <Metric label="Trades" value={String(data.trades_today)} />
             <Metric label="Drawdown" value={`${data.drawdown_pct}%`} tone="warn" />
             <Metric label="Exposure" value={`${data.exposure_pct}%`} />
+            <Metric label="Exposure Spot" value={money(data.spot_exposure_usd ?? '0')} />
+            <Metric label="Exposure Perp" value={money(data.perp_exposure_usd ?? '0')} />
             {expanded && (
               <Metric
                 label="Sharpe"

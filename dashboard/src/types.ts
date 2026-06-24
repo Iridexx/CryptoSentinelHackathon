@@ -100,6 +100,8 @@ export type GlobalView = {
   sharpe_ratio?: string | null;
   drawdown_cap_pct: number;
   exposure_pct: string;
+  spot_exposure_usd: string;
+  perp_exposure_usd: string;
   daily_pnl_usd: string;
   agent_status: string;
   trades_today: number;
