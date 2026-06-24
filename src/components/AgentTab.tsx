@@ -441,8 +441,8 @@ const TradeHistoryList: FC<{
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-white">{label}</div>
                 <div className="mt-2 flex gap-3 text-sm text-gray-400">
-                  <span>In {fmtPrice(t.entry_price ?? t.price)}</span>
-                  <span>Out {fmtPrice(t.current_or_exit_price ?? t.price)}</span>
+                  <span>In {fmtPriceFull(t.entry_price ?? t.price)}</span>
+                  <span>Out {fmtPriceFull(t.current_or_exit_price ?? t.price)}</span>
                 </div>
               </div>
               <div className={`flex-shrink-0 text-right font-bold ${isGood ? 'text-accent-green' : 'text-accent-red'}`}>
@@ -512,8 +512,8 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 </p>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
-                <span>Entry {fmtPrice(position.entry_price)}</span>
-                <span>Now {fmtPrice(position.current_price)}</span>
+                <span>Entry {fmtPriceFull(position.entry_price)}</span>
+                <span>Now {fmtPriceFull(position.current_price)}</span>
                 <span>{position.status}</span>
               </div>
             </div>
@@ -816,8 +816,8 @@ const WalletPane: FC<{
                   </div>
                   <div className="grid grid-cols-3 gap-1 text-xs text-gray-400">
                     <span>Size {Number(p.size).toFixed(4)}</span>
-                    <span>Entry {fmtPrice(p.entry_price)}</span>
-                    <span>Now {fmtPrice(p.current_price)}</span>
+                    <span>Entry {fmtPriceFull(p.entry_price)}</span>
+                    <span>Now {fmtPriceFull(p.current_price)}</span>
                   </div>
                   {(p.stop_loss || p.liquidation_price) && (
                     <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
@@ -1158,8 +1158,8 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Stat label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
         <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
-        <Stat label="Entry" value={fmtPrice(detail.entry_price)} />
-        <Stat label="Now/Exit" value={fmtPrice(detail.current_or_exit_price)} />
+        <Stat label="Entry" value={fmtPriceFull(detail.entry_price)} />
+        <Stat label="Now/Exit" value={fmtPriceFull(detail.current_or_exit_price)} />
         <Stat label="Size" value={detail.size} />
         <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
       </div>
