@@ -96,6 +96,17 @@ class SpotTradeRepository:
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
 
+    async def sum_fees(self, user_id: str) -> Decimal:
+        """Somma fees_quote di tutti i trade spot dry-run (fee pagate all'apertura)."""
+        stmt = (
+            select(func.sum(SpotTrade.fees_quote))
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.fees_quote.is_not(None))
+        )
+        result = await self._session.execute(stmt)
+        val = result.scalar_one_or_none()
+        return Decimal(str(val)) if val is not None else Decimal("0")
+
     async def last_timestamp_for_asset(self, user_id: str, asset: str) -> datetime | None:
         """Timestamp del trade spot piu' recente sull'asset (per cooldown)."""
         result = await self._session.execute(
@@ -156,6 +167,18 @@ class PerpTradeRepository:
         )
         if since is not None:
             stmt = stmt.where(PerpTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
+        val = result.scalar_one_or_none()
+        return Decimal(str(val)) if val is not None else Decimal("0")
+
+    async def sum_fees(self, user_id: str) -> Decimal:
+        """Somma fees_quote dei trade perp di apertura dry-run (fee pagate)."""
+        stmt = (
+            select(func.sum(PerpTrade.fees_quote))
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.fees_quote.is_not(None))
+            .where(PerpTrade.direction == "open")
+        )
         result = await self._session.execute(stmt)
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")

@@ -613,6 +613,7 @@ const GlobalPane: FC<{
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
         <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
         <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />
+        <Stat label="Fee pagate" value={fmtUsd(data?.total_fees_usd ?? '0')} tone="bad" />
         <Stat
           label="API Claude"
           value={claudeUsage != null ? `$${claudeUsage.total_cost_usd.toFixed(2)} / $${claudeUsage.budget_usd.toFixed(2)}` : '--'}

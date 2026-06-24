@@ -182,6 +182,9 @@ class ViewService:
         realized_spot = await spot_trade_repo.sum_realized_pnl(user_id)
         realized_perp = await perp_trade_repo.sum_realized_pnl(user_id)
         realized = realized_spot + realized_perp
+        fees_spot = await spot_trade_repo.sum_fees(user_id)
+        fees_perp = await perp_trade_repo.sum_fees(user_id)
+        total_fees_usd = fees_spot + fees_perp
 
         if portfolio is None:
             return GlobalView(
@@ -199,6 +202,7 @@ class ViewService:
                 exposure_pct=Decimal("0"),
                 spot_exposure_usd=spot_exposure_usd,
                 perp_exposure_usd=perp_exposure_usd,
+                total_fees_usd=total_fees_usd,
                 daily_pnl_usd=Decimal("0"),
                 agent_status="idle",
                 trades_today=0,
@@ -232,6 +236,7 @@ class ViewService:
             exposure_pct=portfolio.exposure_pct,
             spot_exposure_usd=spot_exposure_usd,
             perp_exposure_usd=perp_exposure_usd,
+            total_fees_usd=total_fees_usd,
             daily_pnl_usd=portfolio.daily_pnl_usd,
             agent_status=portfolio.agent_status,
             trades_today=portfolio.trades_today,

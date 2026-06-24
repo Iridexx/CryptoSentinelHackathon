@@ -144,6 +144,7 @@ export interface GlobalView {
   trades_today: number;
   open_spot_positions: number;
   open_perp_positions: number;
+  total_fees_usd: string;
   pnl_history: PnlPoint[];
 }
 
