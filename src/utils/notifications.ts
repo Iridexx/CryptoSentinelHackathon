@@ -234,10 +234,12 @@ async function registerRemotePushToken(): Promise<void> {
 
     await PushNotifications.addListener('pushNotificationReceived', async (notification) => {
       emitFavPush(notification.data, false);
+      const topic = typeof notification.data?.topic === 'string' ? notification.data.topic : '';
+      const isTrade = topic === 'cryptosentinel-spot' || topic === 'cryptosentinel-perp';
       await LocalNotifications.schedule({
         notifications: [{
           id: Math.floor(Math.random() * 1_900_000) + 1,
-          channelId: 'price_alerts',
+          channelId: isTrade ? 'trade_alerts' : 'price_alerts',
           title: notification.title ?? 'CryptoSentinel',
           body: notification.body ?? '',
           sound: 'default',
@@ -284,6 +286,15 @@ export async function initNotifications(): Promise<void> {
     id: 'price_alerts',
     name: 'Allarmi Prezzi',
     description: 'Notifiche per gli allarmi di prezzo crypto',
+    importance: 5,
+    vibration: true,
+    sound: 'default',
+    visibility: 1,
+  });
+  await LocalNotifications.createChannel({
+    id: 'trade_alerts',
+    name: 'Trade Spot & Perp',
+    description: 'Aperture e chiusure di posizioni spot e perpetual',
     importance: 5,
     vibration: true,
     sound: 'default',
