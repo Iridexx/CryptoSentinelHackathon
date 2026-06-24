@@ -49,6 +49,7 @@ class ViewService:
             open_positions=[
                 SpotPositionView(
                     position_id=p.position_id,
+                    open_trade_id=p.open_trade_id,
                     asset=p.asset,
                     size=p.size,
                     entry_price=p.entry_price,
@@ -105,6 +106,7 @@ class ViewService:
             open_positions=[
                 PerpPositionView(
                     position_id=p.position_id,
+                    open_trade_id=p.open_trade_id,
                     asset=p.asset,
                     side=p.side,
                     size=p.size,

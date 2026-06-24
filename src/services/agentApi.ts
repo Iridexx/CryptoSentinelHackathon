@@ -28,6 +28,7 @@ export interface AgentWatchlistResponse {
 
 export interface SpotPositionView {
   position_id: string;
+  open_trade_id?: string | null;
   asset: string;
   size: string;
   entry_price: string;
@@ -71,6 +72,7 @@ export interface SpotView {
 
 export interface PerpPositionView {
   position_id: string;
+  open_trade_id?: string | null;
   asset: string;
   side: string;
   size: string;
@@ -209,6 +211,7 @@ export interface TradeChart {
   take_profit_2?: string | null;
   opened_at: string;
   closed_at: string;
+  live?: boolean;
   candles: TradeChartCandle[];
 }
 

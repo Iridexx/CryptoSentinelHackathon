@@ -506,7 +506,13 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
       {hasPositions ? (
         <div className="space-y-2">
           {data!.open_positions.map((position) => (
-            <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
+            <button
+              key={position.position_id}
+              type="button"
+              onClick={() => position.open_trade_id && onTrade(position.open_trade_id)}
+              disabled={!position.open_trade_id}
+              className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
+            >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-white">{position.asset}</p>
                 <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
@@ -523,10 +529,11 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 <span>Swap {position.swap_fee_usd != null ? fmtUsd(position.swap_fee_usd) : '$0.00'}</span>
                 <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
               </div>
-              <div className="mt-1.5 text-right text-xs text-gray-500">
-                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+                <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
+                <span>{new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       ) : hasActivity && (
@@ -563,7 +570,13 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
       {hasPositions ? (
         <div className="space-y-2">
           {data!.open_positions.map((position) => (
-            <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
+            <button
+              key={position.position_id}
+              type="button"
+              onClick={() => position.open_trade_id && onTrade(position.open_trade_id)}
+              disabled={!position.open_trade_id}
+              className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
+            >
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
                 <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
@@ -581,10 +594,11 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
                 <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
                 <span className={Number(position.funding_accrued_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund.acc. {position.funding_accrued_usd != null ? fmtUsd(position.funding_accrued_usd) : '$0.00'}</span>
               </div>
-              <div className="mt-1.5 text-right text-xs text-gray-500">
-                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+                <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
+                <span>{new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       ) : hasActivity && (
@@ -1175,13 +1189,13 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
     {detail.chart && (
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">Grafico del trade</h3>
+          <h3 className="text-sm font-semibold text-white">{detail.chart.live ? 'Grafico posizione (live)' : 'Grafico del trade'}</h3>
           <span className="text-xs text-gray-500">{detail.chart.interval}</span>
         </div>
         <TradeCandleChart chart={detail.chart} />
         <div className="flex flex-wrap gap-3 text-[10px] text-gray-400">
           <span>⚪ Entry</span>
-          <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● Exit</span>
+          <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.chart.live ? 'Ora' : 'Exit'}</span>
           <span className="text-accent-red">- - SL</span>
           <span className="text-accent-green">- - TP</span>
         </div>

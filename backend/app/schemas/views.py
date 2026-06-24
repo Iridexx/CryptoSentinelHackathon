@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 class SpotPositionView(BaseModel):
     position_id: str
+    open_trade_id: str | None = None
     asset: str
     size: Decimal
     entry_price: Decimal
@@ -54,6 +55,7 @@ class SpotView(BaseModel):
 
 class PerpPositionView(BaseModel):
     position_id: str
+    open_trade_id: str | None = None
     asset: str
     side: str
     size: Decimal

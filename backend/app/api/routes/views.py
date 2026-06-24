@@ -167,11 +167,13 @@ async def trade_detail(
         position = await _find_trade_position(session, SpotPosition, spot)
         decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
         snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
-        return _spot_trade_detail(spot, position, decision, snapshot)
+        live = await _live_chart_if_open(snapshot, position, "spot")
+        return _spot_trade_detail(spot, position, decision, snapshot, live)
     position = await _find_trade_position(session, PerpPosition, perp)
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
     snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
-    return _perp_trade_detail(perp, position, decision, snapshot)
+    live = await _live_chart_if_open(snapshot, position, "perp")
+    return _perp_trade_detail(perp, position, decision, snapshot, live)
 
 
 async def _find_trade_position(session, model, trade):
@@ -198,6 +200,59 @@ async def _load_chart_snapshot(
     if snapshot is None and position is not None:
         snapshot = await chart_repo.get_for_position(user_id, position.position_id)
     return snapshot
+
+
+async def _live_chart_if_open(snapshot, position, market: str) -> dict | None:
+    """Per una posizione ancora aperta (nessuno snapshot congelato) costruisce un
+    grafico dal vivo: candele dall'apertura ad ora + livelli entry/SL/TP."""
+    if snapshot is not None or position is None or position.status == "closed":
+        return None
+    return await _build_live_chart(position, market)
+
+
+async def _build_live_chart(position, market: str) -> dict | None:
+    """Candele OHLC dall'apertura della posizione fino ad ora, con stesso payload
+    degli snapshot congelati ma marcato live (closed_at non e' una chiusura reale).
+
+    Best-effort: se il feed non risponde ritorna None e la scheda omette il grafico.
+    """
+    try:
+        from backend.app.agent.service import _auto_chart_interval
+        from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+
+        opened_at = position.opened_at
+        if opened_at.tzinfo is None:
+            opened_at = opened_at.replace(tzinfo=UTC)
+        now = datetime.now(UTC)
+        duration_min = max(1, int((now - opened_at).total_seconds() / 60))
+        interval, per_min = _auto_chart_interval(duration_min)
+        limit = int(min(120, max(20, (duration_min / per_min) * 1.6)))
+        feed_market = "futures" if market == "perp" else "spot"
+        candles = await BinanceKlineFeed().fetch(
+            symbol=f"{position.asset}USDT", interval=interval, limit=limit, market=feed_market
+        )
+        if not candles:
+            return None
+        tp2 = getattr(position, "take_profit_2", None)
+        return {
+            "interval": interval,
+            "market": market,
+            "side": position.side if market == "perp" else "long",
+            "entry_price": str(position.entry_price),
+            "exit_price": str(position.current_price),
+            "stop_loss": str(position.stop_loss) if position.stop_loss else None,
+            "take_profit_1": str(position.take_profit_1) if position.take_profit_1 else None,
+            "take_profit_2": str(tp2) if tp2 else None,
+            "opened_at": opened_at.isoformat(),
+            "closed_at": now.isoformat(),
+            "live": True,
+            "candles": [
+                {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
+                for c in candles
+            ],
+        }
+    except Exception:
+        return None
 
 
 @router.get("/operational-stats")
@@ -305,6 +360,13 @@ def _q2(value) -> str:
     return f"{Decimal(value).quantize(Decimal('0.01'))}"
 
 
+def _q2_opt(value) -> str | None:
+    """Come _q2 ma tollera None (trade pre-migrazione senza colonne fee)."""
+    if value is None:
+        return None
+    return _q2(value)
+
+
 def _signed(value: str) -> str:
     decimal = Decimal(value)
     return f"{decimal:+.2f}"
@@ -350,7 +412,7 @@ def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tupl
     else:
         opened_at = trade.timestamp_utc.isoformat()
     closed_at: str | None
-    if chart:
+    if chart and not chart.get("live"):
         closed_at = str(chart["closed_at"])
     elif position is not None and position.status == "closed":
         closed_at = position.updated_at.isoformat()
@@ -361,8 +423,8 @@ def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tupl
     return opened_at, closed_at
 
 
-def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None) -> dict:
-    chart = json.loads(snapshot.payload) if snapshot else None
+def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None) -> dict:
+    chart = json.loads(snapshot.payload) if snapshot else live_chart
     is_close = trade.trade_id.startswith("cls_")
     entry = (
         Decimal(position.entry_price) if position is not None
@@ -418,8 +480,8 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
     }
 
 
-def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None) -> dict:
-    chart = json.loads(snapshot.payload) if snapshot else None
+def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None) -> dict:
+    chart = json.loads(snapshot.payload) if snapshot else live_chart
     is_close = trade.trade_id.startswith("cls_")
     entry = (
         Decimal(position.entry_price) if position is not None
@@ -464,9 +526,9 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "fee_mode": position.fee_mode if position else trade.fee_mode,
         "margin_usd": _q2(position.margin_usd) if position and position.margin_usd is not None else None,
         "opening_fee_usd": _q2(position.opening_fee_usd) if position and position.opening_fee_usd is not None else None,
-        "taker_fee_usd": _q2(position.taker_fee_usd if position and position.taker_fee_usd is not None else trade.taker_fee_usd),
-        "maker_fee_usd": _q2(position.maker_fee_usd if position and position.maker_fee_usd is not None else trade.maker_fee_usd),
-        "slippage_usd": _q2(position.slippage_usd if position and position.slippage_usd is not None else trade.slippage_usd),
+        "taker_fee_usd": _q2_opt(position.taker_fee_usd if position and position.taker_fee_usd is not None else trade.taker_fee_usd),
+        "maker_fee_usd": _q2_opt(position.maker_fee_usd if position and position.maker_fee_usd is not None else trade.maker_fee_usd),
+        "slippage_usd": _q2_opt(position.slippage_usd if position and position.slippage_usd is not None else trade.slippage_usd),
         "funding_accrued_usd": _q2(position.funding_accrued_usd) if position else None,
         "funding_rate_8h": str(position.funding_rate) if position and position.funding_rate is not None else None,
         "opened_at": opened_at,
