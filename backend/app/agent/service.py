@@ -39,6 +39,7 @@ from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
+from backend.app.schemas.mobile_agent import AgentMobileSettings
 
 logger = get_logger("agent.service")
 
@@ -109,11 +110,50 @@ class AgentService:
         self._token_resolver_override = token_resolver
         self._token_resolver_cached: CMCProvider | None | object = _UNSET
 
+    @property
+    def _ms(self) -> AgentMobileSettings:
+        """Mobile-overridable settings: reads from RuntimeState, falls back to config."""
+        raw = get_runtime_value(str(self.settings.default_user_id), "mobile_agent_settings")
+        if raw:
+            try:
+                return AgentMobileSettings.model_validate_json(raw)
+            except ValueError:
+                pass
+        return AgentMobileSettings(
+            mode=self.settings.agent_mode,
+            markets_enabled=self.settings.markets_enabled,
+            execution_mode=self.settings.execution_mode,
+            network=self.settings.bsc_network,
+            test_scaling_pct=self.settings.test_scaling_pct,
+            operating_hours_utc=self.settings.operating_hours_utc,
+            capital_per_trade_pct=self.settings.risk_capital_per_trade_pct,
+            max_open_positions=self.settings.risk_max_open_positions,
+            max_total_exposure_pct=self.settings.risk_max_total_exposure_pct,
+            daily_loss_limit_pct=self.settings.risk_daily_loss_limit_pct,
+            drawdown_cap_pct=self.settings.risk_max_drawdown_pct,
+            min_pool_liquidity_usd=self.settings.risk_min_pool_liquidity_usd,
+            max_slippage_pct=self.settings.risk_max_slippage_pct,
+            cooldown_minutes=self.settings.risk_cooldown_minutes,
+            spot_confidence_threshold=self.settings.spot_confidence_threshold,
+            spot_volatility_trigger_pct=self.settings.spot_volatility_trigger_pct,
+            spot_relative_volume_threshold=self.settings.spot_relative_volume_threshold,
+            spot_atr_stop_multiplier=self.settings.spot_atr_stop_multiplier,
+            spot_trailing_distance_pct=self.settings.spot_trailing_distance_pct,
+            spot_partial_take_profit_pct=self.settings.spot_partial_take_profit_pct,
+            spot_time_stop_hours=self.settings.spot_time_stop_hours,
+            perp_direction_mode=self.settings.perp_direction_mode,
+            perp_default_leverage=self.settings.perp_default_leverage,
+            perp_dynamic_leverage_enabled=self.settings.perp_dynamic_leverage_enabled,
+            perp_value_area_pct=self.settings.perp_value_area_pct,
+            perp_atr_stop_multiplier=self.settings.perp_atr_stop_multiplier,
+            perp_time_stop_hours=self.settings.perp_time_stop_hours,
+        )
+
     def status(self) -> dict:
         return {
-            "mode": self.settings.agent_mode,
-            "markets_enabled": self.settings.markets_enabled,
-            "execution_mode": self.settings.execution_mode,
+            "mode": self._ms.mode,
+            "markets_enabled": self._ms.markets_enabled,
+            "execution_mode": self._ms.execution_mode,
             "kill_switch": self.risk.kill_switch.value,
             "degraded_reasons": sorted(self.risk.degraded_reasons),
             "eligible_token_count": len(self.settings.eligible_tokens),
@@ -125,7 +165,7 @@ class AgentService:
     def data_coverage(self) -> dict:
         """Return signal-engine OHLCV cache coverage for eligible active assets."""
 
-        markets = _active_markets(self.settings.markets_enabled)
+        markets = _active_markets(self._ms.markets_enabled)
         items = []
         now = datetime.now(UTC)
         selected_assets = selected_watchlist(self.settings)
@@ -459,17 +499,17 @@ class AgentService:
                 partial = True
             # Trailing stop: attivo solo dopo TP1 (trade in profitto), per non scattare
             # su un ritracciamento iniziale. Trascina il livello verso l'alto e chiude se ritraccia.
-            if reason is None and pos.tp1_reached and self.settings.spot_trailing_distance_pct > 0:
-                candidate = price * (Decimal("1") - Decimal(str(self.settings.spot_trailing_distance_pct)) / Decimal("100"))
+            if reason is None and pos.tp1_reached and self._ms.spot_trailing_distance_pct > 0:
+                candidate = price * (Decimal("1") - Decimal(str(self._ms.spot_trailing_distance_pct)) / Decimal("100"))
                 if pos.trailing_stop is None or candidate > pos.trailing_stop:
                     pos.trailing_stop = candidate
                     pos.updated_at = now
                     session.add(pos)
                 if pos.trailing_stop is not None and price <= pos.trailing_stop:
                     reason = "trailing_stop"
-            if reason is None and self.settings.spot_time_stop_hours > 0:
+            if reason is None and self._ms.spot_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
-                if age_hours >= self.settings.spot_time_stop_hours:
+                if age_hours >= self._ms.spot_time_stop_hours:
                     reason = "time_stop"
             if reason:
                 pnl = await self._close_spot_position(session, pos, price, reason, now, partial=partial)
@@ -484,7 +524,7 @@ class AgentService:
                         pnl_usd=pnl,
                         pnl_pct=pnl_pct,
                         close_reason=reason,
-                        is_dry_run=self.settings.execution_mode == "dry_run",
+                        is_dry_run=self._ms.execution_mode == "dry_run",
                     )
                 )
 
@@ -530,9 +570,9 @@ class AgentService:
                     if price >= pos.trailing_stop:
                         reason = "trailing_stop"
 
-            if reason is None and self.settings.perp_time_stop_hours > 0:
+            if reason is None and self._ms.perp_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
-                if age_hours >= self.settings.perp_time_stop_hours:
+                if age_hours >= self._ms.perp_time_stop_hours:
                     reason = "time_stop"
 
             if reason:
@@ -548,7 +588,7 @@ class AgentService:
                         pnl_usd=pnl,
                         pnl_pct=pnl_pct,
                         close_reason=reason,
-                        is_dry_run=self.settings.execution_mode == "dry_run",
+                        is_dry_run=self._ms.execution_mode == "dry_run",
                     )
                 )
 
@@ -653,7 +693,7 @@ class AgentService:
         _now = now or datetime.now(UTC)
         trade_heartbeat = await self._daily_trade_heartbeat(session, now=_now)
         selected_assets = selected_watchlist(self.settings)
-        markets = _active_markets(self.settings.markets_enabled)
+        markets = _active_markets(self._ms.markets_enabled)
         scanner_results = []
         for asset in selected_assets:
             if "spot" in markets and asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
@@ -677,7 +717,7 @@ class AgentService:
         return {
             "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",
             "reason": "watchlist_empty" if not selected_assets else "watchlist_scanned",
-            "markets_enabled": self.settings.markets_enabled,
+            "markets_enabled": self._ms.markets_enabled,
             "watchlist": selected_assets,
             "scanner_results": [_scanner_summary(result) for result in scanner_results],
             "daily_trade_heartbeat": trade_heartbeat,
@@ -719,7 +759,7 @@ class AgentService:
             }
 
         portfolio = await PnlRepository(session).get_portfolio(user_id)
-        if portfolio is None and self.settings.execution_mode == "dry_run":
+        if portfolio is None and self._ms.execution_mode == "dry_run":
             portfolio = await _initialise_dry_run_portfolio(session, self.settings)
         spot_positions = await SpotPositionRepository(session).open_for_user(user_id)
         perp_positions = await PerpPositionRepository(session).open_for_user(user_id)
@@ -768,7 +808,7 @@ class AgentService:
 
     async def _in_cooldown(self, session: AsyncSession, signal: dict, now: datetime) -> bool:
         """True se esiste un trade recente sull'asset entro la finestra di cooldown."""
-        minutes = self.settings.risk_cooldown_minutes
+        minutes = self._ms.cooldown_minutes
         asset = signal.get("asset")
         if minutes <= 0 or not asset:
             return False
@@ -811,7 +851,7 @@ class AgentService:
 
     async def _execute_or_simulate(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> dict:
         size_quote = risk_decision.size_quote * brain_decision.size_multiplier
-        if self.settings.execution_mode == "dry_run":
+        if self._ms.execution_mode == "dry_run":
             execution = await self._simulate_trade(session, signal, size_quote)
         elif signal.get("market") == "spot":
             # In live i parametri on-chain (token + amount) sono assenti dal segnale:
@@ -892,7 +932,7 @@ class AgentService:
             return {"status": "skipped", "reason": "price_unavailable"}
         if signal.get("market") == "perp":
             side = str(signal.get("side") or "long")
-            leverage = int(signal.get("leverage") or self.settings.perp_default_leverage)
+            leverage = int(signal.get("leverage") or self._ms.perp_default_leverage)
             # size rappresenta i contratti controllati: capitale * leva / prezzo
             leveraged_size = size_quote * Decimal(leverage) / price
             await PerpTradeRepository(session).save(
@@ -927,7 +967,7 @@ class AgentService:
                     take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                     trailing_stop=_optional_decimal(signal.get("trailing_stop")),
                     liquidation_price=_estimate_liquidation_price(
-                        price, int(signal.get("leverage") or self.settings.perp_default_leverage), side
+                        price, int(signal.get("leverage") or self._ms.perp_default_leverage), side
                     ),
                     venue="dry_run",
                     open_trade_id=trade_id,
@@ -987,7 +1027,7 @@ class AgentService:
             from_asset=str(from_asset),
             to_asset=str(to_asset),
             wallet_address=self.settings.wallet_address,
-            slippage_pct=Decimal(str(self.settings.risk_max_slippage_pct)),
+            slippage_pct=Decimal(str(self._ms.max_slippage_pct)),
         )
         return {"status": "prepared", "provider": self.spot_registry.active_name.value, "quote": quote.model_dump()}
 
@@ -996,7 +1036,7 @@ class AgentService:
             asset=str(signal.get("asset")),
             direction=str(signal.get("side") or "long"),  # type: ignore[arg-type]
             size=size_quote,
-            leverage=Decimal(str(signal.get("leverage") or self.settings.perp_default_leverage)),
+            leverage=Decimal(str(signal.get("leverage") or self._ms.perp_default_leverage)),
         )
         result = await self.perp_registry.active.open_position(order)
         return {"status": result.status.value, "provider": self.perp_registry.active_name.value, "reason": result.reason}
@@ -1094,7 +1134,7 @@ class AgentService:
             "heartbeat_trade": True,
         }
         heartbeat_trade_quote_usd = max(Decimal(str(self.settings.min_trade_size_usd)), Decimal("1"))
-        if self.settings.execution_mode == "dry_run":
+        if self._ms.execution_mode == "dry_run":
             execution = await self._simulate_trade(session, signal, heartbeat_trade_quote_usd)
             return {
                 "status": "executed",
@@ -1119,7 +1159,7 @@ class AgentService:
         )
         return {
             "status": "executed" if execution.get("status") in {"prepared", "confirmed"} else "blocked",
-            "mode": self.settings.execution_mode,
+            "mode": self._ms.execution_mode,
             "trades_today_before": trades_today,
             "execution": execution,
             "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
@@ -1143,7 +1183,7 @@ class AgentService:
                 entry_price=Decimal(str(signal.get("price", "0"))),
                 size_usd=risk_decision.size_quote,
                 stop_loss=_optional_decimal(signal.get("stop_loss")),
-                is_dry_run=self.settings.execution_mode == "dry_run",
+                is_dry_run=self._ms.execution_mode == "dry_run",
             )
         except Exception:
             pass  # le notifiche non bloccano mai l'agente
