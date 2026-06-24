@@ -603,7 +603,9 @@ const GlobalPane: FC<{
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
-        <Stat label="PnL $" value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="PnL tot." value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="PnL aperto" value={fmtUsd(data?.unrealized_pnl_usd)} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="PnL realizzato" value={fmtUsd(data?.realized_pnl_usd)} tone={Number(data?.realized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL %" value={`${Number(data?.pnl_total_pct ?? 0) >= 0 ? '+' : ''}${Number(data?.pnl_total_pct ?? 0).toFixed(2)}%`} tone={Number(data?.pnl_total_pct ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="Drawdown" value={fmtPct(data?.drawdown_pct)} tone={Number(data?.drawdown_pct ?? 0) < -10 ? 'bad' : 'neutral'} />
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
