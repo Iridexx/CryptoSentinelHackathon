@@ -115,6 +115,13 @@ class ViewService:
                     take_profit_2=p.take_profit_2,
                     liquidation_price=p.liquidation_price,
                     funding_rate=p.funding_rate,
+                    fee_mode=p.fee_mode,
+                    margin_usd=p.margin_usd,
+                    opening_fee_usd=p.opening_fee_usd,
+                    taker_fee_usd=p.taker_fee_usd,
+                    maker_fee_usd=p.maker_fee_usd,
+                    slippage_usd=p.slippage_usd,
+                    funding_accrued_usd=p.funding_accrued_usd,
                     status=p.status,
                     opened_at=p.opened_at.isoformat(),
                 )

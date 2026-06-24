@@ -54,6 +54,14 @@ class PerpPosition(Base):
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # 25% residuo
     liquidation_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     funding_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
+    # ── Costi posizione (fee + slippage + funding) ────────────────────────────
+    fee_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)          # taker|maker|none
+    margin_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    opening_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)   # costo effettivo applicato
+    taker_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)     # sempre calcolato (confronto)
+    maker_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)     # sempre calcolato (confronto)
+    slippage_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)      # solo taker
+    funding_accrued_usd: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False, default=Decimal("0"))
     tp1_reached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open / closed
     venue: Mapped[str | None] = mapped_column(String(64), nullable=True)

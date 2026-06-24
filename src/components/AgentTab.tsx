@@ -95,6 +95,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_value_area_pct: 68,
   perp_atr_stop_multiplier: 0.5,
   perp_time_stop_hours: 8,
+  perp_fee_mode: 'taker' as const,
 };
 
 const AGENT_REFRESH_MS = 45_000;
@@ -825,6 +826,18 @@ const WalletPane: FC<{
                       {p.liquidation_price && <span className="text-accent-red">Liq {fmtPrice(p.liquidation_price)}</span>}
                     </div>
                   )}
+                  {p.fee_mode && (
+                    <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                      {p.margin_usd != null && <span>Margin {fmtUsd(p.margin_usd)}</span>}
+                      <span className="capitalize">Mode: <span className={p.fee_mode === 'none' ? 'text-gray-400' : p.fee_mode === 'maker' ? 'text-accent-green' : 'text-accent-yellow'}>{p.fee_mode}</span></span>
+                      {p.opening_fee_usd != null && <span>Fee aperta {fmtUsd(p.opening_fee_usd)}</span>}
+                      {p.taker_fee_usd != null && p.maker_fee_usd != null && (
+                        <span className="text-gray-600">T:{fmtUsd(p.taker_fee_usd)} M:{fmtUsd(p.maker_fee_usd)}</span>
+                      )}
+                      {p.slippage_usd != null && Number(p.slippage_usd) > 0 && <span>Slip. {fmtUsd(p.slippage_usd)}</span>}
+                      {p.funding_accrued_usd != null && <span className={Number(p.funding_accrued_usd) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund. {fmtUsd(p.funding_accrued_usd)}</span>}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1047,6 +1060,11 @@ const SetupPane: FC<{
           <NumberInput label="Leverage" value={settings.perp_default_leverage} onChange={(perp_default_leverage) => patch({ perp_default_leverage })} />
           <NumberInput label="Value area %" value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
           <NumberInput label="ATR stop" value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
+          <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(perp_fee_mode) => patch({ perp_fee_mode })} options={[
+            { value: 'taker', label: 'Taker (market) — 0.06%' },
+            { value: 'maker', label: 'Maker (limit) — 0.02%' },
+            { value: 'none', label: 'Nessuna (strategia lorda)' },
+          ]} />
         </div>
       </section>
 
@@ -1163,6 +1181,25 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
         <Stat label="Size" value={detail.size} />
         <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
       </div>
+      {detail.fee_mode && (
+        <>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase text-gray-500">Costi posizione</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${detail.fee_mode === 'none' ? 'bg-gray-700 text-gray-300' : detail.fee_mode === 'maker' ? 'bg-accent-green/15 text-accent-green' : 'bg-accent-yellow/15 text-accent-yellow'}`}>
+              {detail.fee_mode === 'none' ? 'Nessuna fee' : detail.fee_mode === 'maker' ? 'Maker (limit)' : 'Taker (market)'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {detail.margin_usd != null && <Stat label="Margine" value={fmtUsd(detail.margin_usd)} />}
+            {detail.opening_fee_usd != null && <Stat label="Fee applicata" value={fmtUsd(detail.opening_fee_usd)} tone="bad" />}
+            {detail.taker_fee_usd != null && <Stat label="Fee taker (0.06%)" value={fmtUsd(detail.taker_fee_usd)} />}
+            {detail.maker_fee_usd != null && <Stat label="Fee maker (0.02%)" value={fmtUsd(detail.maker_fee_usd)} />}
+            {detail.slippage_usd != null && Number(detail.slippage_usd) > 0 && <Stat label="Slippage" value={fmtUsd(detail.slippage_usd)} tone="bad" />}
+            {detail.funding_accrued_usd != null && <Stat label="Funding maturato" value={fmtUsd(detail.funding_accrued_usd)} tone={Number(detail.funding_accrued_usd) >= 0 ? 'good' : 'bad'} />}
+            {detail.funding_rate_8h != null && <Stat label="Funding rate (8h)" value={`${(Number(detail.funding_rate_8h) * 100).toFixed(4)}%`} />}
+          </div>
+        </>
+      )}
     </section>
     <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
       <h3 className="text-sm font-semibold text-white">Risk levels</h3>

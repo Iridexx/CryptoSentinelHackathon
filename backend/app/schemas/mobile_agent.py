@@ -33,6 +33,7 @@ class AgentMobileSettings(BaseModel):
     perp_value_area_pct: float = Field(default=68.0, ge=50.0, le=90.0)
     perp_atr_stop_multiplier: float = Field(default=0.5, gt=0.0, le=20.0)
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)
+    perp_fee_mode: str = Field(default="taker", pattern="^(taker|maker|none)$")
 
 
 class AgentMobileSettingsResponse(BaseModel):

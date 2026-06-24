@@ -64,6 +64,13 @@ class PerpPositionView(BaseModel):
     take_profit_2: Decimal | None = None
     liquidation_price: Decimal | None = None
     funding_rate: Decimal | None = None
+    fee_mode: str | None = None
+    margin_usd: Decimal | None = None
+    opening_fee_usd: Decimal | None = None
+    taker_fee_usd: Decimal | None = None
+    maker_fee_usd: Decimal | None = None
+    slippage_usd: Decimal | None = None
+    funding_accrued_usd: Decimal | None = None
     status: str
     opened_at: str
 

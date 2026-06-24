@@ -81,6 +81,13 @@ export interface PerpPositionView {
   take_profit_2?: string | null;
   liquidation_price?: string | null;
   funding_rate?: string | null;
+  fee_mode?: string | null;
+  margin_usd?: string | null;
+  opening_fee_usd?: string | null;
+  taker_fee_usd?: string | null;
+  maker_fee_usd?: string | null;
+  slippage_usd?: string | null;
+  funding_accrued_usd?: string | null;
   status: string;
   opened_at: string;
 }
@@ -217,6 +224,14 @@ export interface TradeDetail {
   size: string;
   leverage?: number | null;
   exposure_usd: string;
+  fee_mode?: string | null;
+  margin_usd?: string | null;
+  opening_fee_usd?: string | null;
+  taker_fee_usd?: string | null;
+  maker_fee_usd?: string | null;
+  slippage_usd?: string | null;
+  funding_accrued_usd?: string | null;
+  funding_rate_8h?: string | null;
   opened_at: string;
   closed_at?: string | null;
   close_reason?: string | null;
@@ -252,6 +267,7 @@ export interface AgentMobileSettings {
   perp_value_area_pct: number;
   perp_atr_stop_multiplier: number;
   perp_time_stop_hours: number;
+  perp_fee_mode: 'taker' | 'maker' | 'none';
 }
 
 export interface AgentSettingsResponse {

@@ -40,6 +40,7 @@ from backend.app.persistence.repositories.trade_charts import TradeChartReposito
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import AgentMobileSettings
+from backend.app.execution.perp_fees import fetch_perp_fees, compute_opening_costs, accrue_funding
 
 logger = get_logger("agent.service")
 
@@ -309,6 +310,11 @@ class AgentService:
                 continue
             pnl = (price - pos.entry_price) * pos.size if pos.side == "long" else (pos.entry_price - price) * pos.size
             pos.current_price = price
+            # Aggiorna funding accrued se la posizione ha fee_mode != "none"
+            if pos.funding_rate is not None and pos.fee_mode and pos.fee_mode != "none":
+                hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
+                notional = pos.entry_price * pos.size
+                pos.funding_accrued_usd = accrue_funding(pos.funding_rate, notional, hours, pos.side)
             pos.pnl_unrealized = pnl
             # Aggiorna anche il liq price se mancante (posizioni aperte prima del fix).
             if pos.liquidation_price is None:
@@ -946,8 +952,30 @@ class AgentService:
         if signal.get("market") == "perp":
             side = str(signal.get("side") or "long")
             leverage = int(signal.get("leverage") or self._ms.perp_default_leverage)
-            # size rappresenta i contratti controllati: capitale * leva / prezzo
-            leveraged_size = size_quote * Decimal(leverage) / price
+            fee_mode = self._ms.perp_fee_mode
+            notional_usd = size_quote * Decimal(leverage)
+
+            # Fetch fee e funding da PancakeSwap Perps v2 (fallback a costanti se offline)
+            fee_snapshot = await fetch_perp_fees(
+                asset=str(signal.get("asset", "")),
+                size_usd=notional_usd,
+                fee_mode=fee_mode,
+            )
+            costs = compute_opening_costs(fee_snapshot, notional_usd)
+
+            # Applica slippage al prezzo di entrata (solo taker): l'entry effettivo
+            # è peggiore del mark price di una frazione price_impact_pct.
+            if fee_mode == "taker" and costs["price_impact_pct"] > 0:
+                direction_mult = Decimal("1") if side == "long" else Decimal("-1")
+                effective_price = price * (
+                    Decimal("1") + direction_mult * costs["price_impact_pct"] / Decimal("100")
+                )
+            else:
+                effective_price = price
+
+            # size = contratti controllati: capitale * leva / prezzo effettivo
+            leveraged_size = size_quote * Decimal(leverage) / effective_price
+
             await PerpTradeRepository(session).save(
                 PerpTrade(
                     trade_id=trade_id,
@@ -956,13 +984,20 @@ class AgentService:
                     side=side,
                     direction="open",
                     size=leveraged_size,
-                    price=price,
+                    price=effective_price,
                     leverage=leverage,
                     status=ExecutionStatus.PREPARED.value,
                     timestamp_utc=now,
                     venue="dry_run",
                     signal_id=signal.get("signal_id"),
                     notes="dry_run_step6",
+                    fee_mode=fee_mode,
+                    taker_fee_usd=costs["taker_fee_usd"],
+                    maker_fee_usd=costs["maker_fee_usd"],
+                    slippage_usd=costs["slippage_usd"],
+                    funding_rate_8h=costs["funding_rate_8h"],
+                    fees_quote=costs["applied_fee_usd"],
+                    slippage_pct=costs["price_impact_pct"],
                 )
             )
             await PerpPositionRepository(session).save(
@@ -972,16 +1007,22 @@ class AgentService:
                     asset=str(signal.get("asset")),
                     side=side,
                     size=leveraged_size,
-                    entry_price=price,
-                    current_price=price,
+                    entry_price=effective_price,
+                    current_price=effective_price,
                     leverage=leverage,
                     stop_loss=_optional_decimal(signal.get("stop_loss")),
                     take_profit_1=_optional_decimal(signal.get("take_profit_1")),
                     take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                     trailing_stop=_optional_decimal(signal.get("trailing_stop")),
-                    liquidation_price=_estimate_liquidation_price(
-                        price, int(signal.get("leverage") or self._ms.perp_default_leverage), side
-                    ),
+                    liquidation_price=_estimate_liquidation_price(effective_price, leverage, side),
+                    funding_rate=costs["funding_rate_8h"],
+                    fee_mode=fee_mode,
+                    margin_usd=size_quote,
+                    opening_fee_usd=costs["applied_fee_usd"],
+                    taker_fee_usd=costs["taker_fee_usd"],
+                    maker_fee_usd=costs["maker_fee_usd"],
+                    slippage_usd=costs["slippage_usd"],
+                    funding_accrued_usd=Decimal("0"),
                     venue="dry_run",
                     open_trade_id=trade_id,
                     opened_at=now,
