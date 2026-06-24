@@ -91,6 +91,10 @@ class FcmClient:
         failure_count = 0
         payload_data = self._stringify_data({**data, "severity": severity})
 
+        topic = data.get("topic", "")
+        trade_topics = {self.settings.fcm_spot_topic, self.settings.fcm_perp_topic}
+        channel_id = "trade_alerts" if topic in trade_topics else "price_alerts"
+
         for token in tokens:
             message = messaging.Message(
                 token=token,
@@ -99,9 +103,10 @@ class FcmClient:
                 android=messaging.AndroidConfig(
                     priority="high" if severity == "critical" else "normal",
                     notification=messaging.AndroidNotification(
-                        channel_id="price_alerts",
+                        channel_id=channel_id,
                         sound="default",
                         priority="max" if severity == "critical" else "default",
+                        visibility="public",
                     ),
                 ),
             )
