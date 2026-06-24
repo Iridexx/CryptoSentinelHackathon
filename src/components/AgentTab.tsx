@@ -1121,10 +1121,15 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   if (candles.length < 2) {
     return <p className="text-xs text-gray-500">Grafico non disponibile per questo trade.</p>;
   }
-  const W = 320;
-  const H = 170;
+  // Geometria: area di plot + margine destro per i prezzi (Y) e inferiore per gli orari (X).
+  const W = 340;
+  const H = 200;
   const padX = 6;
-  const padY = 10;
+  const padTop = 10;
+  const axisW = 46;   // larghezza colonna etichette prezzo (asse Y, a destra)
+  const axisH = 16;   // altezza riga etichette orario (asse X, in basso)
+  const plotR = W - axisW;
+  const plotB = H - axisH;
   const entry = Number(chart.entry_price);
   const exit = Number(chart.exit_price);
   const sl = chart.stop_loss != null ? Number(chart.stop_loss) : null;
@@ -1136,8 +1141,8 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   let lo = Math.min(...candles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
   const range = hi - lo;
-  const y = (price: number) => padY + (1 - (price - lo) / range) * (H - 2 * padY);
-  const colW = (W - 2 * padX) / candles.length;
+  const y = (price: number) => padTop + (1 - (price - lo) / range) * (plotB - padTop);
+  const colW = (plotR - padX) / candles.length;
   const cx = (i: number) => padX + colW * (i + 0.5);
 
   // Marker temporali: candela piu' vicina ad apertura/chiusura.
@@ -1152,13 +1157,56 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const exitIdx = nearest(ts(chart.closed_at));
   const exitGood = exit >= entry;
 
+  // Etichette asse Y (prezzo): 5 tacche equidistanti tra lo e hi.
+  const fmtAxisPrice = (p: number) => {
+    if (p >= 1000) return p.toFixed(0);
+    if (p >= 1) return p.toFixed(2);
+    if (p >= 0.01) return p.toFixed(4);
+    return p.toPrecision(3);
+  };
+  const yTicks = [0, 1, 2, 3, 4].map((k) => lo + (range * k) / 4);
+
+  // Etichette asse X (orario): 4 tacche; formato orario o data se l'arco supera le 24h.
+  const spanMs = ts(candles[candles.length - 1].t) - ts(candles[0].t);
+  const fmtAxisTime = (iso: string) => {
+    const d = new Date(iso);
+    return spanMs > 24 * 3600 * 1000
+      ? d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
+      : d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  };
+  const last = candles.length - 1;
+  const xTickIdx = [0, Math.round(last / 3), Math.round((2 * last) / 3), last];
+
   const levelLine = (price: number | null, color: string, dash: string) =>
     price == null || Number.isNaN(price) ? null : (
-      <line x1={padX} x2={W - padX} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
+      <line x1={padX} x2={plotR} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
     );
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
+      {/* griglia + etichette asse Y (prezzo) */}
+      {yTicks.map((p, k) => (
+        <g key={`yt${k}`}>
+          <line x1={padX} x2={plotR} y1={y(p)} y2={y(p)} stroke="#1f2937" strokeWidth="0.5" opacity="0.6" />
+          <text x={plotR + 4} y={y(p)} fontSize="8" fill="#6b7280" dominantBaseline="middle">{fmtAxisPrice(p)}</text>
+        </g>
+      ))}
+      {/* assi */}
+      <line x1={plotR} x2={plotR} y1={padTop} y2={plotB} stroke="#374151" strokeWidth="0.5" />
+      <line x1={padX} x2={plotR} y1={plotB} y2={plotB} stroke="#374151" strokeWidth="0.5" />
+      {/* etichette asse X (orario) */}
+      {xTickIdx.map((i, k) => (
+        <text
+          key={`xt${k}`}
+          x={cx(i)}
+          y={H - 4}
+          fontSize="8"
+          fill="#6b7280"
+          textAnchor={k === 0 ? 'start' : k === xTickIdx.length - 1 ? 'end' : 'middle'}
+        >
+          {fmtAxisTime(candles[i].t)}
+        </text>
+      ))}
       {candles.map((c, i) => {
         const up = c.c >= c.o;
         const color = up ? '#22c55e' : '#ef4444';
