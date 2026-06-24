@@ -789,13 +789,11 @@ const WalletPane: FC<{
                       {p.take_profit_2 && <span>TP2 {fmtPrice(p.take_profit_2)}</span>}
                     </div>
                   )}
-                  {p.fee_mode && (
-                    <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-gray-500">
-                      <span className="capitalize">Mode: <span className={p.fee_mode === 'none' ? 'text-gray-400' : 'text-accent-yellow'}>{p.fee_mode === 'none' ? 'nessuna' : 'swap+slip'}</span></span>
-                      {p.swap_fee_usd != null && <span>Swap fee {fmtUsd(p.swap_fee_usd)}</span>}
-                      {p.slippage_usd != null && Number(p.slippage_usd) > 0 && <span>Slip. {fmtUsd(p.slippage_usd)}</span>}
-                    </div>
-                  )}
+                  <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                    <span>Mode: <span className={!p.fee_mode || p.fee_mode === 'none' ? 'text-gray-400' : 'text-accent-yellow'}>{p.fee_mode === 'none' ? 'nessuna' : p.fee_mode === 'all' ? 'swap+slip' : p.fee_mode ?? '-'}</span></span>
+                    <span>Swap fee {p.swap_fee_usd != null ? fmtUsd(p.swap_fee_usd) : '$0.00'}</span>
+                    <span>Slip. {p.slippage_usd != null ? fmtUsd(p.slippage_usd) : '$0.00'}</span>
+                  </div>
                 </div>
               );
             })}
@@ -834,18 +832,13 @@ const WalletPane: FC<{
                       {p.liquidation_price && <span className="text-accent-red">Liq {fmtPrice(p.liquidation_price)}</span>}
                     </div>
                   )}
-                  {p.fee_mode && (
-                    <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-gray-500">
-                      {p.margin_usd != null && <span>Margin {fmtUsd(p.margin_usd)}</span>}
-                      <span className="capitalize">Mode: <span className={p.fee_mode === 'none' ? 'text-gray-400' : p.fee_mode === 'maker' ? 'text-accent-green' : 'text-accent-yellow'}>{p.fee_mode}</span></span>
-                      {p.opening_fee_usd != null && <span>Fee aperta {fmtUsd(p.opening_fee_usd)}</span>}
-                      {p.taker_fee_usd != null && p.maker_fee_usd != null && (
-                        <span className="text-gray-600">T:{fmtUsd(p.taker_fee_usd)} M:{fmtUsd(p.maker_fee_usd)}</span>
-                      )}
-                      {p.slippage_usd != null && Number(p.slippage_usd) > 0 && <span>Slip. {fmtUsd(p.slippage_usd)}</span>}
-                      {p.funding_accrued_usd != null && <span className={Number(p.funding_accrued_usd) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund. {fmtUsd(p.funding_accrued_usd)}</span>}
-                    </div>
-                  )}
+                  <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                    <span>Margin {p.margin_usd != null ? fmtUsd(p.margin_usd) : '$0.00'}</span>
+                    <span>Mode: <span className={!p.fee_mode || p.fee_mode === 'none' ? 'text-gray-400' : p.fee_mode === 'maker' ? 'text-accent-green' : 'text-accent-yellow'}>{p.fee_mode ?? '-'}</span></span>
+                    <span>Fee {p.opening_fee_usd != null ? fmtUsd(p.opening_fee_usd) : '$0.00'}</span>
+                    <span>Slip. {p.slippage_usd != null ? fmtUsd(p.slippage_usd) : '$0.00'}</span>
+                    <span className={Number(p.funding_accrued_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund. {p.funding_accrued_usd != null ? fmtUsd(p.funding_accrued_usd) : '$0.00'}</span>
+                  </div>
                 </div>
               );
             })}
