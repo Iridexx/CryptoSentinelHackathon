@@ -1,8 +1,8 @@
-"""One-shot migration from legacy JSON stores to the SQLite DB.
+"""Startup migrations: JSON-to-DB data import + idempotent schema upgrades.
 
-Run automatically at startup by main.py lifespan.  The function is idempotent:
-if DB rows already exist the JSON data is not re-imported.  JSON files are left
-on disk as emergency reference but are no longer used by the application.
+Run automatically at startup by main.py lifespan.  Both functions are
+idempotent — safe to call on every restart.  JSON files are left on disk as
+emergency reference but are no longer used by the application.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import structlog
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.persistence.repositories.alerts import AlertConfigRepository
@@ -19,6 +20,78 @@ from backend.app.persistence.repositories.device_tokens import DeviceTokenReposi
 logger = structlog.get_logger("persistence.migration")
 
 _DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+
+async def upgrade_schema(session: AsyncSession) -> None:
+    """Idempotent DDL upgrades — adds missing columns to existing tables.
+
+    SQLite supports ALTER TABLE ADD COLUMN for nullable and DEFAULT-bearing
+    columns.  We check PRAGMA table_info before each ADD to stay idempotent.
+    """
+
+    async def _has_column(table: str, column: str) -> bool:
+        result = await session.execute(text(f"PRAGMA table_info({table})"))
+        return any(row[1] == column for row in result.fetchall())
+
+    # ── perp_positions ────────────────────────────────────────────────────────
+    perp_pos_cols: list[tuple[str, str]] = [
+        ("fee_mode",            "VARCHAR(8)"),
+        ("margin_usd",          "NUMERIC(20, 8)"),
+        ("opening_fee_usd",     "NUMERIC(20, 8)"),
+        ("taker_fee_usd",       "NUMERIC(20, 8)"),
+        ("maker_fee_usd",       "NUMERIC(20, 8)"),
+        ("slippage_usd",        "NUMERIC(20, 8)"),
+        ("funding_accrued_usd", "NUMERIC(20, 8) NOT NULL DEFAULT 0"),
+    ]
+    for col, defn in perp_pos_cols:
+        if not await _has_column("perp_positions", col):
+            await session.execute(
+                text(f"ALTER TABLE perp_positions ADD COLUMN {col} {defn}")
+            )
+            logger.info("schema_column_added", table="perp_positions", column=col)
+
+    # ── perp_trades ───────────────────────────────────────────────────────────
+    perp_trade_cols: list[tuple[str, str]] = [
+        ("fee_mode",        "VARCHAR(8)"),
+        ("taker_fee_usd",   "NUMERIC(20, 8)"),
+        ("maker_fee_usd",   "NUMERIC(20, 8)"),
+        ("slippage_usd",    "NUMERIC(20, 8)"),
+        ("funding_rate_8h", "NUMERIC(20, 10)"),
+    ]
+    for col, defn in perp_trade_cols:
+        if not await _has_column("perp_trades", col):
+            await session.execute(
+                text(f"ALTER TABLE perp_trades ADD COLUMN {col} {defn}")
+            )
+            logger.info("schema_column_added", table="perp_trades", column=col)
+
+    # ── spot_positions ────────────────────────────────────────────────────────
+    spot_pos_cols: list[tuple[str, str]] = [
+        ("fee_mode",     "VARCHAR(8)"),
+        ("swap_fee_usd", "NUMERIC(20, 8)"),
+        ("slippage_usd", "NUMERIC(20, 8)"),
+    ]
+    for col, defn in spot_pos_cols:
+        if not await _has_column("spot_positions", col):
+            await session.execute(
+                text(f"ALTER TABLE spot_positions ADD COLUMN {col} {defn}")
+            )
+            logger.info("schema_column_added", table="spot_positions", column=col)
+
+    # ── spot_trades ───────────────────────────────────────────────────────────
+    spot_trade_cols: list[tuple[str, str]] = [
+        ("fee_mode",     "VARCHAR(8)"),
+        ("swap_fee_usd", "NUMERIC(20, 8)"),
+        ("slippage_usd", "NUMERIC(20, 8)"),
+    ]
+    for col, defn in spot_trade_cols:
+        if not await _has_column("spot_trades", col):
+            await session.execute(
+                text(f"ALTER TABLE spot_trades ADD COLUMN {col} {defn}")
+            )
+            logger.info("schema_column_added", table="spot_trades", column=col)
+
+    await session.commit()
 
 
 async def migrate_json_to_db(

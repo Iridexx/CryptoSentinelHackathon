@@ -34,6 +34,7 @@ class AgentMobileSettings(BaseModel):
     perp_atr_stop_multiplier: float = Field(default=0.5, gt=0.0, le=20.0)
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)
     perp_fee_mode: str = Field(default="taker", pattern="^(taker|maker|none)$")
+    spot_fee_mode: str = Field(default="all", pattern="^(all|none)$")
 
 
 class AgentMobileSettingsResponse(BaseModel):

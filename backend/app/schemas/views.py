@@ -18,6 +18,9 @@ class SpotPositionView(BaseModel):
     stop_loss: Decimal | None = None
     take_profit_1: Decimal | None = None
     take_profit_2: Decimal | None = None
+    fee_mode: str | None = None
+    swap_fee_usd: Decimal | None = None
+    slippage_usd: Decimal | None = None
     status: str
     opened_at: str
 

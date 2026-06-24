@@ -58,6 +58,9 @@ class ViewService:
                     stop_loss=p.stop_loss,
                     take_profit_1=p.take_profit_1,
                     take_profit_2=p.take_profit_2,
+                    fee_mode=p.fee_mode,
+                    swap_fee_usd=p.swap_fee_usd,
+                    slippage_usd=p.slippage_usd,
                     status=p.status,
                     opened_at=p.opened_at.isoformat(),
                 )

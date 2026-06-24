@@ -96,6 +96,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_atr_stop_multiplier: 0.5,
   perp_time_stop_hours: 8,
   perp_fee_mode: 'taker' as const,
+  spot_fee_mode: 'all' as const,
 };
 
 const AGENT_REFRESH_MS = 45_000;
@@ -788,6 +789,13 @@ const WalletPane: FC<{
                       {p.take_profit_2 && <span>TP2 {fmtPrice(p.take_profit_2)}</span>}
                     </div>
                   )}
+                  {p.fee_mode && (
+                    <div className="mt-1 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                      <span className="capitalize">Mode: <span className={p.fee_mode === 'none' ? 'text-gray-400' : 'text-accent-yellow'}>{p.fee_mode === 'none' ? 'nessuna' : 'swap+slip'}</span></span>
+                      {p.swap_fee_usd != null && <span>Swap fee {fmtUsd(p.swap_fee_usd)}</span>}
+                      {p.slippage_usd != null && Number(p.slippage_usd) > 0 && <span>Slip. {fmtUsd(p.slippage_usd)}</span>}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1046,6 +1054,10 @@ const SetupPane: FC<{
           <NumberInput label="Vol trigger %" value={settings.spot_volatility_trigger_pct} onChange={(spot_volatility_trigger_pct) => patch({ spot_volatility_trigger_pct })} />
           <NumberInput label="Rel volume" value={settings.spot_relative_volume_threshold} step={0.1} onChange={(spot_relative_volume_threshold) => patch({ spot_relative_volume_threshold })} />
           <NumberInput label="ATR stop" value={settings.spot_atr_stop_multiplier} step={0.1} onChange={(spot_atr_stop_multiplier) => patch({ spot_atr_stop_multiplier })} />
+          <SelectInput label="Fee mode (dry-run)" value={settings.spot_fee_mode} onChange={(spot_fee_mode) => patch({ spot_fee_mode })} options={[
+            { value: 'all', label: 'Swap fee + Slippage — 0.15%' },
+            { value: 'none', label: 'Nessuna (strategia lorda)' },
+          ]} />
         </div>
       </section>
 
@@ -1186,17 +1198,22 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
           <div className="mt-3 flex items-center gap-2">
             <span className="text-xs font-semibold uppercase text-gray-500">Costi posizione</span>
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${detail.fee_mode === 'none' ? 'bg-gray-700 text-gray-300' : detail.fee_mode === 'maker' ? 'bg-accent-green/15 text-accent-green' : 'bg-accent-yellow/15 text-accent-yellow'}`}>
-              {detail.fee_mode === 'none' ? 'Nessuna fee' : detail.fee_mode === 'maker' ? 'Maker (limit)' : 'Taker (market)'}
+              {detail.fee_mode === 'none' ? 'Nessuna fee' : detail.fee_mode === 'maker' ? 'Maker (limit)' : detail.fee_mode === 'all' ? 'Swap + Slippage' : 'Taker (market)'}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2">
+            {/* perp-specific */}
             {detail.margin_usd != null && <Stat label="Margine" value={fmtUsd(detail.margin_usd)} />}
             {detail.opening_fee_usd != null && <Stat label="Fee applicata" value={fmtUsd(detail.opening_fee_usd)} tone="bad" />}
             {detail.taker_fee_usd != null && <Stat label="Fee taker (0.06%)" value={fmtUsd(detail.taker_fee_usd)} />}
             {detail.maker_fee_usd != null && <Stat label="Fee maker (0.02%)" value={fmtUsd(detail.maker_fee_usd)} />}
-            {detail.slippage_usd != null && Number(detail.slippage_usd) > 0 && <Stat label="Slippage" value={fmtUsd(detail.slippage_usd)} tone="bad" />}
             {detail.funding_accrued_usd != null && <Stat label="Funding maturato" value={fmtUsd(detail.funding_accrued_usd)} tone={Number(detail.funding_accrued_usd) >= 0 ? 'good' : 'bad'} />}
             {detail.funding_rate_8h != null && <Stat label="Funding rate (8h)" value={`${(Number(detail.funding_rate_8h) * 100).toFixed(4)}%`} />}
+            {/* spot-specific */}
+            {detail.swap_fee_usd != null && <Stat label="Swap fee (0.05%)" value={fmtUsd(detail.swap_fee_usd)} tone="bad" />}
+            {detail.gas_cost_bnb != null && <Stat label="Gas (BNB)" value={Number(detail.gas_cost_bnb).toFixed(6)} />}
+            {/* shared */}
+            {detail.slippage_usd != null && Number(detail.slippage_usd) > 0 && <Stat label="Slippage" value={fmtUsd(detail.slippage_usd)} tone="bad" />}
           </div>
         </>
       )}

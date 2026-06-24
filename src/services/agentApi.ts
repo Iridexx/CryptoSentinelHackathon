@@ -37,6 +37,9 @@ export interface SpotPositionView {
   stop_loss?: string | null;
   take_profit_1?: string | null;
   take_profit_2?: string | null;
+  fee_mode?: string | null;
+  swap_fee_usd?: string | null;
+  slippage_usd?: string | null;
   status: string;
   opened_at: string;
 }
@@ -225,13 +228,18 @@ export interface TradeDetail {
   leverage?: number | null;
   exposure_usd: string;
   fee_mode?: string | null;
+  // perp-specific
   margin_usd?: string | null;
   opening_fee_usd?: string | null;
   taker_fee_usd?: string | null;
   maker_fee_usd?: string | null;
-  slippage_usd?: string | null;
   funding_accrued_usd?: string | null;
   funding_rate_8h?: string | null;
+  // spot-specific
+  swap_fee_usd?: string | null;
+  gas_cost_bnb?: string | null;
+  // shared
+  slippage_usd?: string | null;
   opened_at: string;
   closed_at?: string | null;
   close_reason?: string | null;
@@ -268,6 +276,7 @@ export interface AgentMobileSettings {
   perp_atr_stop_multiplier: number;
   perp_time_stop_hours: number;
   perp_fee_mode: 'taker' | 'maker' | 'none';
+  spot_fee_mode: 'all' | 'none';
 }
 
 export interface AgentSettingsResponse {

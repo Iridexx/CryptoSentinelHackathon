@@ -41,6 +41,7 @@ from backend.app.persistence.repositories.trades import PerpTradeRepository, Spo
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import AgentMobileSettings
 from backend.app.execution.perp_fees import fetch_perp_fees, compute_opening_costs, accrue_funding
+from backend.app.execution.spot_fees import compute_spot_costs
 
 logger = get_logger("agent.service")
 
@@ -148,6 +149,7 @@ class AgentService:
             perp_value_area_pct=self.settings.perp_value_area_pct,
             perp_atr_stop_multiplier=self.settings.perp_atr_stop_multiplier,
             perp_time_stop_hours=self.settings.perp_time_stop_hours,
+            spot_fee_mode="all",
         )
 
     def status(self) -> dict:
@@ -308,14 +310,18 @@ class AgentService:
             price = perp_prices.get(pos.asset)
             if price is None:
                 continue
-            pnl = (price - pos.entry_price) * pos.size if pos.side == "long" else (pos.entry_price - price) * pos.size
+            raw_pnl = (price - pos.entry_price) * pos.size if pos.side == "long" else (pos.entry_price - price) * pos.size
             pos.current_price = price
             # Aggiorna funding accrued se la posizione ha fee_mode != "none"
             if pos.funding_rate is not None and pos.fee_mode and pos.fee_mode != "none":
                 hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
                 notional = pos.entry_price * pos.size
                 pos.funding_accrued_usd = accrue_funding(pos.funding_rate, notional, hours, pos.side)
-            pos.pnl_unrealized = pnl
+            # Detrae la fee di apertura (taker o maker) dal P&L netto.
+            # Lo slippage è già nell'entry_price, quindi si sottrae solo la parte
+            # "pura" della fee: opening_fee_usd − slippage_usd già incluso nel prezzo.
+            fee_deduction = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
+            pos.pnl_unrealized = raw_pnl - fee_deduction + pos.funding_accrued_usd
             # Aggiorna anche il liq price se mancante (posizioni aperte prima del fix).
             if pos.liquidation_price is None:
                 pos.liquidation_price = _estimate_liquidation_price(pos.entry_price, pos.leverage, pos.side)
@@ -328,7 +334,9 @@ class AgentService:
             if price is None:
                 continue
             pos.current_price = price
-            pos.pnl_unrealized = (price - pos.entry_price) * pos.size
+            raw_pnl = (price - pos.entry_price) * pos.size
+            # Detrae la swap fee dal P&L netto (lo slippage è già nell'entry_price).
+            pos.pnl_unrealized = raw_pnl - (pos.swap_fee_usd or Decimal("0"))
             pos.updated_at = now
             session.add(pos)
             updated = True
@@ -402,15 +410,18 @@ class AgentService:
         partial: bool = False,
     ) -> Decimal:
         """Chiude (totalmente o al 50% per TP1) una posizione spot; crea trade di chiusura con pnl_usd."""
+        swap_fee = pos.swap_fee_usd or Decimal("0")
         if partial:
             close_size = (pos.size / Decimal("2")).quantize(Decimal("0.000001"))
-            pnl = (exit_price - pos.entry_price) * close_size
+            raw_pnl = (exit_price - pos.entry_price) * close_size
+            pnl = raw_pnl - swap_fee / Decimal("2")
             pos.size = pos.size - close_size
             pos.tp1_reached = True
-            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size
+            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size - swap_fee / Decimal("2")
         else:
             close_size = pos.size
-            pnl = (exit_price - pos.entry_price) * close_size
+            raw_pnl = (exit_price - pos.entry_price) * close_size
+            pnl = raw_pnl - swap_fee
             pos.status = "closed"
             pos.pnl_unrealized = pnl
         pos.current_price = exit_price
@@ -451,16 +462,21 @@ class AgentService:
         """Chiude (totalmente o al 50% per TP1) una posizione perp; crea trade di chiusura con pnl_usd."""
         is_long = pos.side == "long"
         pnl_per_unit = (exit_price - pos.entry_price) if is_long else (pos.entry_price - exit_price)
+        # Fee pura = opening_fee_usd escludendo lo slippage già incluso nell'entry_price.
+        fee_only = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
 
         if partial:
             close_size = (pos.size / Decimal("2")).quantize(Decimal("0.000001"))
-            pnl = pnl_per_unit * close_size
+            funding_share = pos.funding_accrued_usd * Decimal("0.5")
+            raw_pnl = pnl_per_unit * close_size
+            pnl = raw_pnl - fee_only / Decimal("2") + funding_share
             pos.size = pos.size - close_size
             pos.tp1_reached = True
-            pos.pnl_unrealized = pnl_per_unit * pos.size
+            pos.pnl_unrealized = pnl_per_unit * pos.size - fee_only / Decimal("2") + pos.funding_accrued_usd * Decimal("0.5")
         else:
             close_size = pos.size
-            pnl = pnl_per_unit * close_size
+            raw_pnl = pnl_per_unit * close_size
+            pnl = raw_pnl - fee_only + pos.funding_accrued_usd
             pos.status = "closed"
             pos.pnl_unrealized = pnl
 
@@ -1031,20 +1047,35 @@ class AgentService:
             )
             return {"status": "prepared", "mode": "dry_run", "trade_id": trade_id}
 
+        spot_fee_mode = self._ms.spot_fee_mode
+        spot_costs = compute_spot_costs(size_quote, spot_fee_mode)
+
+        # Applica slippage al prezzo di acquisto (buy a prezzo leggermente peggiore)
+        if spot_fee_mode == "all" and spot_costs["slippage_rate"] > 0:
+            effective_spot_price = price * (Decimal("1") + spot_costs["slippage_rate"])
+        else:
+            effective_spot_price = price
+
+        spot_amount = size_quote / effective_spot_price
+
         await SpotTradeRepository(session).save(
             SpotTrade(
                 trade_id=trade_id,
                 user_id=str(self.settings.default_user_id),
                 asset=str(signal.get("asset")),
                 side="buy",
-                amount=size_quote / price,
-                price=price,
+                amount=spot_amount,
+                price=effective_spot_price,
                 amount_quote=size_quote,
                 status=ExecutionStatus.PREPARED.value,
                 provider="dry_run",
                 timestamp_utc=now,
                 signal_id=signal.get("signal_id"),
                 notes="dry_run_step6",
+                fee_mode=spot_fee_mode,
+                swap_fee_usd=spot_costs["swap_fee_usd"],
+                slippage_usd=spot_costs["slippage_usd"],
+                fees_quote=spot_costs["applied_fee_usd"],
             )
         )
         await SpotPositionRepository(session).save(
@@ -1052,13 +1083,16 @@ class AgentService:
                 position_id=f"pos_{uuid4().hex}",
                 user_id=str(self.settings.default_user_id),
                 asset=str(signal.get("asset")),
-                size=size_quote / price,
-                entry_price=price,
-                current_price=price,
+                size=spot_amount,
+                entry_price=effective_spot_price,
+                current_price=effective_spot_price,
                 stop_loss=_optional_decimal(signal.get("stop_loss")),
                 take_profit_1=_optional_decimal(signal.get("take_profit_1")),
                 take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                 trailing_stop=_optional_decimal(signal.get("trailing_stop")),
+                fee_mode=spot_fee_mode,
+                swap_fee_usd=spot_costs["swap_fee_usd"],
+                slippage_usd=spot_costs["slippage_usd"],
                 open_trade_id=trade_id,
                 opened_at=now,
                 updated_at=now,

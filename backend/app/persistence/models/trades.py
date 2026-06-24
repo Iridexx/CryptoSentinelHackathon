@@ -28,6 +28,9 @@ class SpotTrade(Base):
     gas_cost_bnb: Mapped[Decimal | None] = mapped_column(Numeric(30, 18), nullable=True)
     slippage_pct: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
     fees_quote: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    fee_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)           # all|none
+    swap_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    slippage_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     block_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     timestamp_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

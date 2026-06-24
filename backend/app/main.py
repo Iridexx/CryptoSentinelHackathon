@@ -23,7 +23,7 @@ from backend.app.core.security.headers import add_security_headers
 from backend.app.notifications.price_checker import price_checker_loop
 from backend.app.persistence.backup import backup_db
 from backend.app.persistence.database import close_db, get_session_factory, init_db
-from backend.app.persistence.migration import migrate_json_to_db
+from backend.app.persistence.migration import migrate_json_to_db, upgrade_schema
 from backend.app.persistence.sync_database import init_sync_db, reset_sync_db
 
 settings = get_settings()
@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_db(settings.database_url, echo=settings.database_echo)
     init_sync_db(settings.database_url, echo=settings.database_echo)
     async with get_session_factory()() as session:
+        await upgrade_schema(session)
         await migrate_json_to_db(
             session,
             fcm_tokens_path=settings.fcm_token_store_path,
