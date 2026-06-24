@@ -2085,6 +2085,9 @@ function EquityLineChart({ points }: { points: { pct: number; label: string }[] 
   const n = points.length;
   if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
 
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
   const PNL_COLOR = '#F0B90B';
   const W = 520, H = 180, padL = 48, padR = 16, padT = 12, padB = 24;
   const plotW = W - padL - padR;
@@ -2111,8 +2114,34 @@ function EquityLineChart({ points }: { points: { pct: number; label: string }[] 
   const xIdxs = n <= 4 ? points.map((_, i) => i) : [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
   const lastPct = vals[n - 1];
 
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const svgX = (e.clientX - rect.left) * scaleX;
+    const rawIdx = (svgX - padL) / plotW * (n - 1);
+    const idx = Math.max(0, Math.min(n - 1, Math.round(rawIdx)));
+    setHoverIdx(idx);
+  };
+
+  const hov = hoverIdx !== null ? points[hoverIdx] : null;
+  const hovX = hoverIdx !== null ? xAt(hoverIdx) : null;
+  const hovY = hov !== null && hov !== undefined ? yAt(hov.pct) : null;
+
+  // tooltip box: flip to left side when too close to right edge
+  const tooltipLeft = hovX !== null && hovX > W * 0.65;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="Equity curve">
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: '100%', height: 'auto', cursor: 'crosshair' }}
+      role="img"
+      aria-label="Equity curve"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverIdx(null)}
+    >
       <defs>
         <linearGradient id="dashPnlFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.25" />
@@ -2136,6 +2165,24 @@ function EquityLineChart({ points }: { points: { pct: number; label: string }[] 
           {points[idx].label}
         </text>
       ))}
+
+      {/* crosshair + tooltip */}
+      {hoverIdx !== null && hovX !== null && hovY !== null && hov !== null && (
+        <g>
+          {/* vertical line */}
+          <line x1={hovX} x2={hovX} y1={padT} y2={H - padB} stroke="#ffffff" strokeOpacity="0.25" strokeWidth="1" strokeDasharray="3 3" />
+          {/* dot on curve */}
+          <circle cx={hovX} cy={hovY} r="4.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="2" />
+          {/* tooltip box */}
+          <g transform={`translate(${tooltipLeft ? hovX - 88 : hovX + 10},${Math.min(H - padB - 34, Math.max(padT, hovY - 22))})`}>
+            <rect x="0" y="0" width="78" height="34" rx="4" fill="#1a1f2e" stroke="#2d3348" strokeWidth="1" />
+            <text x="6" y="13" fontSize="9" fill="#9ca3af">{hov.label}</text>
+            <text x="6" y="27" fontSize="11" fontWeight="600" fill={hov.pct >= 0 ? '#22c55e' : '#ef4444'}>
+              {hov.pct >= 0 ? '+' : ''}{hov.pct.toFixed(2)}%
+            </text>
+          </g>
+        </g>
+      )}
     </svg>
   );
 }
