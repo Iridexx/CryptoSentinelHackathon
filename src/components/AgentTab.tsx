@@ -1303,6 +1303,7 @@ const AgentTab: FC<AgentTabProps> = ({
   const [refreshing, setRefreshing] = useState(!agentCache.loaded);
   const [justSynced, setJustSynced] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
 
@@ -1417,14 +1418,14 @@ const AgentTab: FC<AgentTabProps> = ({
   };
 
   const handleTradeDetail = async (tradeId: string) => {
-    setSaving(true);
+    setLoadingDetail(true);
     setActionError('');
     try {
       setTradeDetail(await fetchTradeDetail(tradeId));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Unable to load trade detail');
     } finally {
-      setSaving(false);
+      setLoadingDetail(false);
     }
   };
 
@@ -1436,6 +1437,15 @@ const AgentTab: FC<AgentTabProps> = ({
 
   return (
     <div className="space-y-4">
+      {loadingDetail && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-dark-700 border-t-accent-yellow" />
+          <p className="mt-3 text-sm text-gray-400">Caricamento dettaglio...</p>
+        </div>
+      )}
+      {actionError && !tradeDetail && (
+        <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{actionError}</p>
+      )}
       {tradeDetail ? (
         <TradeDetailScreen detail={tradeDetail} onBack={() => setTradeDetail(null)} />
       ) : (
