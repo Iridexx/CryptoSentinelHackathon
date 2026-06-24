@@ -58,7 +58,7 @@ const fmtPriceFull = (value: string | number | null | undefined): string => {
   const intStr = Math.trunc(Math.abs(n)).toLocaleString('en-US');
   const sign = n < 0 ? '-' : '';
   if (dotIdx === -1) return `${sign}$${intStr}`;
-  const decStr = s.slice(dotIdx + 1).replace(/0+$/, '');
+  const decStr = s.slice(dotIdx + 1).slice(0, 8).replace(/0+$/, '');
   return decStr ? `${sign}$${intStr}.${decStr}` : `${sign}$${intStr}`;
 };
 
