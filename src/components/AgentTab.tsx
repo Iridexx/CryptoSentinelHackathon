@@ -1054,7 +1054,7 @@ const SetupPane: FC<{
           <NumberInput label="Vol trigger %" value={settings.spot_volatility_trigger_pct} onChange={(spot_volatility_trigger_pct) => patch({ spot_volatility_trigger_pct })} />
           <NumberInput label="Rel volume" value={settings.spot_relative_volume_threshold} step={0.1} onChange={(spot_relative_volume_threshold) => patch({ spot_relative_volume_threshold })} />
           <NumberInput label="ATR stop" value={settings.spot_atr_stop_multiplier} step={0.1} onChange={(spot_atr_stop_multiplier) => patch({ spot_atr_stop_multiplier })} />
-          <SelectInput label="Fee mode (dry-run)" value={settings.spot_fee_mode} onChange={(spot_fee_mode) => patch({ spot_fee_mode })} options={[
+          <SelectInput label="Fee mode (dry-run)" value={settings.spot_fee_mode} onChange={(v) => patch({ spot_fee_mode: v as 'all' | 'none' })} options={[
             { value: 'all', label: 'Swap fee + Slippage — 0.15%' },
             { value: 'none', label: 'Nessuna (strategia lorda)' },
           ]} />
@@ -1072,7 +1072,7 @@ const SetupPane: FC<{
           <NumberInput label="Leverage" value={settings.perp_default_leverage} onChange={(perp_default_leverage) => patch({ perp_default_leverage })} />
           <NumberInput label="Value area %" value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
           <NumberInput label="ATR stop" value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
-          <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(perp_fee_mode) => patch({ perp_fee_mode })} options={[
+          <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(v) => patch({ perp_fee_mode: v as 'taker' | 'maker' | 'none' })} options={[
             { value: 'taker', label: 'Taker (market) — 0.06%' },
             { value: 'maker', label: 'Maker (limit) — 0.02%' },
             { value: 'none', label: 'Nessuna (strategia lorda)' },
