@@ -3,6 +3,7 @@
 
 risk:
   capital_per_trade_pct: 4.0
+  per_trade_pct: 1.5              # A (v3): rischio per trade; la size si adatta allo stop, mai lo stop alla size
   max_open_positions: 5
   max_total_exposure_pct: 30.0
   daily_loss_limit_pct: -8.0

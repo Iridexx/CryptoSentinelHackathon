@@ -63,6 +63,7 @@ def settings(**overrides):
         anthropic_model="claude-test",
         anthropic_max_tokens=512,
         risk_capital_per_trade_pct=4.0,
+        risk_per_trade_pct=1.5,
         risk_max_open_positions=5,
         risk_max_total_exposure_pct=30.0,
         risk_daily_loss_limit_pct=-8.0,
@@ -77,9 +78,30 @@ def settings(**overrides):
         spot_volatility_trigger_pct=2.0,
         spot_relative_volume_threshold=1.5,
         spot_atr_stop_multiplier=1.5,
+        spot_tp1_atr_multiplier=2.0,
+        spot_tp2_atr_multiplier=3.5,
+        spot_breakeven_trigger_atr=1.0,
+        spot_breakeven_offset_costs=True,
+        spot_trailing_atr_multiplier=2.5,
+        spot_trailing_active_from_start=True,
+        spot_tp1_close_fraction=0.30,
+        spot_scale_in_enabled=True,
+        spot_scale_in_size_fraction=0.50,
+        spot_scale_in_require_new_hh=True,
+        spot_scale_in_require_be_stop=True,
+        spot_scale_in_max_adds=1,
         spot_trailing_distance_pct=2.0,
         spot_partial_take_profit_pct=5.0,
         spot_time_stop_hours=6,
+        spot_time_stop_mode="atr",
+        spot_time_stop_lookback_candles=8,
+        spot_time_stop_min_move_atr=0.5,
+        spot_time_stop_hours_fallback=6,
+        spot_spike_filter_enabled=True,
+        spot_spike_atr_ratio_max=3.0,
+        spot_spike_atr_avg_period=50,
+        spot_spike_action="skip",
+        spot_spike_reduced_size_fraction=0.5,
         spot_vwap_atr_extension_limit=10.0,
         spot_rsi_weight_pct=15.0,
         spot_trend_structure_weight_pct=30.0,
@@ -624,7 +646,8 @@ async def test_close_generates_chart_snapshot(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_spot_trailing_activates_only_after_tp1(db) -> None:
+async def test_spot_trailing_active_from_start(db) -> None:
+    # v3 (C): il trailing è attivo DA SUBITO, non più solo dopo TP1.
     service = AgentService(
         settings(),
         spot_registry=SimpleNamespace(),
@@ -633,7 +656,7 @@ async def test_spot_trailing_activates_only_after_tp1(db) -> None:
     now = datetime.now(UTC)
 
     def _pos(position_id: str, tp1: bool) -> SpotPosition:
-        # entry 100, trailing a 99, prezzo a 98 (sotto il trailing): chiuderebbe per trailing.
+        # entry 100, trailing a 99, prezzo a 98 (sotto il trailing): chiude per trailing.
         # stop_loss basso (90) e nessun TP per isolare il solo trailing.
         return SpotPosition(
             position_id=position_id,
@@ -655,9 +678,8 @@ async def test_spot_trailing_activates_only_after_tp1(db) -> None:
     async with get_session_factory()() as session:
         await service._check_sl_tp(session, [pos_no_tp1, pos_tp1], [], now)
 
-    # Senza TP1 il trailing non si attiva: la posizione resta aperta.
-    assert pos_no_tp1.status == "open"
-    # Con TP1 raggiunto il trailing chiude la posizione.
+    # Il trailing chiude in entrambi i casi: non è più gated dal TP1.
+    assert pos_no_tp1.status == "closed"
     assert pos_tp1.status == "closed"
 
 
@@ -845,3 +867,107 @@ def test_estimate_liquidation_price() -> None:
     assert _estimate_liquidation_price(Decimal("100"), 2, "long") == Decimal("50.00000000")
     assert _estimate_liquidation_price(Decimal("100"), 2, "short") == Decimal("150.00000000")
     assert _estimate_liquidation_price(Decimal("100"), 0, "long") is None
+
+
+# ── Strategia SPOT v3 — criteri di accettazione (§5 del piano) ────────────────
+
+
+@pytest.mark.asyncio
+async def test_spot_breakeven_prevents_loss_after_one_atr(db) -> None:
+    """§5.2: un trade che tocca +1*ATR e poi ritraccia NON chiude in perdita."""
+    # Scaling-in disattivato per isolare il solo breakeven.
+    service = AgentService(
+        settings(spot_scale_in_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="p-be",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("111"),       # >= entry + 1*ATR(10) -> breakeven
+        stop_loss=Decimal("78"),            # entry - 2.2*ATR
+        take_profit_1=Decimal("130"),       # lontani: non scattano
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("10"),
+        max_price=Decimal("100"),
+        swap_fee_usd=Decimal("0"),
+        slippage_usd=Decimal("0"),
+        scale_in_count=0,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos], [], now)
+        # Lo stop è salito a breakeven (>= entry) e la posizione resta aperta.
+        assert pos.status == "open"
+        assert pos.stop_loss >= pos.entry_price
+        # Ritraccia sopra il breakeven: non chiude (non più in perdita).
+        pos.current_price = Decimal("101")
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.status == "open"
+
+
+@pytest.mark.asyncio
+async def test_spot_spike_filter_rejects_signal() -> None:
+    """§5.3: quando ATR_now supera la soglia (ratio_max) il segnale è rifiutato."""
+    base = candles()
+    # Baseline senza filtro: lo stesso scenario entra.
+    enter = await SpotMomentumSignal(settings(spot_spike_filter_enabled=False)).evaluate(
+        {"asset": "BTC", "candles": base, "btc_context_score": 0.7, "sentiment_score": 0.7}
+    )
+    assert enter["action"] == "enter_long"
+    # Con filtro e soglia 0: qualsiasi ATR positivo supera la soglia -> skip.
+    spiked = await SpotMomentumSignal(settings(spot_spike_atr_ratio_max=0.0)).evaluate(
+        {"asset": "BTC", "candles": base, "btc_context_score": 0.7, "sentiment_score": 0.7}
+    )
+    assert spiked["action"] == "skip"
+    assert spiked["reason"] == "volatility_spike"
+
+
+@pytest.mark.asyncio
+async def test_spot_scale_in_never_adds_in_loss_or_without_breakeven(db) -> None:
+    """§5.4: lo scaling-in NON scatta mai in perdita o senza stop a breakeven."""
+    service = AgentService(settings(), spot_registry=SimpleNamespace(), perp_registry=SimpleNamespace())
+    now = datetime.now(UTC)
+
+    def _pos(pid: str, current: Decimal, stop: Decimal) -> SpotPosition:
+        return SpotPosition(
+            position_id=pid,
+            user_id=str(USER_ID),
+            asset="BTC",
+            size=Decimal("1"),
+            entry_price=Decimal("100"),
+            current_price=current,
+            stop_loss=stop,
+            entry_atr=Decimal("10"),
+            max_price=Decimal("100"),
+            scale_in_count=0,
+            fee_mode="all",
+            status="open",
+            opened_at=now,
+            updated_at=now,
+        )
+
+    async with get_session_factory()() as session:
+        # (a) in perdita (price <= entry): nessuna aggiunta.
+        loss = _pos("p-loss", Decimal("95"), Decimal("100"))
+        await service._maybe_scale_in_spot(session, loss, Decimal("95"), Decimal("90"), now)
+        assert loss.scale_in_count == 0
+        assert loss.size == Decimal("1")
+
+        # (b) in profitto ma stop NON a breakeven: nessuna aggiunta.
+        no_be = _pos("p-nobe", Decimal("115"), Decimal("90"))
+        await service._maybe_scale_in_spot(session, no_be, Decimal("115"), Decimal("105"), now)
+        assert no_be.scale_in_count == 0
+        assert no_be.size == Decimal("1")
+
+        # (c) controllo positivo: profitto + stop a breakeven + nuovo HH -> aggiunge.
+        ok = _pos("p-ok", Decimal("115"), Decimal("100"))
+        await service._maybe_scale_in_spot(session, ok, Decimal("115"), Decimal("110"), now)
+        assert ok.scale_in_count == 1
+        assert ok.size > Decimal("1")

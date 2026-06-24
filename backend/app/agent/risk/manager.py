@@ -118,7 +118,9 @@ class RiskManager:
 
         nominal_size = equity * Decimal(str(self.settings.risk_capital_per_trade_pct)) / Decimal("100")
         risk_size = nominal_size
-        risk_amount = equity * Decimal("0.015")
+        # A (v3): rischio per trade da config (era hardcoded 0.015). La size si adatta
+        # alla distanza dello stop; lo stop NON si stringe per rientrare nel rischio.
+        risk_amount = equity * Decimal(str(self.settings.risk_per_trade_pct)) / Decimal("100")
         if intent.stop_loss is not None and intent.price > Decimal("0"):
             stop_distance_pct = abs(intent.price - intent.stop_loss) / intent.price
             if stop_distance_pct > 0:

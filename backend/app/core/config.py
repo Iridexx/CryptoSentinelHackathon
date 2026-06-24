@@ -161,6 +161,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
     },
     "risk": {
         "capital_per_trade_pct": "risk_capital_per_trade_pct",
+        "per_trade_pct": "risk_per_trade_pct",
         "max_open_positions": "risk_max_open_positions",
         "max_total_exposure_pct": "risk_max_total_exposure_pct",
         "daily_loss_limit_pct": "risk_daily_loss_limit_pct",
@@ -181,6 +182,27 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "volatility_trigger_pct": "spot_volatility_trigger_pct",
         "relative_volume_threshold": "spot_relative_volume_threshold",
         "atr_stop_multiplier": "spot_atr_stop_multiplier",
+        "tp1_atr_multiplier": "spot_tp1_atr_multiplier",
+        "tp2_atr_multiplier": "spot_tp2_atr_multiplier",
+        "breakeven_trigger_atr": "spot_breakeven_trigger_atr",
+        "breakeven_offset_costs": "spot_breakeven_offset_costs",
+        "trailing_atr_multiplier": "spot_trailing_atr_multiplier",
+        "trailing_active_from_start": "spot_trailing_active_from_start",
+        "tp1_close_fraction": "spot_tp1_close_fraction",
+        "scale_in_enabled": "spot_scale_in_enabled",
+        "scale_in_size_fraction": "spot_scale_in_size_fraction",
+        "scale_in_require_new_hh": "spot_scale_in_require_new_hh",
+        "scale_in_require_be_stop": "spot_scale_in_require_be_stop",
+        "scale_in_max_adds": "spot_scale_in_max_adds",
+        "time_stop_mode": "spot_time_stop_mode",
+        "time_stop_lookback_candles": "spot_time_stop_lookback_candles",
+        "time_stop_min_move_atr": "spot_time_stop_min_move_atr",
+        "time_stop_hours_fallback": "spot_time_stop_hours_fallback",
+        "spike_filter_enabled": "spot_spike_filter_enabled",
+        "spike_atr_ratio_max": "spot_spike_atr_ratio_max",
+        "spike_atr_avg_period": "spot_spike_atr_avg_period",
+        "spike_action": "spot_spike_action",
+        "spike_reduced_size_fraction": "spot_spike_reduced_size_fraction",
         "trailing_distance_pct": "spot_trailing_distance_pct",
         "partial_take_profit_pct": "spot_partial_take_profit_pct",
         "time_stop_hours": "spot_time_stop_hours",
@@ -456,6 +478,7 @@ class Settings(BaseSettings):
     dry_run_capital_usd: float = Field(default=500.0, alias="DRY_RUN_CAPITAL_USD")
     min_trade_size_usd: float = Field(default=7.0, alias="MIN_TRADE_SIZE_USD")
     risk_capital_per_trade_pct: float = Field(default=6.0, alias="RISK_CAPITAL_PER_TRADE_PCT")
+    risk_per_trade_pct: float = Field(default=1.5, alias="RISK_PER_TRADE_PCT")
     risk_max_open_positions: int = Field(default=3, alias="RISK_MAX_OPEN_POSITIONS")
     risk_max_total_exposure_pct: float = Field(default=30.0, alias="RISK_MAX_TOTAL_EXPOSURE_PCT")
     risk_daily_loss_limit_pct: float = Field(default=-8.0, alias="RISK_DAILY_LOSS_LIMIT_PCT")
@@ -468,7 +491,28 @@ class Settings(BaseSettings):
     spot_confidence_threshold: float = Field(default=0.55, alias="SPOT_CONFIDENCE_THRESHOLD")
     spot_volatility_trigger_pct: float = Field(default=0.4, alias="SPOT_VOLATILITY_TRIGGER_PCT")
     spot_relative_volume_threshold: float = Field(default=1.3, alias="SPOT_RELATIVE_VOLUME_THRESHOLD")
-    spot_atr_stop_multiplier: float = Field(default=1.5, alias="SPOT_ATR_STOP_MULTIPLIER")
+    spot_atr_stop_multiplier: float = Field(default=2.2, alias="SPOT_ATR_STOP_MULTIPLIER")
+    spot_tp1_atr_multiplier: float = Field(default=2.0, alias="SPOT_TP1_ATR_MULTIPLIER")
+    spot_tp2_atr_multiplier: float = Field(default=3.5, alias="SPOT_TP2_ATR_MULTIPLIER")
+    spot_breakeven_trigger_atr: float = Field(default=1.0, alias="SPOT_BREAKEVEN_TRIGGER_ATR")
+    spot_breakeven_offset_costs: bool = Field(default=True, alias="SPOT_BREAKEVEN_OFFSET_COSTS")
+    spot_trailing_atr_multiplier: float = Field(default=2.5, alias="SPOT_TRAILING_ATR_MULTIPLIER")
+    spot_trailing_active_from_start: bool = Field(default=True, alias="SPOT_TRAILING_ACTIVE_FROM_START")
+    spot_tp1_close_fraction: float = Field(default=0.30, alias="SPOT_TP1_CLOSE_FRACTION")
+    spot_scale_in_enabled: bool = Field(default=True, alias="SPOT_SCALE_IN_ENABLED")
+    spot_scale_in_size_fraction: float = Field(default=0.50, alias="SPOT_SCALE_IN_SIZE_FRACTION")
+    spot_scale_in_require_new_hh: bool = Field(default=True, alias="SPOT_SCALE_IN_REQUIRE_NEW_HH")
+    spot_scale_in_require_be_stop: bool = Field(default=True, alias="SPOT_SCALE_IN_REQUIRE_BE_STOP")
+    spot_scale_in_max_adds: int = Field(default=1, alias="SPOT_SCALE_IN_MAX_ADDS")
+    spot_time_stop_mode: str = Field(default="atr", alias="SPOT_TIME_STOP_MODE")  # atr | hours
+    spot_time_stop_lookback_candles: int = Field(default=8, alias="SPOT_TIME_STOP_LOOKBACK_CANDLES")
+    spot_time_stop_min_move_atr: float = Field(default=0.5, alias="SPOT_TIME_STOP_MIN_MOVE_ATR")
+    spot_time_stop_hours_fallback: int = Field(default=6, alias="SPOT_TIME_STOP_HOURS_FALLBACK")
+    spot_spike_filter_enabled: bool = Field(default=True, alias="SPOT_SPIKE_FILTER_ENABLED")
+    spot_spike_atr_ratio_max: float = Field(default=3.0, alias="SPOT_SPIKE_ATR_RATIO_MAX")
+    spot_spike_atr_avg_period: int = Field(default=50, alias="SPOT_SPIKE_ATR_AVG_PERIOD")
+    spot_spike_action: str = Field(default="skip", alias="SPOT_SPIKE_ACTION")  # skip | reduce_size
+    spot_spike_reduced_size_fraction: float = Field(default=0.5, alias="SPOT_SPIKE_REDUCED_SIZE_FRACTION")
     spot_trailing_distance_pct: float = Field(default=2.0, alias="SPOT_TRAILING_DISTANCE_PCT")
     spot_partial_take_profit_pct: float = Field(default=3.0, alias="SPOT_PARTIAL_TAKE_PROFIT_PCT")
     spot_time_stop_hours: int = Field(default=6, alias="SPOT_TIME_STOP_HOURS")

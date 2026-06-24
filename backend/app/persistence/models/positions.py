@@ -26,6 +26,10 @@ class SpotPosition(Base):
     take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    # ── Gestione uscite v3 (ATR-based) ────────────────────────────────────────
+    entry_atr: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # ATR congelato all'ingresso
+    max_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # massimo dall'ingresso (per trailing)
+    scale_in_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)    # n. aggiunte a favore (E)
     # ── Costi posizione (fee + slippage, solo dry-run) ────────────────────────
     fee_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)          # all|none
     swap_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)

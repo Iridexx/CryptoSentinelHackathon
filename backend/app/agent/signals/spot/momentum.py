@@ -8,6 +8,7 @@ from backend.app.agent.signals.base import SignalModule, SignalPayload, SignalRe
 from backend.app.agent.signals.common.indicators import (
     Candle,
     atr,
+    atr_series,
     clamp,
     ema,
     relative_volume,
@@ -22,8 +23,6 @@ from backend.app.core.logging import get_logger
 logger = get_logger("agent.signals.spot")
 MIN_SPOT_CANDLES = 50
 SPOT_WARMUP_CANDLES = 100
-# Distanza minima dello stop-loss dall'entry: evita stop troppo stretti quando l'ATR su 5m e' minimo.
-SPOT_MIN_STOP_DISTANCE_PCT = 1.0
 # TTL della cache klines per il warmup dello scanner: evita un fetch HTTP per ogni asset a ogni slow tick.
 SPOT_WARMUP_CACHE_TTL_SECONDS = 240
 
@@ -107,13 +106,38 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
             and extension_ok
         )
         action = "enter_long" if trigger and quality >= self.settings.spot_confidence_threshold else "skip"
-        atr_stop = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
-        min_stop = current * (1 - SPOT_MIN_STOP_DISTANCE_PCT / 100)
-        stop_loss = min(atr_stop, min_stop)
-        take_profit_1 = current * (1 + self.settings.spot_partial_take_profit_pct / 100)
-        # TP2 (uscita finale) a distanza doppia rispetto a TP1: lascia correre il residuo.
-        take_profit_2 = current * (1 + 2 * self.settings.spot_partial_take_profit_pct / 100)
-        trailing_stop = current * (1 - self.settings.spot_trailing_distance_pct / 100)
+
+        # H (v3): filtro anti-spike. Se la volatilità corrente è anomala rispetto alla
+        # media (ATR_now > ratio_max * ATR_avg) salta l'ingresso o riduce la size.
+        atr_window = atr_series(candles)
+        spike_period = self.settings.spot_spike_atr_avg_period
+        recent_atr = atr_window[-spike_period:] if atr_window else []
+        atr_avg = sum(recent_atr) / len(recent_atr) if recent_atr else None
+        atr_ratio = (
+            current_atr / atr_avg if current_atr and atr_avg and atr_avg > 0 else None
+        )
+        size_factor = 1.0
+        spike_rejected = False
+        if (
+            self.settings.spot_spike_filter_enabled
+            and atr_ratio is not None
+            and atr_ratio > self.settings.spot_spike_atr_ratio_max
+        ):
+            if self.settings.spot_spike_action == "reduce_size":
+                size_factor = self.settings.spot_spike_reduced_size_fraction
+            elif action == "enter_long":
+                action = "skip"
+                spike_rejected = True
+
+        # A (v3): stop SOLO ATR-based, nessun floor in %. Lo stop deve stare FUORI
+        # dalla banda di rumore; è la size ad adattarsi (RiskManager), non lo stop.
+        stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
+        # B (v3): TP ATR-based, nessuna % fissa. TP1 vicino (parziale), TP2 target finale.
+        take_profit_1 = current + (current_atr or 0.0) * self.settings.spot_tp1_atr_multiplier
+        take_profit_2 = current + (current_atr or 0.0) * self.settings.spot_tp2_atr_multiplier
+        # C (v3): trailing iniziale ATR-based (= max_price - ATR*mult con max_price=entry);
+        # poi _check_sl_tp lo trascina solo verso l'alto. Nessuna % fissa.
+        trailing_stop = current - (current_atr or 0.0) * self.settings.spot_trailing_atr_multiplier
 
         return {
             "signal_id": payload.get("signal_id"),
@@ -127,7 +151,12 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
             "take_profit_1": take_profit_1,
             "take_profit_2": take_profit_2,
             "trailing_stop": trailing_stop,
-            "reason": "momentum_confirmed" if action == "enter_long" else "spot_filters_not_satisfied",
+            "size_factor": size_factor,
+            "reason": (
+                "momentum_confirmed" if action == "enter_long"
+                else "volatility_spike" if spike_rejected
+                else "spot_filters_not_satisfied"
+            ),
             "components": {
                 "trend_structure": round(trend_score, 4),
                 "relative_volume": round(rel_volume or 0.0, 4),
@@ -136,6 +165,7 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 "rsi_score": round(rsi_score, 4),
                 "vwap": current_vwap,
                 "atr": current_atr,
+                "atr_ratio": round(atr_ratio, 4) if atr_ratio is not None else None,
                 "ema20": ema20,
                 "ema50": ema50,
                 "volatility_pct": round(volatility_pct, 4),

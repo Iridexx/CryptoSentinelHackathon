@@ -457,15 +457,17 @@ class AgentService:
         *,
         partial: bool = False,
     ) -> Decimal:
-        """Chiude (totalmente o al 50% per TP1) una posizione spot; crea trade di chiusura con pnl_usd."""
+        """Chiude (totalmente o per la quota TP1) una posizione spot; crea trade di chiusura con pnl_usd."""
         swap_fee = pos.swap_fee_usd or Decimal("0")
         if partial:
-            close_size = (pos.size / Decimal("2")).quantize(Decimal("0.000001"))
+            # D (v3): a TP1 chiude solo la quota configurata (default 30%), lascia correre il resto.
+            fraction = Decimal(str(self.settings.spot_tp1_close_fraction))
+            close_size = (pos.size * fraction).quantize(Decimal("0.000001"))
             raw_pnl = (exit_price - pos.entry_price) * close_size
-            pnl = raw_pnl - swap_fee / Decimal("2")
+            pnl = raw_pnl - swap_fee * fraction
             pos.size = pos.size - close_size
             pos.tp1_reached = True
-            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size - swap_fee / Decimal("2")
+            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size - swap_fee * (Decimal("1") - fraction)
         else:
             close_size = pos.size
             raw_pnl = (exit_price - pos.entry_price) * close_size
@@ -496,6 +498,130 @@ class AgentService:
         )
         logger.info("spot_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
+
+    async def _maybe_scale_in_spot(
+        self,
+        session: AsyncSession,
+        pos: SpotPosition,
+        price: Decimal,
+        prev_max: Decimal | None,
+        now: datetime,
+    ) -> None:
+        """E (v3): aggiunge a favore (piramidazione) su una posizione spot vincente.
+
+        Vincoli assoluti: MAI media al ribasso. Aggiunge solo se la posizione è in
+        profitto, lo stop è già a breakeven e c'è un nuovo higher-high confermato.
+        La size totale resta entro il tetto nominale per trade (risk_capital_per_trade_pct).
+        """
+        s = self.settings
+        if not s.spot_scale_in_enabled:
+            return
+        if (pos.scale_in_count or 0) >= s.spot_scale_in_max_adds:
+            return
+        # Mai aggiungere in perdita / non a favore.
+        if price <= pos.entry_price:
+            return
+        # Stop già a breakeven (>= entry).
+        if s.spot_scale_in_require_be_stop:
+            be_moved = pos.stop_loss is not None and pos.stop_loss >= pos.entry_price
+            if not be_moved:
+                return
+        # Nuovo higher-high confermato rispetto al massimo precedente.
+        if s.spot_scale_in_require_new_hh and not (prev_max is not None and price > prev_max):
+            return
+
+        current_notional = pos.size * pos.entry_price
+        add_notional = current_notional * Decimal(str(s.spot_scale_in_size_fraction))
+        # Tetto: il notional totale resta entro il cap nominale per trade.
+        portfolio = await PnlRepository(session).get_portfolio(str(self.settings.default_user_id))
+        if portfolio is not None and Decimal(portfolio.total_equity_usd) > 0:
+            cap = Decimal(portfolio.total_equity_usd) * Decimal(str(s.risk_capital_per_trade_pct)) / Decimal("100")
+            room = cap - current_notional
+            if room <= 0:
+                return
+            add_notional = min(add_notional, room)
+        if add_notional <= 0:
+            return
+
+        # Costi dell'add coerenti con l'ingresso (slippage nel prezzo, swap fee accumulata).
+        costs = compute_spot_costs(add_notional, pos.fee_mode or "all")
+        add_price = price * (Decimal("1") + costs["slippage_rate"]) if costs["slippage_rate"] > 0 else price
+        add_amount = add_notional / add_price
+
+        # Media a favore: nuova entry = media ponderata; stop NON viene mai abbassato.
+        new_size = pos.size + add_amount
+        pos.entry_price = (pos.size * pos.entry_price + add_amount * add_price) / new_size
+        pos.size = new_size
+        pos.scale_in_count = (pos.scale_in_count or 0) + 1
+        pos.swap_fee_usd = (pos.swap_fee_usd or Decimal("0")) + costs["swap_fee_usd"]
+        pos.slippage_usd = (pos.slippage_usd or Decimal("0")) + costs["slippage_usd"]
+        pos.updated_at = now
+        session.add(pos)
+
+        await SpotTradeRepository(session).save(
+            SpotTrade(
+                trade_id=f"add_{pos.position_id}_{uuid4().hex[:8]}",
+                user_id=pos.user_id,
+                asset=pos.asset,
+                side="buy",
+                amount=add_amount,
+                price=add_price,
+                amount_quote=add_notional,
+                status="confirmed",
+                provider="agent",
+                timestamp_utc=now,
+                notes="scale_in",
+                fee_mode=pos.fee_mode,
+                swap_fee_usd=costs["swap_fee_usd"],
+                slippage_usd=costs["slippage_usd"],
+                fees_quote=costs["applied_fee_usd"],
+            )
+        )
+        logger.info("spot_scale_in", asset=pos.asset, add_quote=float(add_notional), adds=pos.scale_in_count)
+
+    async def _spot_time_stop_reason(
+        self,
+        pos: SpotPosition,
+        price: Decimal,
+        atr_v: Decimal | None,
+        now: datetime,
+    ) -> str | None:
+        """G (v3): stop temporale. In modalità ATR chiude solo se il prezzo si è mosso
+        meno di ``min_move_atr * ATR`` nelle ultime N candele (trade fermo). Fallback orario
+        solo se mode='hours'. Best-effort: senza dati candele non chiude."""
+        s = self.settings
+        opened = pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)
+        if s.spot_time_stop_mode == "atr":
+            if not atr_v or atr_v <= 0:
+                return None
+            lookback = s.spot_time_stop_lookback_candles
+            age_min = (now - opened).total_seconds() / 60
+            # Giudica solo dopo che è trascorsa l'intera finestra (candele 5m).
+            if age_min < lookback * 5:
+                return None
+            past_close = self._spot_close_n_candles_ago(pos.asset, lookback)
+            if past_close is None:
+                return None
+            move = abs(price - past_close)
+            if move < atr_v * Decimal(str(s.spot_time_stop_min_move_atr)):
+                return "time_stop_atr"
+            return None
+        # Fallback orario (mode='hours').
+        if s.spot_time_stop_hours_fallback > 0:
+            age_hours = (now - opened).total_seconds() / 3600
+            if age_hours >= s.spot_time_stop_hours_fallback:
+                return "time_stop"
+        return None
+
+    def _spot_close_n_candles_ago(self, asset: str, lookback: int) -> Decimal | None:
+        """Prezzo di chiusura ~N candele 5m fa dalla cache klines (best-effort, no HTTP)."""
+        try:
+            entry = get_kline_cache_entry(market="spot", symbol=f"{asset}USDT", interval="5m")
+            if entry is None or len(entry.candles) <= lookback:
+                return None
+            return Decimal(str(entry.candles[-(lookback + 1)].close))
+        except Exception:
+            return None
 
     async def _close_perp_position(
         self,
@@ -571,29 +697,54 @@ class AgentService:
             price = pos.current_price
             reason: str | None = None
             partial = False
-            if pos.stop_loss and price <= pos.stop_loss:
+            atr_v = pos.entry_atr
+            prev_max = pos.max_price  # E (v3): riferimento higher-high PRIMA dell'update
+
+            # C (v3): aggiorna il massimo dall'ingresso (per il trailing ATR).
+            if pos.max_price is None or price > pos.max_price:
+                pos.max_price = price
+                pos.updated_at = now
+                session.add(pos)
+
+            # C (v3): breakeven a +1*ATR — alza lo stop a entry (+costi), non torna più sotto.
+            if atr_v and atr_v > 0:
+                be_trigger = pos.entry_price + atr_v * Decimal(str(self.settings.spot_breakeven_trigger_atr))
+                if price >= be_trigger:
+                    be_stop = pos.entry_price
+                    if self.settings.spot_breakeven_offset_costs and pos.size > 0:
+                        costs = (pos.swap_fee_usd or Decimal("0")) + (pos.slippage_usd or Decimal("0"))
+                        be_stop = pos.entry_price + costs / pos.size
+                    if pos.stop_loss is None or be_stop > pos.stop_loss:
+                        pos.stop_loss = be_stop
+                        pos.updated_at = now
+                        session.add(pos)
+                # C (v3): trailing ATR attivo DA SUBITO (max_price - ATR*mult), solo verso l'alto.
+                if self.settings.spot_trailing_active_from_start:
+                    trail = (pos.max_price or price) - atr_v * Decimal(str(self.settings.spot_trailing_atr_multiplier))
+                    if pos.trailing_stop is None or trail > pos.trailing_stop:
+                        pos.trailing_stop = trail
+                        pos.updated_at = now
+                        session.add(pos)
+
+            # E (v3): scaling-in a favore (solo HH + stop a breakeven; mai in perdita).
+            await self._maybe_scale_in_spot(session, pos, price, prev_max, now)
+
+            # Uscite — priorità massima: SL / trailing (il maggiore dei due).
+            if pos.trailing_stop is not None and (pos.stop_loss is None or pos.trailing_stop > pos.stop_loss):
+                if price <= pos.trailing_stop:
+                    reason = "trailing_stop"
+            if reason is None and pos.stop_loss is not None and price <= pos.stop_loss:
                 reason = "stop_loss"
             # TP2 (uscita finale) solo dopo che TP1 e' stato preso.
             if reason is None and pos.tp1_reached and pos.take_profit_2 and price >= pos.take_profit_2:
                 reason = "take_profit_2"
-            # TP1: chiusura parziale (50%) la prima volta che viene raggiunto.
+            # TP1: chiusura parziale la prima volta che viene raggiunto.
             if reason is None and not pos.tp1_reached and pos.take_profit_1 and price >= pos.take_profit_1:
                 reason = "take_profit_1"
                 partial = True
-            # Trailing stop: attivo solo dopo TP1 (trade in profitto), per non scattare
-            # su un ritracciamento iniziale. Trascina il livello verso l'alto e chiude se ritraccia.
-            if reason is None and pos.tp1_reached and self._ms.spot_trailing_distance_pct > 0:
-                candidate = price * (Decimal("1") - Decimal(str(self._ms.spot_trailing_distance_pct)) / Decimal("100"))
-                if pos.trailing_stop is None or candidate > pos.trailing_stop:
-                    pos.trailing_stop = candidate
-                    pos.updated_at = now
-                    session.add(pos)
-                if pos.trailing_stop is not None and price <= pos.trailing_stop:
-                    reason = "trailing_stop"
-            if reason is None and self._ms.spot_time_stop_hours > 0:
-                age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
-                if age_hours >= self._ms.spot_time_stop_hours:
-                    reason = "time_stop"
+            # G (v3): stop temporale ATR-aware — chiude solo i trade davvero fermi.
+            if reason is None:
+                reason = await self._spot_time_stop_reason(pos, price, atr_v, now)
             if reason:
                 pnl = await self._close_spot_position(session, pos, price, reason, now, partial=partial)
                 exposure = pos.entry_price * pos.size
@@ -933,7 +1084,9 @@ class AgentService:
         return await AgentDecisionRepository(session).save(decision)
 
     async def _execute_or_simulate(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> dict:
-        size_quote = risk_decision.size_quote * brain_decision.size_multiplier
+        # H (v3): size_factor dal segnale (anti-spike reduce_size); default 1.0.
+        size_factor = Decimal(str(signal.get("size_factor", 1) or 1))
+        size_quote = risk_decision.size_quote * brain_decision.size_multiplier * size_factor
         if self._ms.execution_mode == "dry_run":
             execution = await self._simulate_trade(session, signal, size_quote)
         elif signal.get("market") == "spot":
@@ -1138,6 +1291,9 @@ class AgentService:
                 take_profit_1=_optional_decimal(signal.get("take_profit_1")),
                 take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                 trailing_stop=_optional_decimal(signal.get("trailing_stop")),
+                # C (v3): ATR congelato all'ingresso + max_price per breakeven/trailing ATR.
+                entry_atr=_optional_decimal((signal.get("components") or {}).get("atr")),
+                max_price=effective_spot_price,
                 fee_mode=spot_fee_mode,
                 swap_fee_usd=spot_costs["swap_fee_usd"],
                 slippage_usd=spot_costs["slippage_usd"],

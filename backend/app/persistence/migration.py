@@ -67,9 +67,12 @@ async def upgrade_schema(session: AsyncSession) -> None:
 
     # ── spot_positions ────────────────────────────────────────────────────────
     spot_pos_cols: list[tuple[str, str]] = [
-        ("fee_mode",     "VARCHAR(8)"),
-        ("swap_fee_usd", "NUMERIC(20, 8)"),
-        ("slippage_usd", "NUMERIC(20, 8)"),
+        ("fee_mode",       "VARCHAR(8)"),
+        ("swap_fee_usd",   "NUMERIC(20, 8)"),
+        ("slippage_usd",   "NUMERIC(20, 8)"),
+        ("entry_atr",      "NUMERIC(30, 8)"),
+        ("max_price",      "NUMERIC(30, 8)"),
+        ("scale_in_count", "INTEGER NOT NULL DEFAULT 0"),
     ]
     for col, defn in spot_pos_cols:
         if not await _has_column("spot_positions", col):
