@@ -86,6 +86,32 @@ def atr(candles: list[Candle], period: int = 14) -> float | None:
     return sum(true_ranges[-period:]) / period
 
 
+def atr_series(candles: list[Candle], period: int = 14) -> list[float]:
+    """Serie ATR a finestra mobile (un valore per ogni posizione della finestra).
+
+    L'ultimo valore coincide con ``atr(candles, period)``. Usata per ricavare
+    minimo/massimo storico dell'ATR nella finestra disponibile.
+    """
+    if len(candles) < period + 1:
+        return []
+    true_ranges: list[float] = []
+    previous_close = candles[0].close
+    for candle in candles[1:]:
+        true_ranges.append(
+            max(
+                candle.high - candle.low,
+                abs(candle.high - previous_close),
+                abs(candle.low - previous_close),
+            )
+        )
+        previous_close = candle.close
+    out: list[float] = []
+    for end in range(period, len(true_ranges) + 1):
+        window = true_ranges[end - period : end]
+        out.append(sum(window) / period)
+    return out
+
+
 def rsi(closes: list[float], period: int = 14) -> float | None:
     """Return latest Relative Strength Index."""
 

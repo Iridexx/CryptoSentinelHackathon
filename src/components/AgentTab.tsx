@@ -91,8 +91,8 @@ const defaultSettings: AgentMobileSettings = {
   spot_partial_take_profit_pct: 50,
   spot_time_stop_hours: 6,
   perp_direction_mode: 'long_short',
-  perp_default_leverage: 2,
-  perp_dynamic_leverage_enabled: true,
+  perp_min_leverage: 4,
+  perp_max_leverage: 40,
   perp_value_area_pct: 68,
   perp_atr_stop_multiplier: 0.5,
   perp_time_stop_hours: 8,
@@ -1122,7 +1122,8 @@ const SetupPane: FC<{
             { value: 'short_only', label: 'Short' },
             { value: 'long_short', label: 'Both' },
           ]} />
-          <NumberInput label="Leverage" value={settings.perp_default_leverage} onChange={(perp_default_leverage) => patch({ perp_default_leverage })} />
+          <NumberInput label="Leva min (alta vol.)" value={settings.perp_min_leverage} onChange={(perp_min_leverage) => patch({ perp_min_leverage })} />
+          <NumberInput label="Leva max (bassa vol.)" value={settings.perp_max_leverage} onChange={(perp_max_leverage) => patch({ perp_max_leverage })} />
           <NumberInput label="Value area %" value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
           <NumberInput label="ATR stop" value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(v) => patch({ perp_fee_mode: v as 'taker' | 'maker' | 'none' })} options={[
@@ -1131,6 +1132,9 @@ const SetupPane: FC<{
             { value: 'none', label: 'Nessuna (strategia lorda)' },
           ]} />
         </div>
+        <p className="px-1 text-xs text-gray-500">
+          Leva modulata sulla volatilità ATR(72) in apertura: bassa volatilità → leva max, alta volatilità → leva min. Volatilità anomala (oltre il massimo storico) → leva forzata al minimo. Range 1–50.
+        </p>
       </section>
 
       <button onClick={onSave} disabled={!adminToken || saving} className="w-full rounded-lg bg-accent-blue px-3 py-3 text-sm font-semibold text-white disabled:opacity-40">

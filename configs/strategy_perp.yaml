@@ -8,6 +8,8 @@ perp:
   dynamic_leverage_enabled: true
   min_volume_profile_liquidity_usd: 50000.0
   default_leverage: 2
-  max_leverage: 5
+  # Range leva modulata sull'ATR(72) in apertura (bassa vol → max, alta vol → min).
+  min_leverage: 4
+  max_leverage: 40
   volume_profile_window_hours: 24
   volume_profile_candle_minutes: 5

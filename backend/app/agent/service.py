@@ -15,7 +15,7 @@ from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
-from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _dynamic_leverage as _perp_dynamic_leverage
+from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _atr_range_leverage as _perp_atr_range_leverage
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
 from backend.app.agent.watchlist import selected_watchlist
 from backend.app.core.config import Settings, get_settings
@@ -144,8 +144,8 @@ class AgentService:
             spot_partial_take_profit_pct=self.settings.spot_partial_take_profit_pct,
             spot_time_stop_hours=self.settings.spot_time_stop_hours,
             perp_direction_mode=self.settings.perp_direction_mode,
-            perp_default_leverage=self.settings.perp_default_leverage,
-            perp_dynamic_leverage_enabled=self.settings.perp_dynamic_leverage_enabled,
+            perp_min_leverage=self.settings.perp_min_leverage,
+            perp_max_leverage=self.settings.perp_max_leverage,
             perp_value_area_pct=self.settings.perp_value_area_pct,
             perp_atr_stop_multiplier=self.settings.perp_atr_stop_multiplier,
             perp_time_stop_hours=self.settings.perp_time_stop_hours,
@@ -275,12 +275,12 @@ class AgentService:
         if signal.get("action") != "skip":
             ms = self._ms
             components = signal.get("components") or {}
-            signal["leverage"] = _perp_dynamic_leverage(
-                default=ms.perp_default_leverage,
-                maximum=self.settings.perp_max_leverage,
-                enabled=ms.perp_dynamic_leverage_enabled,
-                atr_value=components.get("atr"),
-                price=float(signal.get("price") or 0),
+            signal["leverage"] = _perp_atr_range_leverage(
+                min_lev=ms.perp_min_leverage,
+                max_lev=ms.perp_max_leverage,
+                atr_value=components.get("atr_lev"),
+                atr_min=components.get("atr_lev_min"),
+                atr_max=components.get("atr_lev_max"),
             )
         return await self._handle_signal(signal, session)
 
@@ -1015,7 +1015,7 @@ class AgentService:
             return {"status": "skipped", "reason": "price_unavailable"}
         if signal.get("market") == "perp":
             side = str(signal.get("side") or "long")
-            leverage = int(signal.get("leverage") or self._ms.perp_default_leverage)
+            leverage = int(signal.get("leverage") or self._ms.perp_min_leverage)
             fee_mode = self._ms.perp_fee_mode
             notional_usd = size_quote * Decimal(leverage)
 
@@ -1172,7 +1172,7 @@ class AgentService:
             asset=str(signal.get("asset")),
             direction=str(signal.get("side") or "long"),  # type: ignore[arg-type]
             size=size_quote,
-            leverage=Decimal(str(signal.get("leverage") or self._ms.perp_default_leverage)),
+            leverage=Decimal(str(signal.get("leverage") or self._ms.perp_min_leverage)),
         )
         result = await self.perp_registry.active.open_position(order)
         return {"status": result.status.value, "provider": self.perp_registry.active_name.value, "reason": result.reason}

@@ -367,6 +367,25 @@ def _q2_opt(value) -> str | None:
     return _q2(value)
 
 
+def _fmt_price(value) -> str:
+    """Prezzo come stringa a virgola fissa: niente notazione scientifica,
+    minimo 2 decimali, massimo 8, senza zeri finali superflui.
+
+    Es: 100 → "100.00", 0.000123 → "0.000123", 0.0001234567 → "0.00012346".
+    Evita il problema di Decimal.normalize() che per i numeri tondi produce
+    notazione scientifica ("1E+2").
+    """
+    quantized = Decimal(str(value)).quantize(Decimal("0.00000001"))
+    text = format(quantized, "f")
+    if "." in text:
+        int_part, frac = text.split(".")
+        frac = frac.rstrip("0")
+        if len(frac) < 2:
+            frac = frac.ljust(2, "0")
+        return f"{int_part}.{frac}"
+    return f"{text}.00"
+
+
 def _signed(value: str) -> str:
     decimal = Decimal(value)
     return f"{decimal:+.2f}"
@@ -394,9 +413,9 @@ def _decision_payload(decision: AgentDecision | None) -> dict | None:
 def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
     """Livello (SL/TP) dalla posizione, con fallback ai dati congelati nello snapshot."""
     if position is not None and getattr(position, attr, None):
-        return str(Decimal(str(getattr(position, attr))).normalize())
+        return _fmt_price(getattr(position, attr))
     if chart and chart.get(key):
-        return str(Decimal(str(chart[key])).normalize())
+        return _fmt_price(chart[key])
     return None
 
 
@@ -454,14 +473,14 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
         "asset": trade.asset,
         "market": "spot",
         "direction": trade.side,
-        "entry_price": str(entry.normalize()),
-        "current_or_exit_price": str(current.normalize()),
+        "entry_price": _fmt_price(entry),
+        "current_or_exit_price": _fmt_price(current),
         "pnl_usd": _signed(_q2(pnl)),
         "pnl_pct": _pnl_pct(pnl, entry, size),
         "stop_loss": _level(position, "stop_loss", chart, "stop_loss"),
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
-        "trailing_stop": str(Decimal(str(position.trailing_stop)).normalize()) if position and position.trailing_stop else None,
+        "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
         "size": _q2(size),
         "leverage": None,
         "exposure_usd": _q2(size * entry),
@@ -512,14 +531,14 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "asset": trade.asset,
         "market": "perp",
         "direction": trade.side,
-        "entry_price": str(entry.normalize()),
-        "current_or_exit_price": str(current.normalize()),
+        "entry_price": _fmt_price(entry),
+        "current_or_exit_price": _fmt_price(current),
         "pnl_usd": _signed(_q2(pnl)),
         "pnl_pct": _pnl_pct(pnl, entry, size, leverage or 1),
         "stop_loss": _level(position, "stop_loss", chart, "stop_loss"),
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
-        "trailing_stop": str(Decimal(str(position.trailing_stop)).normalize()) if position and position.trailing_stop else None,
+        "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
         "size": _q2(size),
         "leverage": leverage,
         "exposure_usd": _q2(size * entry * (leverage or 1)),

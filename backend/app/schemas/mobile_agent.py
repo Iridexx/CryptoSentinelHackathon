@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AgentMobileSettings(BaseModel):
@@ -28,13 +28,21 @@ class AgentMobileSettings(BaseModel):
     spot_partial_take_profit_pct: float = Field(default=50.0, ge=0.0, le=100.0)
     spot_time_stop_hours: int = Field(default=6, ge=0, le=168)
     perp_direction_mode: str = "long_short"
-    perp_default_leverage: int = Field(default=2, ge=1, le=20)
-    perp_dynamic_leverage_enabled: bool = True
+    # Leva modulata dinamicamente sull'ATR(72) in apertura: bassa volatilità → max,
+    # alta volatilità → min. Range configurabile dall'utente.
+    perp_min_leverage: int = Field(default=4, ge=1, le=50)
+    perp_max_leverage: int = Field(default=40, ge=1, le=50)
     perp_value_area_pct: float = Field(default=68.0, ge=50.0, le=90.0)
     perp_atr_stop_multiplier: float = Field(default=0.5, gt=0.0, le=20.0)
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)
     perp_fee_mode: str = Field(default="taker", pattern="^(taker|maker|none)$")
     spot_fee_mode: str = Field(default="all", pattern="^(all|none)$")
+
+    @model_validator(mode="after")
+    def _check_leverage_range(self) -> "AgentMobileSettings":
+        if self.perp_min_leverage > self.perp_max_leverage:
+            raise ValueError("perp_min_leverage must be <= perp_max_leverage")
+        return self
 
 
 class AgentMobileSettingsResponse(BaseModel):

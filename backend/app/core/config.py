@@ -199,6 +199,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "dynamic_leverage_enabled": "perp_dynamic_leverage_enabled",
         "min_volume_profile_liquidity_usd": "perp_min_volume_profile_liquidity_usd",
         "default_leverage": "perp_default_leverage",
+        "min_leverage": "perp_min_leverage",
         "max_leverage": "perp_max_leverage",
         "volume_profile_window_hours": "perp_volume_profile_window_hours",
         "volume_profile_candle_minutes": "perp_volume_profile_candle_minutes",
@@ -487,8 +488,10 @@ class Settings(BaseSettings):
         default=50000.0,
         alias="PERP_MIN_VOLUME_PROFILE_LIQUIDITY_USD",
     )
-    perp_default_leverage: int = Field(default=2, alias="PERP_DEFAULT_LEVERAGE")
-    perp_max_leverage: int = Field(default=5, alias="PERP_MAX_LEVERAGE")
+    perp_default_leverage: int = Field(default=2, alias="PERP_DEFAULT_LEVERAGE")  # legacy
+    # Range leva modulata sull'ATR(72) in apertura (bassa vol → max, alta vol → min).
+    perp_min_leverage: int = Field(default=4, alias="PERP_MIN_LEVERAGE")
+    perp_max_leverage: int = Field(default=40, alias="PERP_MAX_LEVERAGE")
     perp_volume_profile_window_hours: int = Field(default=24, alias="PERP_VOLUME_PROFILE_WINDOW_HOURS")
     perp_volume_profile_candle_minutes: int = Field(default=5, alias="PERP_VOLUME_PROFILE_CANDLE_MINUTES")
 

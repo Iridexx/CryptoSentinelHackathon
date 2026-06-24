@@ -5,9 +5,13 @@ from __future__ import annotations
 from collections import defaultdict
 
 from backend.app.agent.signals.base import SignalModule, SignalPayload, SignalResult
-from backend.app.agent.signals.common.indicators import atr, sanitize_candles, vwap
+from backend.app.agent.signals.common.indicators import atr, atr_series, sanitize_candles, vwap
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 from backend.app.core.config import Settings, get_settings
+
+# Periodo ATR usato esclusivamente per modulare la leva in apertura: a 5m sono
+# ~6 ore di lookback, abbastanza liscio da leggere il regime di volatilità.
+LEVERAGE_ATR_PERIOD = 72
 
 
 class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
@@ -85,12 +89,17 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
             take_profit_2 = poc
             trailing_stop = current * 1.01
 
-        leverage = _dynamic_leverage(
-            default=self.settings.perp_default_leverage,
-            maximum=self.settings.perp_max_leverage,
-            enabled=self.settings.perp_dynamic_leverage_enabled,
-            atr_value=current_atr,
-            price=current,
+        # Leva modulata sull'ATR(72): bassa volatilità → leva max, alta → min.
+        lev_atr = atr(candles, period=LEVERAGE_ATR_PERIOD)
+        lev_atr_window = atr_series(candles, period=LEVERAGE_ATR_PERIOD)
+        lev_atr_min = min(lev_atr_window) if lev_atr_window else None
+        lev_atr_max = max(lev_atr_window) if lev_atr_window else None
+        leverage = _atr_range_leverage(
+            min_lev=self.settings.perp_min_leverage,
+            max_lev=self.settings.perp_max_leverage,
+            atr_value=lev_atr,
+            atr_min=lev_atr_min,
+            atr_max=lev_atr_max,
         )
         action = f"enter_{side}" if side and quality >= 0.6 else "skip"
         return {
@@ -114,6 +123,9 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
                 "val": val,
                 "vwap": current_vwap,
                 "atr": current_atr,
+                "atr_lev": lev_atr,
+                "atr_lev_min": lev_atr_min,
+                "atr_lev_max": lev_atr_max,
                 "trend_bias": trend_bias,
                 "total_quote_volume": round(total_quote_volume, 2),
                 "value_area_pct": self.settings.perp_value_area_pct,
@@ -164,16 +176,35 @@ def _quality(side: str | None, price: float, poc: float, vah: float, val: float,
     return min(1.0, map_score * 0.35 + trend_score * 0.25 + atr_score * 0.15 + value_edge * 0.25)
 
 
-def _dynamic_leverage(*, default: int, maximum: int, enabled: bool, atr_value: float | None, price: float) -> int:
-    leverage = min(default, maximum)
-    if not enabled or not atr_value or price <= 0:
-        return max(1, leverage)
-    atr_pct = atr_value / price * 100
-    if atr_pct > 4:
-        leverage = int(leverage * 0.5)
-    elif atr_pct > 2:
-        leverage = int(leverage * 0.7)
-    return max(1, min(maximum, leverage))
+def _atr_range_leverage(
+    *,
+    min_lev: int,
+    max_lev: int,
+    atr_value: float | None,
+    atr_min: float | None,
+    atr_max: float | None,
+) -> int:
+    """Leva inversamente proporzionale alla volatilità ATR(72), in apertura del trade.
+
+    - Bassa volatilità (ATR ~ minimo storico)  → leva massima del range.
+    - Alta volatilità (ATR ~ massimo storico)   → leva minima del range.
+    - Filtro anomalia: ATR corrente oltre il massimo storico → leva minima forzata.
+    - Dati insufficienti / volatilità nulla     → leva minima (conservativo).
+    """
+    lo = max(1, min(min_lev, max_lev))
+    hi = max(1, max(min_lev, max_lev))
+    if atr_value is None or atr_min is None or atr_max is None:
+        return lo
+    # Volatilità anomala: oltre il massimo storico → massima prudenza.
+    if atr_value > atr_max:
+        return lo
+    if atr_max <= atr_min:
+        # Volatilità piatta nella finestra: nessuna penalità → leva massima.
+        return hi
+    frac = (atr_value - atr_min) / (atr_max - atr_min)
+    frac = min(1.0, max(0.0, frac))
+    leverage = hi - frac * (hi - lo)
+    return max(lo, min(hi, int(round(leverage))))
 
 
 def _skip(payload: SignalPayload, reason: str) -> SignalResult:

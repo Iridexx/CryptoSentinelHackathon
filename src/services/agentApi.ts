@@ -274,8 +274,8 @@ export interface AgentMobileSettings {
   spot_partial_take_profit_pct: number;
   spot_time_stop_hours: number;
   perp_direction_mode: string;
-  perp_default_leverage: number;
-  perp_dynamic_leverage_enabled: boolean;
+  perp_min_leverage: number;
+  perp_max_leverage: number;
   perp_value_area_pct: number;
   perp_atr_stop_multiplier: number;
   perp_time_stop_hours: number;
