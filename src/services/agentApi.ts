@@ -488,3 +488,15 @@ export function setKillSwitch(state: KillSwitchState, adminToken: string): Promi
     token: adminToken,
   });
 }
+
+export interface RiskCloseAllResponse extends AgentStatus {
+  closed_spot: number;
+  closed_perp: number;
+}
+
+export function riskCloseAll(adminToken: string): Promise<RiskCloseAllResponse> {
+  return request<RiskCloseAllResponse>('/api/v1/agent/risk/close-all', {
+    method: 'POST',
+    token: adminToken,
+  });
+}

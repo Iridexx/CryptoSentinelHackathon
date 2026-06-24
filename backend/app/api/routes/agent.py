@@ -161,6 +161,16 @@ async def set_kill_switch(request: KillSwitchRequest, _: AdminAccessDep) -> dict
     return get_agent_service().set_kill_switch(KillSwitchState(request.state))
 
 
+@router.post("/risk/close-all")
+async def risk_close_all(session: SessionDep, _: AdminAccessDep) -> dict:
+    """Risk action: close every open spot/perp position and pause the agent.
+
+    Resume trading afterwards via PUT /kill-switch {state: running}.
+    """
+
+    return await get_agent_service().close_all_and_pause(session, reason="manual_risk")
+
+
 # Cache leggera della summary spesa Claude: evita una query DB a ogni refresh dell'app.
 _CLAUDE_USAGE_CACHE: dict[str, object] = {"at": 0.0, "view": None}
 _CLAUDE_USAGE_TTL_SECONDS = 300.0

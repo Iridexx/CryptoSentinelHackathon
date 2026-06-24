@@ -215,6 +215,54 @@ class AgentService:
         self.risk.set_kill_switch(state)
         return self.status()
 
+    async def close_all_and_pause(self, session: AsyncSession, *, reason: str = "manual_risk") -> dict:
+        """Chiude TUTTE le posizioni aperte (spot + perp) al prezzo di mercato e
+        mette l'agente in pausa (hard_stop). Usato dal pulsante Risk dell'app.
+
+        La pausa blocca qualsiasi nuova entrata finche' non si riprende con
+        ``set_kill_switch(RUNNING)``. Best-effort sul prezzo: se il feed non
+        risponde si usa l'ultimo ``current_price`` memorizzato.
+        """
+        user_id = str(self.settings.default_user_id)
+        spot_positions = await SpotPositionRepository(session).open_for_user(user_id)
+        perp_positions = await PerpPositionRepository(session).open_for_user(user_id)
+        now = datetime.now(UTC)
+
+        if spot_positions or perp_positions:
+            try:
+                await self._refresh_position_prices(session, spot_positions, perp_positions)
+            except Exception:
+                pass
+
+        closed_spot = 0
+        for pos in spot_positions:
+            if pos.status != "open":
+                continue
+            await self._close_spot_position(session, pos, pos.current_price, reason, now)
+            closed_spot += 1
+
+        closed_perp = 0
+        for pos in perp_positions:
+            if pos.status != "open":
+                continue
+            await self._close_perp_position(session, pos, pos.current_price, reason, now)
+            closed_perp += 1
+
+        # Pausa l'agente: nessuna nuova entrata fino al resume.
+        self.risk.set_kill_switch(KillSwitchState.HARD_STOP)
+        await self._update_portfolio_state(session, [], [], now)
+        await session.commit()
+
+        logger.info(
+            "risk_close_all_and_pause",
+            closed_spot=closed_spot, closed_perp=closed_perp, reason=reason,
+        )
+        return {
+            "closed_spot": closed_spot,
+            "closed_perp": closed_perp,
+            **self.status(),
+        }
+
     async def evaluate_spot(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.spot_signal.evaluate(payload)
         return await self._handle_signal(signal, session)

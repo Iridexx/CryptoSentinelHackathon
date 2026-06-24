@@ -14,6 +14,7 @@ import {
   fetchTradeDetail,
   saveAgentSettings,
   setKillSwitch,
+  riskCloseAll,
   validateOnboarding,
   type AgentDecisionResponse,
   type AgentMobileSettings,
@@ -968,6 +969,7 @@ const SetupPane: FC<{
   onSave: () => void;
   onValidate: () => void;
   onKill: (state: KillSwitchState) => void;
+  onCloseAll: () => void;
 }> = ({
   settings,
   onSettings,
@@ -980,6 +982,7 @@ const SetupPane: FC<{
   onSave,
   onValidate,
   onKill,
+  onCloseAll,
 }) => {
   const patch = (partial: Partial<AgentMobileSettings>) => onSettings({ ...settings, ...partial });
 
@@ -1018,6 +1021,28 @@ const SetupPane: FC<{
           <button onClick={() => onKill('soft_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-yellow/20 px-2 py-2.5 text-xs font-semibold text-accent-yellow disabled:opacity-40">Soft</button>
           <button onClick={() => onKill('hard_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-red/20 px-2 py-2.5 text-xs font-semibold text-accent-red disabled:opacity-40">Hard</button>
         </div>
+        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
+      </section>
+
+      <section className="rounded-xl border border-accent-red/30 bg-dark-800 px-4 py-4 space-y-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-white">Risk · Chiusura di emergenza</h3>
+          <p className="mt-0.5 text-xs text-gray-500">Chiude tutte le posizioni spot e perp al prezzo di mercato e mette l'agente in pausa (hard stop). Riprende solo quando premi Riprendi.</p>
+        </div>
+        <button
+          onClick={onCloseAll}
+          disabled={!adminToken || saving}
+          className="w-full rounded-lg bg-accent-red px-3 py-3 text-sm font-bold text-white disabled:opacity-40"
+        >
+          {saving ? 'Esecuzione...' : '⛔ Chiudi tutto & metti in pausa'}
+        </button>
+        <button
+          onClick={() => onKill('running')}
+          disabled={!adminToken || saving || agentStatus?.kill_switch === 'running'}
+          className="w-full rounded-lg bg-accent-green/20 px-3 py-2.5 text-sm font-semibold text-accent-green disabled:opacity-40"
+        >
+          ▶ Riprendi agente
+        </button>
         {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
       </section>
 
@@ -1493,6 +1518,21 @@ const AgentTab: FC<AgentTabProps> = ({
     }
   };
 
+  const handleCloseAll = async () => {
+    if (!window.confirm('Chiudere TUTTE le posizioni spot e perp al prezzo di mercato e mettere in pausa l\'agente?')) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      const result = await riskCloseAll(adminToken);
+      setStatus(result);
+      await refresh(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Close-all failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleTradeDetail = async (tradeId: string) => {
     setLoadingDetail(true);
     setActionError('');
@@ -1602,6 +1642,7 @@ const AgentTab: FC<AgentTabProps> = ({
           onSave={handleSave}
           onValidate={handleValidate}
           onKill={handleKill}
+          onCloseAll={handleCloseAll}
         />
       )}
         </>
