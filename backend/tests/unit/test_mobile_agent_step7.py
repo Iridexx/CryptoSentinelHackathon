@@ -85,6 +85,8 @@ def settings(**overrides):
         perp_dynamic_leverage_enabled=True,
         perp_min_leverage=4,
         perp_max_leverage=40,
+        perp_leverage_atr_period=72,
+        perp_leverage_atr_baseline_hours=120,
         perp_value_area_pct=68.0,
         perp_atr_stop_multiplier=0.5,
         perp_time_stop_hours=8,

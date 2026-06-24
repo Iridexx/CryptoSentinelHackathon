@@ -41,6 +41,7 @@ from backend.app.persistence.repositories.trades import PerpTradeRepository, Spo
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import AgentMobileSettings
 from backend.app.execution.perp_fees import fetch_perp_fees, compute_opening_costs, accrue_funding
+from backend.app.agent.signals.common.indicators import atr_series
 from backend.app.execution.spot_fees import compute_spot_costs
 
 logger = get_logger("agent.service")
@@ -275,14 +276,49 @@ class AgentService:
         if signal.get("action") != "skip":
             ms = self._ms
             components = signal.get("components") or {}
+            atr_now = components.get("atr_lev")
+            # Baseline storica più lunga per atr_min/atr_max (vol corrente vs storico ampio):
+            # così la leva è graduata e il minimo è riservato alle vere anomalie.
+            atr_min, atr_max = await self._perp_leverage_atr_baseline(
+                signal.get("asset"), payload, atr_now
+            )
             signal["leverage"] = _perp_atr_range_leverage(
                 min_lev=ms.perp_min_leverage,
                 max_lev=ms.perp_max_leverage,
-                atr_value=components.get("atr_lev"),
-                atr_min=components.get("atr_lev_min"),
-                atr_max=components.get("atr_lev_max"),
+                atr_value=atr_now,
+                atr_min=atr_min,
+                atr_max=atr_max,
             )
         return await self._handle_signal(signal, session)
+
+    async def _perp_leverage_atr_baseline(
+        self, asset: str | None, payload: dict, atr_now: float | None
+    ) -> tuple[float | None, float | None]:
+        """Ricava (atr_min, atr_max) della serie ATR su un lookback lungo (giorni), per
+        modulare la leva confrontando la vol corrente con uno storico ampio.
+
+        Best-effort: senza ATR corrente o senza dati ritorna (None, None) → leva minima.
+        Eseguito solo all'apertura reale (action != skip), una fetch klines per trade.
+        """
+        if atr_now is None:
+            return None, None
+        symbol = payload.get("symbol") or (f"{asset}USDT" if asset else None)
+        if not symbol:
+            return None, None
+        minutes = self.settings.perp_volume_profile_candle_minutes
+        hours = self.settings.perp_leverage_atr_baseline_hours
+        period = self.settings.perp_leverage_atr_period
+        limit = min(int(hours * 60 / minutes), 1500)
+        try:
+            candles = await self.price_feed.fetch(
+                symbol=str(symbol), interval=f"{minutes}m", limit=limit, market="futures"
+            )
+        except Exception:
+            return None, None
+        series = atr_series(candles, period=period)
+        if not series:
+            return None, None
+        return min(series), max(series)
 
     async def fast_tick(self, session: AsyncSession) -> dict:
         """Manage open positions; refresh live prices and check SL/TP."""

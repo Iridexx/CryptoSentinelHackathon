@@ -89,9 +89,12 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
             take_profit_2 = poc
             trailing_stop = current * 1.01
 
-        # Leva modulata sull'ATR(72): bassa volatilità → leva max, alta → min.
-        lev_atr = atr(candles, period=LEVERAGE_ATR_PERIOD)
-        lev_atr_window = atr_series(candles, period=LEVERAGE_ATR_PERIOD)
+        # ATR corrente per la leva (periodo da config). atr_min/atr_max storici sono
+        # calcolati nel service su un lookback più lungo; qui la leva è solo placeholder
+        # (verrà sovrascritta in evaluate_perp con i mobile settings).
+        lev_period = self.settings.perp_leverage_atr_period
+        lev_atr = atr(candles, period=lev_period)
+        lev_atr_window = atr_series(candles, period=lev_period)
         lev_atr_min = min(lev_atr_window) if lev_atr_window else None
         lev_atr_max = max(lev_atr_window) if lev_atr_window else None
         leverage = _atr_range_leverage(

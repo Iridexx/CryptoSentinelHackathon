@@ -223,6 +223,8 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "default_leverage": "perp_default_leverage",
         "min_leverage": "perp_min_leverage",
         "max_leverage": "perp_max_leverage",
+        "leverage_atr_period": "perp_leverage_atr_period",
+        "leverage_atr_baseline_hours": "perp_leverage_atr_baseline_hours",
         "volume_profile_window_hours": "perp_volume_profile_window_hours",
         "volume_profile_candle_minutes": "perp_volume_profile_candle_minutes",
     },
@@ -536,6 +538,9 @@ class Settings(BaseSettings):
     # Range leva modulata sull'ATR(72) in apertura (bassa vol → max, alta vol → min).
     perp_min_leverage: int = Field(default=4, alias="PERP_MIN_LEVERAGE")
     perp_max_leverage: int = Field(default=40, alias="PERP_MAX_LEVERAGE")
+    # Baseline storica per atr_min/atr_max della leva: periodo ATR e finestra di lookback.
+    perp_leverage_atr_period: int = Field(default=72, alias="PERP_LEVERAGE_ATR_PERIOD")
+    perp_leverage_atr_baseline_hours: int = Field(default=120, alias="PERP_LEVERAGE_ATR_BASELINE_HOURS")
     perp_volume_profile_window_hours: int = Field(default=24, alias="PERP_VOLUME_PROFILE_WINDOW_HOURS")
     perp_volume_profile_candle_minutes: int = Field(default=5, alias="PERP_VOLUME_PROFILE_CANDLE_MINUTES")
 

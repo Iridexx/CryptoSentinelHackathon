@@ -117,6 +117,8 @@ def settings(**overrides):
         perp_default_leverage=2,
         perp_min_leverage=4,
         perp_max_leverage=5,
+        perp_leverage_atr_period=72,
+        perp_leverage_atr_baseline_hours=120,
         perp_volume_profile_window_hours=24,
         perp_volume_profile_candle_minutes=5,
         binance_futures_base_url="https://fapi.binance.com",
@@ -927,6 +929,21 @@ async def test_spot_spike_filter_rejects_signal() -> None:
     )
     assert spiked["action"] == "skip"
     assert spiked["reason"] == "volatility_spike"
+
+
+def test_perp_atr_range_leverage_is_graduated() -> None:
+    """La leva perp è graduata sull'ATR (non bimodale) e il minimo è riservato alle anomalie."""
+    from backend.app.agent.signals.perp.volume_profile import _atr_range_leverage
+
+    # Vol corrente a metà dello storico -> leva intermedia (né min né max).
+    mid = _atr_range_leverage(min_lev=4, max_lev=40, atr_value=3.0, atr_min=2.0, atr_max=4.0)
+    assert 4 < mid < 40
+    # Vol minima storica -> leva massima.
+    assert _atr_range_leverage(min_lev=4, max_lev=40, atr_value=2.0, atr_min=2.0, atr_max=4.0) == 40
+    # Vol oltre il massimo storico (anomalia) -> leva minima.
+    assert _atr_range_leverage(min_lev=4, max_lev=40, atr_value=5.0, atr_min=2.0, atr_max=4.0) == 4
+    # Dati insufficienti -> leva minima (conservativo).
+    assert _atr_range_leverage(min_lev=4, max_lev=40, atr_value=None, atr_min=None, atr_max=None) == 4
 
 
 @pytest.mark.asyncio
