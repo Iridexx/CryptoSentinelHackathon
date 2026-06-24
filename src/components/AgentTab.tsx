@@ -523,6 +523,9 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 <span>Swap {position.swap_fee_usd != null ? fmtUsd(position.swap_fee_usd) : '$0.00'}</span>
                 <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
               </div>
+              <div className="mt-1.5 text-right text-xs text-gray-500">
+                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </div>
             </div>
           ))}
         </div>
@@ -577,6 +580,9 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
                 <span>Fee {position.opening_fee_usd != null ? fmtUsd(position.opening_fee_usd) : '$0.00'}</span>
                 <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
                 <span className={Number(position.funding_accrued_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund.acc. {position.funding_accrued_usd != null ? fmtUsd(position.funding_accrued_usd) : '$0.00'}</span>
+              </div>
+              <div className="mt-1.5 text-right text-xs text-gray-500">
+                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
           ))}
