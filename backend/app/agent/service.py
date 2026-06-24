@@ -15,7 +15,7 @@ from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
-from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
+from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _dynamic_leverage as _perp_dynamic_leverage
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
 from backend.app.agent.watchlist import selected_watchlist
 from backend.app.core.config import Settings, get_settings
@@ -218,6 +218,19 @@ class AgentService:
 
     async def evaluate_perp(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.perp_signal.evaluate(payload)
+        # Il segnale embeds la leva calcolata con il config YAML statico.
+        # La sovrascriviamo con i mobile settings (RuntimeState) per rispettare
+        # la leva impostata dall'utente nell'app.
+        if signal.get("action") != "skip":
+            ms = self._ms
+            components = signal.get("components") or {}
+            signal["leverage"] = _perp_dynamic_leverage(
+                default=ms.perp_default_leverage,
+                maximum=self.settings.perp_max_leverage,
+                enabled=ms.perp_dynamic_leverage_enabled,
+                atr_value=components.get("atr"),
+                price=float(signal.get("price") or 0),
+            )
         return await self._handle_signal(signal, session)
 
     async def fast_tick(self, session: AsyncSession) -> dict:
