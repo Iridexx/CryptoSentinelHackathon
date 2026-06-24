@@ -518,6 +518,11 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 <span>Now {fmtPriceFull(position.current_price)}</span>
                 <span>{position.status}</span>
               </div>
+              <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                <span>Mode: <span className={!position.fee_mode || position.fee_mode === 'none' ? 'text-gray-400' : 'text-accent-yellow'}>{position.fee_mode === 'none' ? 'nessuna' : position.fee_mode === 'all' ? 'swap+slip' : position.fee_mode ?? '-'}</span></span>
+                <span>Swap {position.swap_fee_usd != null ? fmtUsd(position.swap_fee_usd) : '$0.00'}</span>
+                <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -565,6 +570,13 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
                 <span>Liq {position.liquidation_price ? fmtPrice(position.liquidation_price) : '-'}</span>
                 <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
                 <span>{position.status}</span>
+              </div>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-gray-500">
+                <span>Margin {position.margin_usd != null ? fmtUsd(position.margin_usd) : '$0.00'}</span>
+                <span>Mode: <span className={!position.fee_mode || position.fee_mode === 'none' ? 'text-gray-400' : position.fee_mode === 'maker' ? 'text-accent-green' : 'text-accent-yellow'}>{position.fee_mode ?? '-'}</span></span>
+                <span>Fee {position.opening_fee_usd != null ? fmtUsd(position.opening_fee_usd) : '$0.00'}</span>
+                <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
+                <span className={Number(position.funding_accrued_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund.acc. {position.funding_accrued_usd != null ? fmtUsd(position.funding_accrued_usd) : '$0.00'}</span>
               </div>
             </div>
           ))}
