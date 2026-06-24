@@ -578,21 +578,23 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
               className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
-                <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
+                  <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
+                </div>
+                <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
+                  {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
+                </p>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                <span>PnL {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%</span>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                <span>Size {Number(position.size).toFixed(4)}</span>
+                <span>Entry {fmtPriceFull(position.entry_price)}</span>
+                <span>Now {fmtPriceFull(position.current_price)}</span>
+              </div>
+              <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                <span>Margin {position.margin_usd != null ? fmtUsd(position.margin_usd) : '$0.00'}</span>
                 <span>Liq {position.liquidation_price ? fmtPrice(position.liquidation_price) : '-'}</span>
                 <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
-                <span>{position.status}</span>
-              </div>
-              <div className="mt-1 grid grid-cols-2 gap-2 text-xs text-gray-500">
-                <span>Margin {position.margin_usd != null ? fmtUsd(position.margin_usd) : '$0.00'}</span>
-                <span>Mode: <span className={!position.fee_mode || position.fee_mode === 'none' ? 'text-gray-400' : position.fee_mode === 'maker' ? 'text-accent-green' : 'text-accent-yellow'}>{position.fee_mode ?? '-'}</span></span>
-                <span>Fee {position.opening_fee_usd != null ? fmtUsd(position.opening_fee_usd) : '$0.00'}</span>
-                <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
-                <span className={Number(position.funding_accrued_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}>Fund.acc. {position.funding_accrued_usd != null ? fmtUsd(position.funding_accrued_usd) : '$0.00'}</span>
               </div>
               <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
                 <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
