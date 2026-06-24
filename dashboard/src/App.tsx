@@ -578,7 +578,7 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
                 const pct = base > 0 ? ((Number(pt.total_equity_usd) - base) / base) * 100 : 0;
                 const d = new Date(pt.timestamp_utc);
                 const label = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                return { pct, label };
+                return { pct, label, equity: pt.total_equity_usd };
               })}
             />
           )}
@@ -758,6 +758,7 @@ function AnalyticsPanel({
               points={equity.data.items.map((pt) => ({
                 pct: Number(pt.pnl_pct),
                 label: new Date(pt.timestamp_utc).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+                equity: pt.equity_usd,
               }))}
             />
             <Table
@@ -2081,7 +2082,7 @@ function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   );
 }
 
-function EquityLineChart({ points }: { points: { pct: number; label: string }[] }) {
+function EquityLineChart({ points }: { points: { pct: number; label: string; equity?: string | number }[] }) {
   const n = points.length;
   if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
 
@@ -2174,10 +2175,13 @@ function EquityLineChart({ points }: { points: { pct: number; label: string }[] 
           {/* dot on curve */}
           <circle cx={hovX} cy={hovY} r="4.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="2" />
           {/* tooltip box */}
-          <g transform={`translate(${tooltipLeft ? hovX - 88 : hovX + 10},${Math.min(H - padB - 34, Math.max(padT, hovY - 22))})`}>
-            <rect x="0" y="0" width="78" height="34" rx="4" fill="#1a1f2e" stroke="#2d3348" strokeWidth="1" />
+          <g transform={`translate(${tooltipLeft ? hovX - 94 : hovX + 10},${Math.min(H - padB - 46, Math.max(padT, hovY - 28))})`}>
+            <rect x="0" y="0" width="84" height="46" rx="4" fill="#1a1f2e" stroke="#2d3348" strokeWidth="1" />
             <text x="6" y="13" fontSize="9" fill="#9ca3af">{hov.label}</text>
-            <text x="6" y="27" fontSize="11" fontWeight="600" fill={hov.pct >= 0 ? '#22c55e' : '#ef4444'}>
+            {hov.equity != null && (
+              <text x="6" y="26" fontSize="10" fill="#e5e7eb">{money(hov.equity)}</text>
+            )}
+            <text x="6" y={hov.equity != null ? 40 : 28} fontSize="10" fontWeight="600" fill={hov.pct >= 0 ? '#22c55e' : '#ef4444'}>
               {hov.pct >= 0 ? '+' : ''}{hov.pct.toFixed(2)}%
             </text>
           </g>
