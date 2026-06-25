@@ -1295,3 +1295,44 @@ button.danger {
   background: #1a1e2a;
   color: #7a9ab0;
 }
+
+/* Pannello Liquidità · Versamento/Prelievo */
+.equity-adjust-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+.equity-adjust-row input {
+  flex: 1;
+  min-width: 0;
+  background: #11151f;
+  border: 1px solid #2a3142;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #e6edf3;
+  font-size: 13px;
+}
+.equity-adjust-row input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.mini-table th,
+.mini-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #1f2531;
+}
+.mini-table th {
+  color: #7a9ab0;
+  font-weight: 600;
+}
+.mini-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

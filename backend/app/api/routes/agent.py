@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,6 +18,7 @@ from backend.app.agent.watchlist import selected_watchlist, set_selected_watchli
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.repositories.api_usage import ApiUsageRepository
+from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.schemas.views import ClaudeUsageView
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SessionDep
 from backend.app.core.config import get_settings
@@ -201,6 +204,69 @@ async def dev_reset_db(request: ResetDbRequest, session: SessionDep, _: AdminAcc
     service.risk.clear_degraded()
     result["kill_switch"] = service.risk.kill_switch.value
     return result
+
+
+class EquityAdjustRequest(BaseModel):
+    amount: float = Field(..., description="Importo: positivo = versamento, negativo = prelievo")
+    note: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/equity/adjust")
+async def adjust_equity(request: EquityAdjustRequest, session: SessionDep, _: AdminAccessDep) -> dict:
+    """Versamento (+) o prelievo (-) di liquidità.
+
+    Tratta l'importo come un deposito: alza l'equity e la base (initial_equity)
+    dello stesso valore, quindi il PnL (= realized + unrealized) NON cambia.
+    """
+
+    try:
+        amount = Decimal(str(request.amount))
+    except (InvalidOperation, ValueError):
+        raise HTTPException(status_code=400, detail="amount_not_a_number")
+    if amount == 0:
+        raise HTTPException(status_code=400, detail="amount_must_be_nonzero")
+
+    settings = get_settings()
+    try:
+        portfolio, adjustment = await PnlRepository(session).adjust_equity(
+            str(settings.default_user_id),
+            amount=amount,
+            base_capital=Decimal(str(settings.dry_run_capital_usd)),
+            note=(request.note or "").strip() or None,
+            now=datetime.now(UTC),
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="equity_would_go_negative")
+
+    return {
+        "status": "ok",
+        "applied": str(amount),
+        "total_equity_usd": str(portfolio.total_equity_usd),
+        "initial_equity_usd": str(portfolio.initial_equity_usd),
+        "adjustment_id": adjustment.id,
+        "created_at": adjustment.created_at.isoformat(),
+    }
+
+
+@router.get("/equity/adjustments")
+async def equity_adjustments(_: ReadAccessDep, session: SessionDep, limit: int = Query(50, ge=1, le=200)) -> dict:
+    """Storico dei versamenti/prelievi manuali (più recenti prima)."""
+
+    settings = get_settings()
+    rows = await PnlRepository(session).list_equity_adjustments(
+        str(settings.default_user_id), limit=limit
+    )
+    items = [
+        {
+            "id": row.id,
+            "amount": str(row.amount),
+            "balance_after": str(row.balance_after),
+            "note": row.note,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+    return {"items": items, "count": len(items)}
 
 
 # Cache leggera della summary spesa Claude: evita una query DB a ogni refresh dell'app.

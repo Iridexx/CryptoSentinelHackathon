@@ -15,6 +15,7 @@ import {
   saveAgentSettings,
   setKillSwitch,
   riskCloseAll,
+  adjustEquity,
   validateOnboarding,
   type AgentDecisionResponse,
   type AgentMobileSettings,
@@ -971,6 +972,7 @@ const SetupPane: FC<{
   onValidate: () => void;
   onKill: (state: KillSwitchState) => void;
   onCloseAll: () => void;
+  onAdjustEquity: (amount: number) => void;
 }> = ({
   settings,
   onSettings,
@@ -984,8 +986,12 @@ const SetupPane: FC<{
   onValidate,
   onKill,
   onCloseAll,
+  onAdjustEquity,
 }) => {
   const patch = (partial: Partial<AgentMobileSettings>) => onSettings({ ...settings, ...partial });
+  const [equityInput, setEquityInput] = useState('');
+  const equityValue = Number(equityInput);
+  const equityValid = equityInput.trim() !== '' && Number.isFinite(equityValue) && equityValue !== 0;
 
   return (
     <div className="space-y-4">
@@ -1044,6 +1050,31 @@ const SetupPane: FC<{
         >
           ▶ Riprendi agente
         </button>
+        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
+      </section>
+
+      <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-white">Liquidità · Versamento / Prelievo</h3>
+          <p className="mt-0.5 text-xs text-gray-500">Aggiunge (o toglie, con valore negativo) capitale come un deposito. Alza l'equity senza contare come PnL. Es: <span className="text-gray-400">200</span> = +200$, <span className="text-gray-400">-50</span> = −50$.</p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={equityInput}
+            onChange={(event) => setEquityInput(event.target.value)}
+            placeholder="es. 200 oppure -50"
+            className="flex-1 min-w-0 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
+          />
+          <button
+            onClick={() => { if (equityValid) { onAdjustEquity(equityValue); setEquityInput(''); } }}
+            disabled={!adminToken || saving || !equityValid}
+            className="rounded-lg bg-accent-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            Applica
+          </button>
+        </div>
         {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
       </section>
 
@@ -1544,6 +1575,23 @@ const AgentTab: FC<AgentTabProps> = ({
     }
   };
 
+  const handleAdjustEquity = async (amount: number) => {
+    const verb = amount >= 0 ? 'Versare' : 'Prelevare';
+    const prep = amount >= 0 ? 'in' : 'da';
+    if (!window.confirm(`${verb} ${Math.abs(amount).toFixed(2)}$ ${prep} liquidità?\n\nAggiorna l'equity, non il PnL.`)) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      const result = await adjustEquity(amount, null, adminToken);
+      window.alert(`Applicato ${amount >= 0 ? '+' : ''}${amount}$. Equity ora: ${Number(result.total_equity_usd).toFixed(2)}$.`);
+      await refresh(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Adjust equity failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleTradeDetail = async (tradeId: string) => {
     setLoadingDetail(true);
     setActionError('');
@@ -1654,6 +1702,7 @@ const AgentTab: FC<AgentTabProps> = ({
           onValidate={handleValidate}
           onKill={handleKill}
           onCloseAll={handleCloseAll}
+          onAdjustEquity={handleAdjustEquity}
         />
       )}
         </>

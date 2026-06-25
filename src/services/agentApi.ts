@@ -517,3 +517,20 @@ export function resetDatabase(backupName: string | null, adminToken: string): Pr
     token: adminToken,
   });
 }
+
+export interface EquityAdjustResponse {
+  status: string;
+  applied: string;
+  total_equity_usd: string;
+  initial_equity_usd: string;
+  adjustment_id: number;
+  created_at: string;
+}
+
+export function adjustEquity(amount: number, note: string | null, adminToken: string): Promise<EquityAdjustResponse> {
+  return request<EquityAdjustResponse>('/api/v1/agent/equity/adjust', {
+    method: 'POST',
+    body: { amount, note },
+    token: adminToken,
+  });
+}

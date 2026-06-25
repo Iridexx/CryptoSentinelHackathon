@@ -90,3 +90,69 @@ class PnlRepository:
             select(PortfolioState).where(PortfolioState.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def adjust_equity(
+        self,
+        user_id: str,
+        *,
+        amount: Decimal,
+        base_capital: Decimal,
+        note: str | None,
+        now: datetime,
+    ) -> tuple[PortfolioState, "EquityAdjustment"]:
+        """Versamento (+) o prelievo (-) di liquidità.
+
+        Tratta il movimento come un deposito: somma l'importo a ``initial_equity``
+        (la base) e a ``total``/``peak``. Così l'equity cambia ma il PnL
+        (= realized + unrealized) resta invariato. Registra anche una riga in
+        ``equity_adjustments`` e uno snapshot per il gradino nella equity curve.
+        Solleva ``ValueError`` se l'equity o la base diventerebbero negative.
+        """
+        from backend.app.persistence.models.equity_adjustments import EquityAdjustment
+
+        record = await self.get_portfolio(user_id)
+        if record is None:
+            record = PortfolioState(
+                user_id=user_id,
+                total_equity_usd=base_capital,
+                initial_equity_usd=base_capital,
+                peak_equity_usd=base_capital,
+                agent_status="idle",
+                updated_at=now,
+            )
+            self._session.add(record)
+
+        new_total = record.total_equity_usd + amount
+        new_initial = record.initial_equity_usd + amount
+        if new_total < 0 or new_initial < 0:
+            raise ValueError("equity_would_go_negative")
+        record.total_equity_usd = new_total
+        record.initial_equity_usd = new_initial
+        # Sposta il picco dello stesso importo (mantiene il drawdown coerente),
+        # senza mai scendere sotto l'equity corrente.
+        record.peak_equity_usd = max(record.peak_equity_usd + amount, new_total)
+        record.updated_at = now
+
+        adjustment = EquityAdjustment(
+            user_id=user_id, amount=amount, balance_after=new_total, note=note, created_at=now
+        )
+        self._session.add(adjustment)
+        # Gradino immediato nella equity curve.
+        self._session.add(
+            PnlSnapshot(user_id=user_id, timestamp_utc=now, total_equity_usd=new_total)
+        )
+        await self._session.commit()
+        await self._session.refresh(record)
+        await self._session.refresh(adjustment)
+        return record, adjustment
+
+    async def list_equity_adjustments(self, user_id: str, *, limit: int = 50) -> list["EquityAdjustment"]:
+        from backend.app.persistence.models.equity_adjustments import EquityAdjustment
+
+        result = await self._session.execute(
+            select(EquityAdjustment)
+            .where(EquityAdjustment.user_id == user_id)
+            .order_by(EquityAdjustment.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())

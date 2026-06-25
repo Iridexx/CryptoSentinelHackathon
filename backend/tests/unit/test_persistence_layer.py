@@ -475,6 +475,70 @@ async def test_reset_all_data_wipes_everything_and_optionally_backs_up(db) -> No
 
 
 @pytest.mark.asyncio
+async def test_adjust_equity_deposit_raises_base_not_pnl(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await PnlRepository(session).upsert_portfolio(
+            USER, total_equity_usd=Decimal("250"), initial_equity_usd=Decimal("200"),
+            peak_equity_usd=Decimal("260"),
+        )
+        await session.commit()
+
+    async with factory() as session:
+        portfolio, adj = await PnlRepository(session).adjust_equity(
+            USER, amount=Decimal("200"), base_capital=Decimal("200"), note="versamento test", now=now,
+        )
+
+    # Equity e base salgono di 200; il PnL implicito (total - initial) resta 50.
+    assert portfolio.total_equity_usd == Decimal("450")
+    assert portfolio.initial_equity_usd == Decimal("400")
+    assert portfolio.total_equity_usd - portfolio.initial_equity_usd == Decimal("50")
+    assert portfolio.peak_equity_usd == Decimal("460")  # 260 + 200
+    assert adj.amount == Decimal("200")
+    assert adj.balance_after == Decimal("450")
+
+
+@pytest.mark.asyncio
+async def test_adjust_equity_withdrawal_and_negative_guard(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await PnlRepository(session).upsert_portfolio(
+            USER, total_equity_usd=Decimal("300"), initial_equity_usd=Decimal("300"),
+            peak_equity_usd=Decimal("300"),
+        )
+        await session.commit()
+
+    async with factory() as session:
+        repo = PnlRepository(session)
+        portfolio, _ = await repo.adjust_equity(
+            USER, amount=Decimal("-50"), base_capital=Decimal("200"), note=None, now=now,
+        )
+        assert portfolio.total_equity_usd == Decimal("250")
+        assert portfolio.initial_equity_usd == Decimal("250")
+
+    async with factory() as session:
+        with pytest.raises(ValueError):
+            await PnlRepository(session).adjust_equity(
+                USER, amount=Decimal("-9999"), base_capital=Decimal("200"), note=None, now=now,
+            )
+
+
+@pytest.mark.asyncio
+async def test_adjust_equity_initialises_missing_portfolio(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        portfolio, _ = await PnlRepository(session).adjust_equity(
+            USER, amount=Decimal("100"), base_capital=Decimal("200"), note=None, now=now,
+        )
+    # Nessun portfolio preesistente: parte dal capitale base (200) + 100.
+    assert portfolio.total_equity_usd == Decimal("300")
+    assert portfolio.initial_equity_usd == Decimal("300")
+
+
+@pytest.mark.asyncio
 async def test_reset_all_data_without_backup_does_not_archive(db) -> None:
     factory = get_session_factory()
     now = datetime.now(UTC)

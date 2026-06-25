@@ -218,6 +218,34 @@ export function resetDatabase(session: DashboardSession, backupName: string | nu
   });
 }
 
+export type EquityAdjustResponse = {
+  status: string;
+  applied: string;
+  total_equity_usd: string;
+  initial_equity_usd: string;
+  adjustment_id: number;
+  created_at: string;
+};
+
+export type EquityAdjustment = {
+  id: number;
+  amount: string;
+  balance_after: string;
+  note: string | null;
+  created_at: string;
+};
+
+export function adjustEquity(session: DashboardSession, amount: number, note: string | null) {
+  return requestJson<EquityAdjustResponse>(session, '/api/v1/agent/equity/adjust', 'admin', {
+    method: 'POST',
+    body: JSON.stringify({ amount, note }),
+  });
+}
+
+export function fetchEquityAdjustments(session: DashboardSession) {
+  return requestJson<{ items: EquityAdjustment[]; count: number }>(session, '/api/v1/agent/equity/adjustments');
+}
+
 export function fetchMarkets(session: DashboardSession, limit = 50) {
   return requestJson<MarketListResponse>(session, `/api/v1/market-data/markets?currency=usd&limit=${limit}&page=1`);
 }

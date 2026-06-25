@@ -6,6 +6,7 @@ from .archives import ArchivedRun
 from .base import Base
 from .decisions import AgentDecision
 from .device_alert_configs import DeviceAlertConfig
+from .equity_adjustments import EquityAdjustment
 from .device_tokens import DeviceToken
 from .pnl import PnlSnapshot, PortfolioState
 from .positions import PerpPosition, SpotPosition
@@ -21,6 +22,7 @@ __all__ = [
     "ArchivedRun",
     "AgentDecision",
     "DeviceAlertConfig",
+    "EquityAdjustment",
     "DeviceToken",
     "PnlSnapshot",
     "PortfolioState",

@@ -22,6 +22,8 @@ import {
   fetchSpot,
   fetchTradeDetail,
   resetDatabase,
+  adjustEquity,
+  fetchEquityAdjustments,
   saveNotificationPrefs,
   saveSettings,
   sendToken,
@@ -33,6 +35,7 @@ import {
   setSpotExecutionProvider,
   validateOnboarding,
   type DashboardSession,
+  type EquityAdjustment,
 } from './api';
 import type {
   AgentDecisionResponse,
@@ -143,6 +146,8 @@ export default function App() {
   const [logs, setLogs] = useState<LoadState<LogEntry[]>>(emptyState([]));
   const [settings, setSettings] = useState<LoadState<SettingsResponse>>(emptyState());
   const [settingsDraft, setSettingsDraft] = useState<AgentSettings>({});
+  const [equityInput, setEquityInput] = useState('');
+  const [equityHistory, setEquityHistory] = useState<EquityAdjustment[]>([]);
   const [checks, setChecks] = useState<LoadState<CredentialCheck[]>>(emptyState([]));
   const [markets, setMarkets] = useState<LoadState<MarketAsset[]>>(emptyState([]));
   const [notice, setNotice] = useState('');
@@ -245,6 +250,38 @@ export default function App() {
     if (response) {
       setSettingsDraft(response.settings);
       setNotice('Settings saved');
+    }
+  }
+
+  async function refreshEquityHistory() {
+    if (!canRead) return;
+    try {
+      const response = await fetchEquityAdjustments(session);
+      setEquityHistory(response.items);
+    } catch {
+      // best-effort
+    }
+  }
+
+  async function submitAdjustEquity() {
+    if (!canAdmin) {
+      setNotice('Admin token required');
+      return;
+    }
+    const amount = Number(equityInput);
+    if (equityInput.trim() === '' || !Number.isFinite(amount) || amount === 0) {
+      setNotice('Importo non valido');
+      return;
+    }
+    const verb = amount >= 0 ? 'Versare' : 'Prelevare';
+    if (!window.confirm(`${verb} ${Math.abs(amount).toFixed(2)}$ di liquidità? Aggiorna l'equity, non il PnL.`)) return;
+    try {
+      const result = await adjustEquity(session, amount, null);
+      setNotice(`Applicato ${amount >= 0 ? '+' : ''}${amount}$. Equity ora: ${Number(result.total_equity_usd).toFixed(2)}$.`);
+      setEquityInput('');
+      await refreshEquityHistory();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Adjust equity failed');
     }
   }
 
@@ -539,6 +576,35 @@ export default function App() {
               onLoad={() => void refreshNotifPrefs()}
               onToggle={(key) => void toggleNotifPref(key)}
             />
+            <Panel title="Liquidità · Versamento / Prelievo" className="wide" action={<button onClick={() => void refreshEquityHistory()} disabled={!canRead}>Storico</button>}>
+              <p className="hint">Aggiunge (o toglie, con valore negativo) capitale come un deposito. Alza l'equity senza contare come PnL. Es: 200 = +200$, -50 = −50$.</p>
+              <div className="equity-adjust-row">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={equityInput}
+                  onChange={(e) => setEquityInput(e.target.value)}
+                  placeholder="es. 200 oppure -50"
+                />
+                <button onClick={() => void submitAdjustEquity()} disabled={!canAdmin || equityInput.trim() === '' || Number(equityInput) === 0 || !Number.isFinite(Number(equityInput))}>Applica</button>
+              </div>
+              {!canAdmin && <p className="hint">Admin token required.</p>}
+              {equityHistory.length > 0 && (
+                <table className="mini-table">
+                  <thead><tr><th>Data</th><th>Importo</th><th>Saldo dopo</th><th>Nota</th></tr></thead>
+                  <tbody>
+                    {equityHistory.map((a) => (
+                      <tr key={a.id}>
+                        <td>{shortDate(a.created_at)}</td>
+                        <td className={Number(a.amount) >= 0 ? 'ok-text' : 'error-text'}>{Number(a.amount) >= 0 ? '+' : ''}{money(a.amount)}</td>
+                        <td className="num">{money(a.balance_after)}</td>
+                        <td>{a.note ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </Panel>
             <Panel title="Modalità sviluppatore" className="wide">
               <p className="hint">Azzera tutto il database: trade, decisioni, posizioni, PnL, portfolio e grafici. Impostazioni e watchlist restano. Prima di azzerare puoi salvare un backup con un nome.</p>
               <button className="danger" onClick={() => void submitResetDb()} disabled={!canAdmin}>🗑 Resetta database</button>
