@@ -1966,6 +1966,8 @@ function TradeHistoryTable({
               <th>{market === 'spot' ? 'Amount' : 'Size'}</th>
               <th>Entry</th>
               <th>Exit</th>
+              <th>Investito</th>
+              <th>Val. uscita</th>
               <th>PnL $</th>
               <th>PnL %</th>
               <th>Status</th>
@@ -1978,6 +1980,11 @@ function TradeHistoryTable({
               const pnl = Number(t.pnl_usd ?? 0);
               const isGood = pnl >= 0;
               const isClose = market === 'perp' ? t.direction === 'close' : t.side === 'sell';
+              const qty = market === 'spot' ? Number(t.amount ?? 0) : Number(t.size ?? 0);
+              const entryP = Number(t.entry_price ?? t.price);
+              const exitP = Number(t.current_or_exit_price ?? t.price);
+              const invested = qty * entryP;
+              const exitValue = qty * exitP;
               return (
                 <tr
                   key={t.trade_id}
@@ -1992,6 +1999,8 @@ function TradeHistoryTable({
                   <td className="num">{market === 'spot' ? String(t.amount ?? '-') : String(t.size ?? '-')}</td>
                   <td className="num">{fmtPrice(t.entry_price ?? t.price)}</td>
                   <td className="num">{fmtPrice(t.current_or_exit_price ?? t.price)}</td>
+                  <td className="num">{qty > 0 ? money(invested) : '--'}</td>
+                  <td className="num">{qty > 0 ? money(exitValue) : '--'}</td>
                   <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_usd ?? '--'}</td>
                   <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_pct ?? '--'}%</td>
                   <td><span className="status-badge">{t.status}</span></td>
