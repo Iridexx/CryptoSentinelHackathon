@@ -15,7 +15,6 @@ import {
   saveAgentSettings,
   setKillSwitch,
   riskCloseAll,
-  resetDatabase,
   validateOnboarding,
   type AgentDecisionResponse,
   type AgentMobileSettings,
@@ -972,7 +971,6 @@ const SetupPane: FC<{
   onValidate: () => void;
   onKill: (state: KillSwitchState) => void;
   onCloseAll: () => void;
-  onResetDb: () => void;
 }> = ({
   settings,
   onSettings,
@@ -986,7 +984,6 @@ const SetupPane: FC<{
   onValidate,
   onKill,
   onCloseAll,
-  onResetDb,
 }) => {
   const patch = (partial: Partial<AgentMobileSettings>) => onSettings({ ...settings, ...partial });
 
@@ -1046,21 +1043,6 @@ const SetupPane: FC<{
           className="w-full rounded-lg bg-accent-green/20 px-3 py-2.5 text-sm font-semibold text-accent-green disabled:opacity-40"
         >
           ▶ Riprendi agente
-        </button>
-        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
-      </section>
-
-      <section className="rounded-xl border border-accent-yellow/30 bg-dark-800 px-4 py-4 space-y-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-white">Modalità sviluppatore</h3>
-          <p className="mt-0.5 text-xs text-gray-500">Azzera tutto il database: trade, decisioni, posizioni, PnL, portfolio e grafici. Le impostazioni e la watchlist restano. Prima di azzerare puoi salvare un backup con un nome.</p>
-        </div>
-        <button
-          onClick={onResetDb}
-          disabled={!adminToken || saving}
-          className="w-full rounded-lg bg-accent-yellow/20 px-3 py-3 text-sm font-bold text-accent-yellow disabled:opacity-40"
-        >
-          {saving ? 'Esecuzione...' : '🗑 Resetta database'}
         </button>
         {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
       </section>
@@ -1562,34 +1544,6 @@ const AgentTab: FC<AgentTabProps> = ({
     }
   };
 
-  const handleResetDb = async () => {
-    const wantsBackup = window.confirm('Vuoi salvare un backup prima di azzerare il database?\n\nOK = salva backup · Annulla = niente backup');
-    let backupName: string | null = null;
-    if (wantsBackup) {
-      const input = window.prompt('Nome del backup:', `backup_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}`);
-      if (input === null) return; // l'utente ha annullato il prompt: interrompe tutto
-      backupName = input.trim() || null;
-    }
-    const warn = backupName
-      ? `Azzerare TUTTO il database? Verrà prima salvato il backup "${backupName}".`
-      : 'Azzerare TUTTO il database SENZA backup? L\'operazione è irreversibile.';
-    if (!window.confirm(warn)) return;
-    setSaving(true);
-    setActionError('');
-    try {
-      const result = await resetDatabase(backupName, adminToken);
-      const total = Object.values(result.deleted).reduce((a, b) => a + b, 0);
-      window.alert(result.archived_run_id
-        ? `Database azzerato (${total} record). Backup salvato: "${result.backup_label}".`
-        : `Database azzerato (${total} record). Nessun backup.`);
-      await refresh(true);
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Reset database failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleTradeDetail = async (tradeId: string) => {
     setLoadingDetail(true);
     setActionError('');
@@ -1700,7 +1654,6 @@ const AgentTab: FC<AgentTabProps> = ({
           onValidate={handleValidate}
           onKill={handleKill}
           onCloseAll={handleCloseAll}
-          onResetDb={handleResetDb}
         />
       )}
         </>

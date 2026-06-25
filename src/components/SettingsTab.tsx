@@ -11,6 +11,7 @@ import {
   type ProviderName,
   type ProviderSelectionResponse,
 } from '../services/marketData';
+import { resetDatabase } from '../services/agentApi';
 
 const DONATION_OPTIONS = [
   {
@@ -217,6 +218,8 @@ const SettingsTab: FC<Props> = ({
   const [adminToken, setAdminToken] = useState('');
   const [providerState, setProviderState] = useState<ProviderSelectionResponse | null>(null);
   const [providerLoadState, setProviderLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [resetState, setResetState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
+  const [resetMsg, setResetMsg] = useState('');
 
   type DiagState = 'idle' | 'checking' | 'done';
   interface DiagResult {
@@ -358,6 +361,34 @@ const SettingsTab: FC<Props> = ({
       setProviderLoadState('idle');
     } catch {
       setProviderLoadState('error');
+    }
+  };
+
+  const handleResetDb = async () => {
+    if (!adminToken) return;
+    const wantsBackup = window.confirm('Salvare un backup prima di azzerare il database?\n\nOK = salva backup · Annulla = niente backup');
+    let backupName: string | null = null;
+    if (wantsBackup) {
+      const input = window.prompt('Nome del backup:', `backup_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}`);
+      if (input === null) return; // prompt annullato: interrompe tutto
+      backupName = input.trim() || null;
+    }
+    const warn = backupName
+      ? `Azzerare TUTTO il database? Verrà prima salvato il backup "${backupName}".`
+      : 'Azzerare TUTTO il database SENZA backup? Operazione irreversibile.';
+    if (!window.confirm(warn)) return;
+    setResetState('working');
+    setResetMsg('');
+    try {
+      const result = await resetDatabase(backupName, adminToken);
+      const total = Object.values(result.deleted).reduce((a, b) => a + b, 0);
+      setResetState('done');
+      setResetMsg(result.archived_run_id
+        ? `Azzerato (${total} record) · backup "${result.backup_label}"`
+        : `Azzerato (${total} record) · nessun backup`);
+    } catch (err) {
+      setResetState('error');
+      setResetMsg(err instanceof Error ? err.message : 'Reset fallito');
     }
   };
 
@@ -1004,6 +1035,23 @@ const SettingsTab: FC<Props> = ({
                 {providerLoadState === 'error' && (
                   <p className="text-xs text-accent-red">Unable to read or update the provider.</p>
                 )}
+              </div>
+
+              <div className="border-t border-dark-600" />
+
+              {/* ── Reset database ── */}
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Database</span>
+                <p className="text-xs text-gray-600">Azzera trade, decisioni, posizioni, PnL, portfolio e grafici. Impostazioni e watchlist restano. Prima di azzerare puoi salvare un backup con un nome.</p>
+                <button
+                  onClick={handleResetDb}
+                  disabled={!adminToken || resetState === 'working'}
+                  className="w-full py-2.5 bg-accent-red/20 text-accent-red text-sm font-semibold rounded-lg hover:bg-accent-red/30 transition-colors disabled:opacity-40"
+                >
+                  {resetState === 'working' ? 'Esecuzione…' : '🗑 Resetta database'}
+                </button>
+                {!adminToken && <p className="text-xs text-gray-600">Richiede admin token (sopra).</p>}
+                {resetMsg && <p className={`text-xs ${resetState === 'error' ? 'text-accent-red' : 'text-accent-green'}`}>{resetMsg}</p>}
               </div>
 
               <div className="border-t border-dark-600" />
