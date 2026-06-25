@@ -220,6 +220,13 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "tp1_atr_multiplier": "perp_tp1_atr_multiplier",
         "tp2_atr_multiplier": "perp_tp2_atr_multiplier",
         "use_poc_for_tp2": "perp_use_poc_for_tp2",
+        "breakeven_trigger_atr": "perp_breakeven_trigger_atr",
+        "breakeven_offset_costs": "perp_breakeven_offset_costs",
+        "trailing_base_atr_largo": "perp_trailing_base_atr_largo",
+        "trailing_floor_atr_largo": "perp_trailing_floor_atr_largo",
+        "trailing_base_atr_stretto": "perp_trailing_base_atr_stretto",
+        "trailing_floor_atr_stretto": "perp_trailing_floor_atr_stretto",
+        "trailing_mode": "perp_trailing_mode",
         "time_stop_hours": "perp_time_stop_hours",
         "dynamic_leverage_enabled": "perp_dynamic_leverage_enabled",
         "min_volume_profile_liquidity_usd": "perp_min_volume_profile_liquidity_usd",
@@ -537,6 +544,17 @@ class Settings(BaseSettings):
     # Se True, TP2 usa il POC (livello strutturale di volume) quando è più ambizioso
     # del target ATR; altrimenti resta sul target ATR. Garantisce R:R minimo.
     perp_use_poc_for_tp2: bool = Field(default=True, alias="PERP_USE_POC_FOR_TP2")
+    # ── Protezione posizione perp (breakeven + trailing dinamico sulla leva) ──────
+    # Breakeven: a +N×ATR dall'entry lo SL sale a entry (+costi), niente più perdita.
+    perp_breakeven_trigger_atr: float = Field(default=1.0, alias="PERP_BREAKEVEN_TRIGGER_ATR")
+    perp_breakeven_offset_costs: bool = Field(default=True, alias="PERP_BREAKEVEN_OFFSET_COSTS")
+    # Trailing ATR dinamico: il moltiplicatore scala con la leva del trade tra base
+    # (leva minima → largo) e floor (leva massima → stretto). Due preset Largo/Stretto.
+    perp_trailing_base_atr_largo: float = Field(default=4.0, alias="PERP_TRAILING_BASE_ATR_LARGO")
+    perp_trailing_floor_atr_largo: float = Field(default=2.5, alias="PERP_TRAILING_FLOOR_ATR_LARGO")
+    perp_trailing_base_atr_stretto: float = Field(default=2.5, alias="PERP_TRAILING_BASE_ATR_STRETTO")
+    perp_trailing_floor_atr_stretto: float = Field(default=1.5, alias="PERP_TRAILING_FLOOR_ATR_STRETTO")
+    perp_trailing_mode: str = Field(default="largo", alias="PERP_TRAILING_MODE")  # largo|stretto
     perp_time_stop_hours: int = Field(default=8, alias="PERP_TIME_STOP_HOURS")
     perp_dynamic_leverage_enabled: bool = Field(default=True, alias="PERP_DYNAMIC_LEVERAGE_ENABLED")
     perp_min_volume_profile_liquidity_usd: float = Field(

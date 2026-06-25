@@ -278,6 +278,7 @@ export interface AgentMobileSettings {
   perp_max_leverage: number;
   perp_value_area_pct: number;
   perp_atr_stop_multiplier: number;
+  perp_trailing_mode: 'largo' | 'stretto';
   perp_time_stop_hours: number;
   perp_fee_mode: 'taker' | 'maker' | 'none';
   spot_fee_mode: 'all' | 'none';

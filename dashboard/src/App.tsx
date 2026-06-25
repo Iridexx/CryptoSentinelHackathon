@@ -1000,7 +1000,7 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
             <Metric label="Stop loss" value={detail.stop_loss ? fmtPrice(detail.stop_loss) : '—'} />
             <Metric label="Take profit 1" value={detail.take_profit_1 ? fmtPrice(detail.take_profit_1) : '—'} />
             <Metric label="Take profit 2" value={detail.take_profit_2 ? fmtPrice(detail.take_profit_2) : '—'} />
-            <Metric label="Trailing" value={detail.trailing_stop ? fmtPrice(detail.trailing_stop) : '—'} />
+            <Metric label="Trailing" value={detail.trailing_stop ? fmtPrice(detail.trailing_stop) : 'Non attivo'} />
           </div>
           <div className="trade-timeline muted">
             <span>Open: {detail.opened_at ? shortDate(detail.opened_at) : '—'}</span>

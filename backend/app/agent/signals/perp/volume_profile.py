@@ -86,6 +86,8 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
         stop_loss = None
         take_profit_1 = None
         take_profit_2 = None
+        # Il trailing non viene più seminato all'apertura: lo gestisce il service
+        # da subito (breakeven + trailing dinamico). Resta None → UI "non attivo".
         trailing_stop = None
         if side == "long":
             if atr_v is not None:
@@ -93,24 +95,20 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
                 take_profit_1 = current + atr_v * tp1_mult
                 tp2_atr = current + atr_v * tp2_mult
                 take_profit_2 = poc if (use_poc and poc > tp2_atr) else tp2_atr
-                trailing_stop = current - atr_v * sl_mult
             else:
                 stop_loss = previous.low
                 take_profit_1 = val
                 take_profit_2 = poc
-                trailing_stop = current * 0.99
         elif side == "short":
             if atr_v is not None:
                 stop_loss = current + atr_v * sl_mult
                 take_profit_1 = current - atr_v * tp1_mult
                 tp2_atr = current - atr_v * tp2_mult
                 take_profit_2 = poc if (use_poc and poc < tp2_atr) else tp2_atr
-                trailing_stop = current + atr_v * sl_mult
             else:
                 stop_loss = previous.high
                 take_profit_1 = vah
                 take_profit_2 = poc
-                trailing_stop = current * 1.01
 
         # ATR corrente per la leva (periodo da config). atr_min/atr_max storici sono
         # calcolati nel service su un lookback più lungo; qui la leva è solo placeholder

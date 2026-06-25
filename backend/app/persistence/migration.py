@@ -42,6 +42,8 @@ async def upgrade_schema(session: AsyncSession) -> None:
         ("maker_fee_usd",       "NUMERIC(20, 8)"),
         ("slippage_usd",        "NUMERIC(20, 8)"),
         ("funding_accrued_usd", "NUMERIC(20, 8) NOT NULL DEFAULT 0"),
+        ("entry_atr",           "NUMERIC(30, 8)"),
+        ("max_price",           "NUMERIC(30, 8)"),
     ]
     for col, defn in perp_pos_cols:
         if not await _has_column("perp_positions", col):

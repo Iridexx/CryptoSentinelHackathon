@@ -25,7 +25,7 @@ from backend.app.persistence.repositories.decisions import AgentDecisionReposito
 from backend.app.persistence.repositories.positions import SpotPositionRepository
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.models.pnl import PortfolioState
-from backend.app.persistence.models.positions import SpotPosition
+from backend.app.persistence.models.positions import PerpPosition, SpotPosition
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.sync_database import (
     create_all_sync,
@@ -114,6 +114,13 @@ def settings(**overrides):
         perp_tp1_atr_multiplier=2.5,
         perp_tp2_atr_multiplier=4.0,
         perp_use_poc_for_tp2=True,
+        perp_breakeven_trigger_atr=1.0,
+        perp_breakeven_offset_costs=True,
+        perp_trailing_base_atr_largo=4.0,
+        perp_trailing_floor_atr_largo=2.5,
+        perp_trailing_base_atr_stretto=2.5,
+        perp_trailing_floor_atr_stretto=1.5,
+        perp_trailing_mode="largo",
         perp_time_stop_hours=8,
         perp_dynamic_leverage_enabled=True,
         perp_min_volume_profile_liquidity_usd=100.0,
@@ -1097,3 +1104,94 @@ async def test_spot_scale_in_never_adds_in_loss_or_without_breakeven(db) -> None
         await service._maybe_scale_in_spot(session, ok, Decimal("115"), Decimal("110"), now)
         assert ok.scale_in_count == 1
         assert ok.size > Decimal("1")
+
+
+# ── Protezione PERP — breakeven + trailing dinamico sulla leva ────────────────
+
+
+def test_perp_trailing_mult_scales_inverse_with_leverage() -> None:
+    """Il moltiplicatore ATR del trailing va da base (leva min) a floor (leva max):
+    più alta la leva, più stretto il trailing in prezzo."""
+    from backend.app.agent.service import _perp_trailing_mult
+
+    at_min = _perp_trailing_mult(leverage=4, min_lev=4, max_lev=40, base=4.0, floor=2.5)
+    at_max = _perp_trailing_mult(leverage=40, min_lev=4, max_lev=40, base=4.0, floor=2.5)
+    mid = _perp_trailing_mult(leverage=22, min_lev=4, max_lev=40, base=4.0, floor=2.5)
+    assert at_min == Decimal("4.0")
+    assert at_max == Decimal("2.5")
+    assert at_max < mid < at_min  # leva alta -> più stretto
+
+
+def _perp_pos(pid: str, current: Decimal, *, stop: Decimal, leverage: int = 4) -> PerpPosition:
+    now = datetime.now(UTC)
+    return PerpPosition(
+        position_id=pid,
+        user_id=str(USER_ID),
+        asset="DOGE",
+        side="long",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=current,
+        leverage=leverage,
+        stop_loss=stop,
+        take_profit_1=Decimal("120"),   # lontani: non scattano
+        take_profit_2=Decimal("130"),
+        entry_atr=Decimal("2"),
+        max_price=None,
+        funding_accrued_usd=Decimal("0"),
+        tp1_reached=False,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+
+
+class _OfflineFeed:
+    async def fetch(self, **kwargs):
+        raise RuntimeError("offline")
+
+    async def fetch_prices(self, **kwargs):
+        return {}
+
+
+@pytest.mark.asyncio
+async def test_perp_breakeven_moves_stop_to_entry(db) -> None:
+    """A +1*ATR lo SL perp sale a entry: il trade non può più chiudere in perdita."""
+    service = AgentService(settings(), spot_registry=SimpleNamespace(), perp_registry=SimpleNamespace())
+    service.price_feed = _OfflineFeed()
+    now = datetime.now(UTC)
+    # entry 100, ATR 2 -> breakeven a 102; stop iniziale 97 (entry-1.5*ATR).
+    pos = _perp_pos("perp-be", Decimal("102.5"), stop=Decimal("97"))
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [], [pos], now)
+        assert pos.status == "open"
+        assert pos.stop_loss == Decimal("100")        # salito a entry (no costi)
+        assert pos.trailing_stop is None              # ancora "non attivo"
+
+
+@pytest.mark.asyncio
+async def test_perp_trailing_inactive_until_protective_then_activates(db) -> None:
+    """Il trailing resta None finché non supera lo stop (UI 'non attivo'), poi si attiva
+    e chiude se il prezzo ci rientra."""
+    service = AgentService(settings(), spot_registry=SimpleNamespace(), perp_registry=SimpleNamespace())
+    service.price_feed = _OfflineFeed()
+    now = datetime.now(UTC)
+    pos = _perp_pos("perp-trail", Decimal("103"), stop=Decimal("97"), leverage=4)  # mult=base=4.0
+
+    async with get_session_factory()() as session:
+        # +1*ATR: breakeven a 100. trail = 103 - 4*2 = 95 < 100 -> resta None.
+        await service._check_sl_tp(session, [], [pos], now)
+        assert pos.status == "open"
+        assert pos.stop_loss == Decimal("100")
+        assert pos.trailing_stop is None
+
+        # Sale a 110: trail = 110 - 8 = 102 > stop 100 -> trailing si attiva.
+        pos.current_price = Decimal("110")
+        await service._check_sl_tp(session, [], [pos], now)
+        assert pos.trailing_stop == Decimal("102")
+        assert pos.status == "open"
+
+        # Ritraccia a 101 (sotto il trailing 102): chiude per trailing.
+        pos.current_price = Decimal("101")
+        await service._check_sl_tp(session, [], [pos], now)
+        assert pos.status == "closed"

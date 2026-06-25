@@ -95,6 +95,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_max_leverage: 40,
   perp_value_area_pct: 68,
   perp_atr_stop_multiplier: 0.5,
+  perp_trailing_mode: 'largo' as const,
   perp_time_stop_hours: 8,
   perp_fee_mode: 'taker' as const,
   spot_fee_mode: 'all' as const,
@@ -1126,6 +1127,10 @@ const SetupPane: FC<{
           <NumberInput label="Leva max (bassa vol.)" value={settings.perp_max_leverage} onChange={(perp_max_leverage) => patch({ perp_max_leverage })} />
           <NumberInput label="Value area %" value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
           <NumberInput label="ATR stop" value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
+          <SelectInput label="Trailing (adatta alla leva)" value={settings.perp_trailing_mode} onChange={(v) => patch({ perp_trailing_mode: v as 'largo' | 'stretto' })} options={[
+            { value: 'largo', label: 'Largo — lascia correre' },
+            { value: 'stretto', label: 'Stretto — blocca prima' },
+          ]} />
           <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(v) => patch({ perp_fee_mode: v as 'taker' | 'maker' | 'none' })} options={[
             { value: 'taker', label: 'Taker (market) — 0.06%' },
             { value: 'maker', label: 'Maker (limit) — 0.02%' },
@@ -1333,7 +1338,9 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       ].map(([label, value]) => (
         <div key={label} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
           <span className="text-gray-500">{label}</span>
-          <span className="text-white">{value ? fmtPriceFull(value) : '-'}</span>
+          <span className={value ? 'text-white' : 'text-gray-600'}>
+            {value ? fmtPriceFull(value) : (label === 'Trailing stop' ? 'Non attivo' : '-')}
+          </span>
         </div>
       ))}
     </section>

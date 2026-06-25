@@ -59,7 +59,10 @@ class PerpPosition(Base):
     stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # bordo value area (50%)
     take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # POC (25%)
-    trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # 25% residuo
+    trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # null finché non attivo
+    # ── Protezione posizione (breakeven + trailing dinamico ATR) ──────────────
+    entry_atr: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # ATR congelato all'ingresso
+    max_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # estremo favorevole dall'ingresso
     liquidation_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     funding_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
     # ── Costi posizione (fee + slippage + funding) ────────────────────────────

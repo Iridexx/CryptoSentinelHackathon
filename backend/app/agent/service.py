@@ -149,6 +149,7 @@ class AgentService:
             perp_max_leverage=self.settings.perp_max_leverage,
             perp_value_area_pct=self.settings.perp_value_area_pct,
             perp_atr_stop_multiplier=self.settings.perp_atr_stop_multiplier,
+            perp_trailing_mode=self.settings.perp_trailing_mode,
             perp_time_stop_hours=self.settings.perp_time_stop_hours,
             spot_fee_mode="all",
         )
@@ -799,6 +800,15 @@ class AgentService:
                     )
                 )
 
+        ms = self._ms
+        if (ms.perp_trailing_mode or "largo").lower() == "stretto":
+            trail_base = self.settings.perp_trailing_base_atr_stretto
+            trail_floor = self.settings.perp_trailing_floor_atr_stretto
+        else:
+            trail_base = self.settings.perp_trailing_base_atr_largo
+            trail_floor = self.settings.perp_trailing_floor_atr_largo
+        be_mult = Decimal(str(self.settings.perp_breakeven_trigger_atr))
+
         for pos in perp_positions:
             if pos.status != "open":
                 continue
@@ -806,8 +816,58 @@ class AgentService:
             is_long = pos.side == "long"
             reason = None
             partial = False
+            atr_v = pos.entry_atr
 
-            if pos.stop_loss:
+            # Estremo favorevole dall'ingresso (per il trailing): max per i long, min per gli short.
+            if is_long:
+                if pos.max_price is None or price > pos.max_price:
+                    pos.max_price = price; pos.updated_at = now; session.add(pos)
+            else:
+                if pos.max_price is None or price < pos.max_price:
+                    pos.max_price = price; pos.updated_at = now; session.add(pos)
+            extreme = pos.max_price if pos.max_price is not None else price
+
+            # Protezione ATR — solo se l'ATR è stato congelato all'ingresso (trade nuovi).
+            if atr_v and atr_v > 0:
+                # Breakeven: a +N×ATR lo SL si sposta a entry (+costi), solo verso il sicuro.
+                be_trigger = (pos.entry_price + atr_v * be_mult) if is_long else (pos.entry_price - atr_v * be_mult)
+                if (is_long and price >= be_trigger) or (not is_long and price <= be_trigger):
+                    be_stop = pos.entry_price
+                    if self.settings.perp_breakeven_offset_costs and pos.size > 0:
+                        fee_only = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
+                        offset = fee_only / pos.size
+                        be_stop = pos.entry_price + offset if is_long else pos.entry_price - offset
+                    if is_long and (pos.stop_loss is None or be_stop > pos.stop_loss):
+                        pos.stop_loss = be_stop; pos.updated_at = now; session.add(pos)
+                    elif not is_long and (pos.stop_loss is None or be_stop < pos.stop_loss):
+                        pos.stop_loss = be_stop; pos.updated_at = now; session.add(pos)
+
+                # Trailing da subito, moltiplicatore ATR dinamico sulla leva del trade.
+                mult = _perp_trailing_mult(
+                    leverage=pos.leverage, min_lev=ms.perp_min_leverage, max_lev=ms.perp_max_leverage,
+                    base=trail_base, floor=trail_floor,
+                )
+                if is_long:
+                    trail = extreme - atr_v * mult
+                    # Si popola solo quando è più protettivo dello stop; altrimenti resta
+                    # None → UI "non attivo". Si alza soltanto, mai scende.
+                    if (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
+                        pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
+                else:
+                    trail = extreme + atr_v * mult
+                    if (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
+                        pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
+
+            # ── Uscite — trailing (se più protettivo) → stop → TP2 → TP1 → time ──
+            if pos.trailing_stop is not None and (
+                pos.stop_loss is None
+                or (is_long and pos.trailing_stop > pos.stop_loss)
+                or (not is_long and pos.trailing_stop < pos.stop_loss)
+            ):
+                if (is_long and price <= pos.trailing_stop) or (not is_long and price >= pos.trailing_stop):
+                    reason = "trailing_stop"
+
+            if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
                     reason = "stop_loss"
 
@@ -820,30 +880,9 @@ class AgentService:
                     reason = "take_profit_1"
                     partial = True
 
-            # Trailing stop dinamico: attivo solo dopo TP1 (posizione residua in profitto),
-            # per non scattare su un ritracciamento iniziale.
-            if reason is None and pos.tp1_reached and pos.trailing_stop is not None:
-                dist = PERP_TRAILING_DISTANCE_PCT / Decimal("100")
-                if is_long:
-                    candidate = price * (Decimal("1") - dist)
-                    if candidate > pos.trailing_stop:
-                        pos.trailing_stop = candidate
-                        pos.updated_at = now
-                        session.add(pos)
-                    if price <= pos.trailing_stop:
-                        reason = "trailing_stop"
-                else:
-                    candidate = price * (Decimal("1") + dist)
-                    if candidate < pos.trailing_stop:
-                        pos.trailing_stop = candidate
-                        pos.updated_at = now
-                        session.add(pos)
-                    if price >= pos.trailing_stop:
-                        reason = "trailing_stop"
-
-            if reason is None and self._ms.perp_time_stop_hours > 0:
+            if reason is None and ms.perp_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
-                if age_hours >= self._ms.perp_time_stop_hours:
+                if age_hours >= ms.perp_time_stop_hours:
                     reason = "time_stop"
 
             if reason:
@@ -860,7 +899,7 @@ class AgentService:
                         pnl_usd=pnl,
                         pnl_pct=pnl_pct,
                         close_reason=reason,
-                        is_dry_run=self._ms.execution_mode == "dry_run",
+                        is_dry_run=ms.execution_mode == "dry_run",
                     )
                 )
 
@@ -1269,6 +1308,9 @@ class AgentService:
                     take_profit_1=_optional_decimal(signal.get("take_profit_1")),
                     take_profit_2=_optional_decimal(signal.get("take_profit_2")),
                     trailing_stop=_optional_decimal(signal.get("trailing_stop")),
+                    # Congelati all'ingresso per breakeven + trailing dinamico.
+                    entry_atr=_optional_decimal((signal.get("components") or {}).get("atr")),
+                    max_price=effective_price,
                     liquidation_price=_estimate_liquidation_price(effective_price, leverage, side),
                     funding_rate=costs["funding_rate_8h"],
                     fee_mode=fee_mode,
@@ -1622,6 +1664,27 @@ def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
     if level is None:
         return market_price
     return Decimal(str(level))
+
+
+def _perp_trailing_mult(
+    *, leverage: int, min_lev: int, max_lev: int, base: float, floor: float
+) -> Decimal:
+    """Moltiplicatore ATR del trailing perp, dinamico sulla leva del trade.
+
+    Interpola linearmente tra `base` (a leva minima → trailing largo) e `floor`
+    (a leva massima → trailing stretto): più alta la leva, più stretto il trailing
+    in prezzo, così non si restituisce il profitto amplificato dalla leva. Il
+    floor resta sopra il rumore (ATR) per evitare il whipsaw.
+    """
+    lo = min(min_lev, max_lev)
+    hi = max(min_lev, max_lev)
+    if hi <= lo:
+        t = 0.0
+    else:
+        t = (leverage - lo) / (hi - lo)
+        t = min(1.0, max(0.0, t))
+    mult = base - t * (base - floor)
+    return Decimal(str(mult))
 
 
 async def _initialise_dry_run_portfolio(session: AsyncSession, settings: Settings):

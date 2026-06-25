@@ -66,6 +66,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_max_leverage=settings.perp_max_leverage,
         perp_value_area_pct=settings.perp_value_area_pct,
         perp_atr_stop_multiplier=settings.perp_atr_stop_multiplier,
+        perp_trailing_mode=settings.perp_trailing_mode,
         perp_time_stop_hours=settings.perp_time_stop_hours,
     )
 
