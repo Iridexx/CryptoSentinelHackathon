@@ -116,8 +116,30 @@ class BinanceKlineFeed:
                 result = {str(row["symbol"]).upper(): Decimal(str(row["price"])) for row in response.json()}
         except Exception:
             result = {}
-        # Fallback CEX per i symbol non coperti da Binance (Bitget -> KuCoin).
+        # Su Binance futures alcuni low-cap/meme sono quotati col prefisso "1000"
+        # (es. LUNC -> 1000LUNCUSDT, SHIB -> 1000SHIBUSDT): prezzo ×1000. Senza
+        # questo passaggio il refresh non trova "LUNCUSDT", il prezzo resta
+        # congelato e gli stop non scattano. Si tenta SOLO per i symbol mancanti.
         missing = [s for s in symbols if s.upper() not in result]
+        if missing and market == "futures":
+            thousand_map = {f"1000{s.upper()}": s.upper() for s in missing}
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                    response = await client.get(
+                        f"{base_url}{path}",
+                        params={"symbols": json.dumps(list(thousand_map), separators=(",", ":"))},
+                    )
+                if response.status_code < 400:
+                    for row in response.json():
+                        sym = str(row["symbol"]).upper()
+                        if sym in thousand_map:
+                            # Riporta al prezzo "unitario" coerente con l'entry (÷1000).
+                            result[thousand_map[sym]] = Decimal(str(row["price"])) / Decimal("1000")
+            except Exception:
+                pass
+            missing = [s for s in symbols if s.upper() not in result]
+
+        # Fallback CEX per i symbol non coperti da Binance (Bitget -> KuCoin).
         if missing:
             from backend.app.agent.signals.perp.cex_fallback import fetch_price_fallback
 
@@ -134,7 +156,12 @@ class BinanceKlineFeed:
         """lastFundingRate per asset dai futures Binance (premiumIndex). Best-effort."""
         if not assets:
             return {}
-        wanted = {f"{a.upper()}USDT": a.upper() for a in assets}
+        # Mappa sia il symbol diretto sia la variante "1000XXX" (vedi fetch_prices):
+        # il funding rate è una percentuale, quindi non va riscalato.
+        wanted: dict[str, str] = {}
+        for a in assets:
+            wanted[f"{a.upper()}USDT"] = a.upper()
+            wanted[f"1000{a.upper()}USDT"] = a.upper()
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.get(f"{self.futures_base_url}/fapi/v1/premiumIndex")

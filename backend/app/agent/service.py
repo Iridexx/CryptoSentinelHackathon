@@ -782,7 +782,8 @@ class AgentService:
             if reason is None:
                 reason = await self._spot_time_stop_reason(pos, price, atr_v, now)
             if reason:
-                pnl = await self._close_spot_position(session, pos, price, reason, now, partial=partial)
+                exit_price = _level_fill_price(pos, reason, price)
+                pnl = await self._close_spot_position(session, pos, exit_price, reason, now, partial=partial)
                 exposure = pos.entry_price * pos.size
                 pnl_pct = pnl / exposure * 100 if exposure > 0 else Decimal("0")
                 asyncio.create_task(
@@ -846,7 +847,8 @@ class AgentService:
                     reason = "time_stop"
 
             if reason:
-                pnl = await self._close_perp_position(session, pos, price, reason, now, partial=partial)
+                exit_price = _level_fill_price(pos, reason, price)
+                pnl = await self._close_perp_position(session, pos, exit_price, reason, now, partial=partial)
                 exposure = pos.entry_price * pos.size * pos.leverage
                 pnl_pct = pnl / exposure * 100 if exposure > 0 else Decimal("0")
                 asyncio.create_task(
@@ -1597,6 +1599,29 @@ def _optional_decimal(value) -> Decimal | None:
         return None
     parsed = Decimal(str(value))
     return parsed if parsed > 0 else None
+
+
+def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
+    """Prezzo di fill per le chiusure su livello.
+
+    Uno stop/TP/trailing riempie al PROPRIO livello, non al prezzo di mercato:
+    se il refresh è in ritardo (feed instabile, prezzo non aggiornato per più
+    cicli) il mercato può aver superato di molto il livello, e chiudere a quel
+    prezzo gonfia la perdita ben oltre il rischio realmente assunto (critico con
+    leva alta). Le chiusure NON su livello (time_stop, manuali) usano il mercato.
+    """
+    level = None
+    if reason == "stop_loss":
+        level = pos.stop_loss
+    elif reason == "trailing_stop":
+        level = pos.trailing_stop
+    elif reason == "take_profit_1":
+        level = pos.take_profit_1
+    elif reason == "take_profit_2":
+        level = pos.take_profit_2
+    if level is None:
+        return market_price
+    return Decimal(str(level))
 
 
 async def _initialise_dry_run_portfolio(session: AsyncSession, settings: Settings):

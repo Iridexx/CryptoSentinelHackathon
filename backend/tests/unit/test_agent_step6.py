@@ -908,6 +908,78 @@ def test_estimate_liquidation_price() -> None:
     assert _estimate_liquidation_price(Decimal("100"), 0, "long") is None
 
 
+def test_level_fill_price_caps_loss_to_stop_level() -> None:
+    """Su chiusura per stop, il fill è al livello dello stop, non al prezzo di
+    mercato gappato (che con feed in ritardo gonfierebbe la perdita)."""
+    from backend.app.agent.service import _level_fill_price
+
+    short = SimpleNamespace(
+        stop_loss=Decimal("6.149714e-05"),
+        trailing_stop=Decimal("6.13e-05"),
+        take_profit_1=Decimal("6.0e-05"),
+        take_profit_2=Decimal("5.858e-05"),
+    )
+    gapped_market = Decimal("6.189e-05")  # ha superato lo stop di 0.64%
+
+    # stop_loss → riempie al livello dello stop, non al mercato gappato.
+    assert _level_fill_price(short, "stop_loss", gapped_market) == Decimal("6.149714e-05")
+    # TP usano il proprio livello.
+    assert _level_fill_price(short, "take_profit_1", gapped_market) == Decimal("6.0e-05")
+    assert _level_fill_price(short, "take_profit_2", gapped_market) == Decimal("5.858e-05")
+    assert _level_fill_price(short, "trailing_stop", gapped_market) == Decimal("6.13e-05")
+    # time_stop (non su livello) → prezzo di mercato.
+    assert _level_fill_price(short, "time_stop", gapped_market) == gapped_market
+    # livello assente → fallback al mercato.
+    no_level = SimpleNamespace(stop_loss=None, trailing_stop=None, take_profit_1=None, take_profit_2=None)
+    assert _level_fill_price(no_level, "stop_loss", gapped_market) == gapped_market
+
+
+def test_fetch_prices_resolves_1000_prefixed_futures_symbol(monkeypatch) -> None:
+    """LUNC su futures è 1000LUNCUSDT (prezzo ×1000): il refresh deve risolverlo
+    e riportarlo al prezzo unitario (÷1000), senza dipendere dal fallback CEX."""
+    import asyncio
+
+    import httpx
+
+    from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+            self.status_code = 200
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, params=None):
+            syms = params["symbols"]
+            # Prima chiamata: LUNCUSDT non esiste su futures → vuoto.
+            if '"LUNCUSDT"' in syms and "1000" not in syms:
+                return FakeResponse([])
+            # Seconda chiamata: variante 1000LUNCUSDT con prezzo ×1000.
+            if "1000LUNCUSDT" in syms:
+                return FakeResponse([{"symbol": "1000LUNCUSDT", "price": "0.06189"}])
+            return FakeResponse([])
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+
+    feed = BinanceKlineFeed()
+    prices = asyncio.run(feed.fetch_prices(symbols=["LUNCUSDT"], market="futures"))
+
+    assert "LUNCUSDT" in prices
+    assert prices["LUNCUSDT"] == Decimal("0.06189") / Decimal("1000")
+
+
 # ── Strategia SPOT v3 — criteri di accettazione (§5 del piano) ────────────────
 
 
