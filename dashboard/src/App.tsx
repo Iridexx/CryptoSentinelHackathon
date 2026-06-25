@@ -665,7 +665,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
                 const pct = item.pnl_pct ?? '0.00';
                 return [
                   item.asset,
-                  item.side,
+                  <span className={item.side === 'long' ? 'ok-text' : 'error-text'}>{item.side}</span>,
                   item.leverage ? `${item.leverage}x` : '-',
                   fmtPrice(item.entry_price),
                   fmtPrice(item.current_price),
@@ -2008,8 +2008,8 @@ function TradeHistoryTable({
                   style={{ cursor: 'pointer' }}
                 >
                   <td><strong>{t.asset}</strong></td>
-                  <td>{t.side}</td>
-                  {market === 'perp' && <td>{t.direction}</td>}
+                  <td><span className={t.side === 'buy' || t.side === 'long' ? 'ok-text' : 'error-text'}>{t.side}</span></td>
+                  {market === 'perp' && <td><span className={t.direction === 'long' || t.direction === 'open' ? 'ok-text' : 'error-text'}>{t.direction}</span></td>}
                   {market === 'perp' && <td>{t.leverage ? `${t.leverage}x` : '-'}</td>}
                   <td className="num">{trimDecimals(market === 'spot' ? t.amount : t.size)}</td>
                   <td className="num">{fmtPrice(t.entry_price ?? t.price)}</td>
