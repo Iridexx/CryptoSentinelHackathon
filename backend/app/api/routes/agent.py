@@ -178,19 +178,29 @@ class ResetDbRequest(BaseModel):
 @router.post("/dev/reset-db")
 async def dev_reset_db(request: ResetDbRequest, session: SessionDep, _: AdminAccessDep) -> dict:
     """Modalità sviluppatore: azzera l'intero dataset di trading (trade, decisioni,
-    posizioni, PnL, portfolio, grafici).
+    posizioni, PnL, portfolio, grafici) e riporta l'agente allo stato di default.
 
     Se ``backup_name`` è valorizzato, salva PRIMA uno snapshot completo recuperabile
     in archived_runs. Le impostazioni e la watchlist NON vengono toccate.
+
+    Reset pulito = anche il kill switch torna a ``running`` (un eventuale hard_stop
+    da un precedente \"chiudi tutto & pausa\" resterebbe altrimenti in memoria).
     """
 
     from backend.app.persistence.archive import reset_all_data
 
     settings = get_settings()
     label = (request.backup_name or "").strip() or None
-    return await reset_all_data(
+    result = await reset_all_data(
         session, user_id=str(settings.default_user_id), backup_label=label
     )
+
+    # Stato agente al default: riavvia da running e azzera eventuali degraded.
+    service = get_agent_service()
+    service.risk.set_kill_switch(KillSwitchState.RUNNING)
+    service.risk.clear_degraded()
+    result["kill_switch"] = service.risk.kill_switch.value
+    return result
 
 
 # Cache leggera della summary spesa Claude: evita una query DB a ogni refresh dell'app.

@@ -267,9 +267,10 @@ export default function App() {
     try {
       const result = await resetDatabase(session, backupName);
       const total = Object.values(result.deleted).reduce((a, b) => a + b, 0);
+      const agente = result.kill_switch ? ` Agente: ${result.kill_switch}.` : '';
       setNotice(result.archived_run_id
-        ? `Database azzerato (${total} record). Backup: "${result.backup_label}".`
-        : `Database azzerato (${total} record). Nessun backup.`);
+        ? `Database azzerato (${total} record). Backup: "${result.backup_label}".${agente}`
+        : `Database azzerato (${total} record). Nessun backup.${agente}`);
     } catch (err) {
       setNotice(err instanceof Error ? err.message : 'Reset database failed');
     }

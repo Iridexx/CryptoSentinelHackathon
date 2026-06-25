@@ -382,10 +382,11 @@ const SettingsTab: FC<Props> = ({
     try {
       const result = await resetDatabase(backupName, adminToken);
       const total = Object.values(result.deleted).reduce((a, b) => a + b, 0);
+      const agente = result.kill_switch ? ` · agente: ${result.kill_switch}` : '';
       setResetState('done');
       setResetMsg(result.archived_run_id
-        ? `Azzerato (${total} record) · backup "${result.backup_label}"`
-        : `Azzerato (${total} record) · nessun backup`);
+        ? `Azzerato (${total} record) · backup "${result.backup_label}"${agente}`
+        : `Azzerato (${total} record) · nessun backup${agente}`);
     } catch (err) {
       setResetState('error');
       setResetMsg(err instanceof Error ? err.message : 'Reset fallito');

@@ -507,6 +507,7 @@ export interface ResetDbResponse {
   archived_run_id: string | null;
   backup_label: string | null;
   deleted: Record<string, number>;
+  kill_switch?: string;
 }
 
 export function resetDatabase(backupName: string | null, adminToken: string): Promise<ResetDbResponse> {
