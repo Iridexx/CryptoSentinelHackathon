@@ -74,20 +74,43 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
             side = None
 
         quality = _quality(side, current, poc, vah, val, current_vwap, current_atr)
+        # SL/TP ancorati all'entry (current) via ATR: il R:R è controllato a
+        # prescindere dalla leva. TP2 può promuoversi al POC (livello strutturale
+        # di volume) quando è più ambizioso del target ATR. Se l'ATR non è
+        # disponibile, fallback ai livelli di Volume Profile (previous.low/VAL).
+        atr_v = current_atr if (current_atr and current_atr > 0) else None
+        sl_mult = self.settings.perp_atr_stop_multiplier
+        tp1_mult = self.settings.perp_tp1_atr_multiplier
+        tp2_mult = self.settings.perp_tp2_atr_multiplier
+        use_poc = self.settings.perp_use_poc_for_tp2
         stop_loss = None
         take_profit_1 = None
         take_profit_2 = None
         trailing_stop = None
         if side == "long":
-            stop_loss = previous.low - (current_atr or 0.0) * self.settings.perp_atr_stop_multiplier
-            take_profit_1 = val
-            take_profit_2 = poc
-            trailing_stop = current * 0.99
+            if atr_v is not None:
+                stop_loss = current - atr_v * sl_mult
+                take_profit_1 = current + atr_v * tp1_mult
+                tp2_atr = current + atr_v * tp2_mult
+                take_profit_2 = poc if (use_poc and poc > tp2_atr) else tp2_atr
+                trailing_stop = current - atr_v * sl_mult
+            else:
+                stop_loss = previous.low
+                take_profit_1 = val
+                take_profit_2 = poc
+                trailing_stop = current * 0.99
         elif side == "short":
-            stop_loss = previous.high + (current_atr or 0.0) * self.settings.perp_atr_stop_multiplier
-            take_profit_1 = vah
-            take_profit_2 = poc
-            trailing_stop = current * 1.01
+            if atr_v is not None:
+                stop_loss = current + atr_v * sl_mult
+                take_profit_1 = current - atr_v * tp1_mult
+                tp2_atr = current - atr_v * tp2_mult
+                take_profit_2 = poc if (use_poc and poc < tp2_atr) else tp2_atr
+                trailing_stop = current + atr_v * sl_mult
+            else:
+                stop_loss = previous.high
+                take_profit_1 = vah
+                take_profit_2 = poc
+                trailing_stop = current * 1.01
 
         # ATR corrente per la leva (periodo da config). atr_min/atr_max storici sono
         # calcolati nel service su un lookback più lungo; qui la leva è solo placeholder

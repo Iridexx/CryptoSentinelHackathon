@@ -3,7 +3,11 @@
 perp:
   direction_mode: long_short
   value_area_pct: 68.0
-  atr_stop_multiplier: 1.0
+  # SL/TP ancorati all'entry via ATR(14): R:R controllato a prescindere dalla leva.
+  atr_stop_multiplier: 1.5   # SL = entry ∓ 1.5×ATR
+  tp1_atr_multiplier: 2.5    # TP1 = entry ± 2.5×ATR (R:R ~1.67)
+  tp2_atr_multiplier: 4.0    # TP2 = entry ± 4.0×ATR (R:R ~2.67)
+  use_poc_for_tp2: true      # TP2 → POC se più ambizioso del target ATR
   time_stop_hours: 8
   dynamic_leverage_enabled: true
   min_volume_profile_liquidity_usd: 50000.0

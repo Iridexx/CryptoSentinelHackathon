@@ -110,7 +110,10 @@ def settings(**overrides):
         spot_sentiment_weight_pct=10.0,
         perp_direction_mode="long_short",
         perp_value_area_pct=68.0,
-        perp_atr_stop_multiplier=0.5,
+        perp_atr_stop_multiplier=1.5,
+        perp_tp1_atr_multiplier=2.5,
+        perp_tp2_atr_multiplier=4.0,
+        perp_use_poc_for_tp2=True,
         perp_time_stop_hours=8,
         perp_dynamic_leverage_enabled=True,
         perp_min_volume_profile_liquidity_usd=100.0,
@@ -210,6 +213,40 @@ async def test_volume_profile_builds_levels_without_market_provider() -> None:
     assert signal["market"] == "perp"
     assert signal["components"]["poc"] > 0
     assert signal["components"]["val"] <= signal["components"]["poc"] <= signal["components"]["vah"]
+
+
+def _breakout_long_candles() -> list[Candle]:
+    """78 candele piatte a 100 (value area), poi un retest sotto VAL e un breakout
+    sopra il massimo precedente: condizioni per un long del Volume Profile."""
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    out: list[Candle] = []
+    for i in range(78):
+        out.append(Candle(timestamp=start + timedelta(minutes=5 * i), open=100.0, high=100.5, low=99.5, close=100.0, volume=100.0))
+    # previous: chiusura sotto la value area low (~99.5)
+    out.append(Candle(timestamp=start + timedelta(minutes=5 * 78), open=99.5, high=99.6, low=98.8, close=99.0, volume=120.0))
+    # current: breakout sopra previous.high con volume
+    out.append(Candle(timestamp=start + timedelta(minutes=5 * 79), open=99.4, high=101.2, low=99.3, close=101.0, volume=500.0))
+    return out
+
+
+@pytest.mark.asyncio
+async def test_perp_sl_tp_are_atr_anchored_with_controlled_rr() -> None:
+    signal = await VolumeProfileSignal(settings()).evaluate(
+        {"asset": "BTC", "candles": _breakout_long_candles()}
+    )
+
+    assert signal["side"] == "long"
+    entry = signal["price"]
+    sl = signal["stop_loss"]
+    tp1 = signal["take_profit_1"]
+    tp2 = signal["take_profit_2"]
+    assert sl is not None and tp1 is not None and tp2 is not None
+    # SL sotto l'entry, TP sopra: struttura coerente.
+    assert sl < entry < tp1
+    # R:R controllato: la distanza al TP1 supera quella allo stop (tp1_mult > sl_mult).
+    assert (tp1 - entry) > (entry - sl)
+    # TP2 non meno ambizioso del TP1.
+    assert tp2 >= tp1
 
 
 def test_risk_manager_blocks_assets_outside_eligible_universe() -> None:

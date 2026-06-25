@@ -217,6 +217,9 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "direction_mode": "perp_direction_mode",
         "value_area_pct": "perp_value_area_pct",
         "atr_stop_multiplier": "perp_atr_stop_multiplier",
+        "tp1_atr_multiplier": "perp_tp1_atr_multiplier",
+        "tp2_atr_multiplier": "perp_tp2_atr_multiplier",
+        "use_poc_for_tp2": "perp_use_poc_for_tp2",
         "time_stop_hours": "perp_time_stop_hours",
         "dynamic_leverage_enabled": "perp_dynamic_leverage_enabled",
         "min_volume_profile_liquidity_usd": "perp_min_volume_profile_liquidity_usd",
@@ -527,7 +530,13 @@ class Settings(BaseSettings):
 
     perp_direction_mode: str = Field(default="long_short", alias="PERP_DIRECTION_MODE")
     perp_value_area_pct: float = Field(default=68.0, alias="PERP_VALUE_AREA_PCT")
-    perp_atr_stop_multiplier: float = Field(default=1.0, alias="PERP_ATR_STOP_MULTIPLIER")
+    # SL/TP ancorati all'entry via ATR (R:R controllato a prescindere dalla leva).
+    perp_atr_stop_multiplier: float = Field(default=1.5, alias="PERP_ATR_STOP_MULTIPLIER")
+    perp_tp1_atr_multiplier: float = Field(default=2.5, alias="PERP_TP1_ATR_MULTIPLIER")
+    perp_tp2_atr_multiplier: float = Field(default=4.0, alias="PERP_TP2_ATR_MULTIPLIER")
+    # Se True, TP2 usa il POC (livello strutturale di volume) quando è più ambizioso
+    # del target ATR; altrimenti resta sul target ATR. Garantisce R:R minimo.
+    perp_use_poc_for_tp2: bool = Field(default=True, alias="PERP_USE_POC_FOR_TP2")
     perp_time_stop_hours: int = Field(default=8, alias="PERP_TIME_STOP_HOURS")
     perp_dynamic_leverage_enabled: bool = Field(default=True, alias="PERP_DYNAMIC_LEVERAGE_ENABLED")
     perp_min_volume_profile_liquidity_usd: float = Field(
