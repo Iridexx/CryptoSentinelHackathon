@@ -1967,6 +1967,7 @@ function TradeHistoryTable({
               <th>Entry</th>
               <th>Exit</th>
               <th>Investito</th>
+              {market === 'perp' && <th>Margine</th>}
               <th>Val. uscita</th>
               <th>PnL $</th>
               <th>PnL %</th>
@@ -1996,10 +1997,13 @@ function TradeHistoryTable({
                   <td>{t.side}</td>
                   {market === 'perp' && <td>{t.direction}</td>}
                   {market === 'perp' && <td>{t.leverage ? `${t.leverage}x` : '-'}</td>}
-                  <td className="num">{market === 'spot' ? String(t.amount ?? '-') : String(t.size ?? '-')}</td>
+                  <td className="num">{trimDecimals(market === 'spot' ? t.amount : t.size)}</td>
                   <td className="num">{fmtPrice(t.entry_price ?? t.price)}</td>
                   <td className="num">{fmtPrice(t.current_or_exit_price ?? t.price)}</td>
                   <td className="num">{qty > 0 ? money(invested) : '--'}</td>
+                  {market === 'perp' && (
+                    <td className="num">{qty > 0 && t.leverage ? money(invested / Number(t.leverage)) : '--'}</td>
+                  )}
                   <td className="num">{qty > 0 ? money(exitValue) : '--'}</td>
                   <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_usd ?? '--'}</td>
                   <td className={`num ${isGood ? 'ok-text' : 'error-text'}`}>{t.pnl_pct ?? '--'}%</td>
@@ -2220,9 +2224,16 @@ function fmtPrice(value: string | number | null | undefined): string {
   if (n === 0) return '$0';
   if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
-  // Sub-$1: keep up to 8 significant digits, strip trailing zeros
-  const sig = parseFloat(n.toPrecision(8));
-  return `$${sig.toString()}`;
+  // Sub-$1: massimo 8 decimali, zeri finali rimossi.
+  const capped = parseFloat(n.toFixed(8));
+  return capped === 0 ? '$0' : `$${capped.toString()}`;
+}
+
+function trimDecimals(value: string | number | null | undefined, max = 8): string {
+  if (value == null || value === '') return '-';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return String(parseFloat(n.toFixed(max)));
 }
 
 function compact(value: number) {
