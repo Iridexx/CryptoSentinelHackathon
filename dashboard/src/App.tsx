@@ -1899,6 +1899,7 @@ function TradeHistoryTable({
   const [filterSide, setFilterSide] = useState('all');
   const [filterDir, setFilterDir] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterReason, setFilterReason] = useState('all');
   const [page, setPage] = useState(0);
   const [openTrade, setOpenTrade] = useState<string | null>(null);
 
@@ -1908,6 +1909,10 @@ function TradeHistoryTable({
     [trades, market],
   );
   const statuses = useMemo(() => ['all', ...Array.from(new Set(trades.map((t) => t.status)))], [trades]);
+  const reasons = useMemo(
+    () => ['all', ...Array.from(new Set((trades as (SpotHistoryItem & PerpHistoryItem)[]).map((t) => t.close_reason ?? '').filter(Boolean))).sort()],
+    [trades],
+  );
 
   const filtered = useMemo(() => {
     return (trades as (SpotHistoryItem & PerpHistoryItem)[]).filter((t) => {
@@ -1915,9 +1920,10 @@ function TradeHistoryTable({
       if (filterSide !== 'all' && t.side !== filterSide) return false;
       if (market === 'perp' && filterDir !== 'all' && t.direction !== filterDir) return false;
       if (filterStatus !== 'all' && t.status !== filterStatus) return false;
+      if (filterReason !== 'all' && (t.close_reason ?? '') !== filterReason) return false;
       return true;
     });
-  }, [trades, search, filterSide, filterDir, filterStatus, market]);
+  }, [trades, search, filterSide, filterDir, filterStatus, filterReason, market]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE));
   const pg = Math.min(page, totalPages - 1);
@@ -1948,6 +1954,14 @@ function TradeHistoryTable({
           <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); resetPage(); }}>
             {statuses.map((s) => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s}</option>)}
           </select>
+          {reasons.length > 1 && (
+            <select value={filterReason} onChange={(e) => { setFilterReason(e.target.value); resetPage(); }}>
+              <option value="all">Tutti i motivi</option>
+              {reasons.filter((r) => r !== 'all').map((r) => (
+                <option key={r} value={r}>{CLOSE_REASON_LABELS[r] ?? r}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="trade-history-pager">
           <button className="pager-btn" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={pg === 0}>‹</button>
