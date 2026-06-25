@@ -13,7 +13,7 @@ from backend.app.persistence import database
 from backend.app.persistence.backup import backup_db
 from backend.app.persistence.database import check_db, close_db, get_session_factory, init_db
 from backend.app.persistence.migration import migrate_json_to_db
-from backend.app.persistence.archive import archive_dry_run_records, list_archived_runs
+from backend.app.persistence.archive import archive_dry_run_records, list_archived_runs, reset_all_data
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
@@ -423,6 +423,79 @@ async def test_archive_dry_run_records_copies_and_clears_live_data(db) -> None:
     assert portfolio is not None
     assert portfolio.total_equity_usd == Decimal("500")
     assert portfolio.trades_today == 0
+
+
+@pytest.mark.asyncio
+async def test_reset_all_data_wipes_everything_and_optionally_backs_up(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await SpotTradeRepository(session).save(
+            SpotTrade(
+                trade_id="t1", user_id=USER, asset="BNB", side="buy",
+                amount=Decimal("0.1"), price=Decimal("600"), amount_quote=Decimal("60"),
+                status="prepared", provider="dry_run", timestamp_utc=now,
+            )
+        )
+        await PerpPositionRepository(session).save(
+            PerpPosition(
+                position_id="pp1", user_id=USER, asset="DOGE", side="long",
+                size=Decimal("1"), entry_price=Decimal("0.07"), current_price=Decimal("0.07"),
+                leverage=10, opened_at=now, updated_at=now,
+            )
+        )
+        await PnlRepository(session).save_snapshot(
+            PnlSnapshot(user_id=USER, timestamp_utc=now, total_equity_usd=Decimal("500"))
+        )
+        await PnlRepository(session).upsert_portfolio(
+            USER, total_equity_usd=Decimal("612"), initial_equity_usd=Decimal("500"),
+            peak_equity_usd=Decimal("650"),
+        )
+        await session.commit()
+
+    async with factory() as session:
+        result = await reset_all_data(session, user_id=USER, backup_label="snap_2026")
+        runs = await list_archived_runs(session, user_id=USER)
+        trades = await SpotTradeRepository(session).list_for_user(USER)
+        perps = await PerpPositionRepository(session).open_for_user(USER)
+        snapshots = await PnlRepository(session).recent_for_user(USER)
+        portfolio = await PnlRepository(session).get_portfolio(USER)
+
+    # Backup salvato con i conteggi corretti.
+    assert result["archived_run_id"] is not None
+    assert result["backup_label"] == "snap_2026"
+    assert result["deleted"]["spot_trades"] == 1
+    assert result["deleted"]["perp_positions"] == 1
+    assert runs[0]["archive_label"] == "snap_2026"
+    # Tutto azzerato.
+    assert trades == []
+    assert perps == []
+    assert snapshots == []
+    assert portfolio is None
+
+
+@pytest.mark.asyncio
+async def test_reset_all_data_without_backup_does_not_archive(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await SpotTradeRepository(session).save(
+            SpotTrade(
+                trade_id="t2", user_id=USER, asset="BNB", side="buy",
+                amount=Decimal("0.1"), price=Decimal("600"), amount_quote=Decimal("60"),
+                status="prepared", provider="dry_run", timestamp_utc=now,
+            )
+        )
+        await session.commit()
+
+    async with factory() as session:
+        result = await reset_all_data(session, user_id=USER, backup_label=None)
+        runs = await list_archived_runs(session, user_id=USER)
+        trades = await SpotTradeRepository(session).list_for_user(USER)
+
+    assert result["archived_run_id"] is None
+    assert runs == []
+    assert trades == []
 
 
 def test_backup_creates_timestamped_copy_and_prunes(tmp_path: Path) -> None:

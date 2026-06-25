@@ -21,6 +21,7 @@ import {
   fetchSettings,
   fetchSpot,
   fetchTradeDetail,
+  resetDatabase,
   saveNotificationPrefs,
   saveSettings,
   sendToken,
@@ -244,6 +245,33 @@ export default function App() {
     if (response) {
       setSettingsDraft(response.settings);
       setNotice('Settings saved');
+    }
+  }
+
+  async function submitResetDb() {
+    if (!canAdmin) {
+      setNotice('Admin token required');
+      return;
+    }
+    const wantsBackup = window.confirm('Salvare un backup prima di azzerare il database?\n\nOK = salva backup · Annulla = niente backup');
+    let backupName: string | null = null;
+    if (wantsBackup) {
+      const input = window.prompt('Nome del backup:', `backup_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}`);
+      if (input === null) return; // prompt annullato: interrompe tutto
+      backupName = input.trim() || null;
+    }
+    const warn = backupName
+      ? `Azzerare TUTTO il database? Verrà prima salvato il backup "${backupName}".`
+      : 'Azzerare TUTTO il database SENZA backup? Operazione irreversibile.';
+    if (!window.confirm(warn)) return;
+    try {
+      const result = await resetDatabase(session, backupName);
+      const total = Object.values(result.deleted).reduce((a, b) => a + b, 0);
+      setNotice(result.archived_run_id
+        ? `Database azzerato (${total} record). Backup: "${result.backup_label}".`
+        : `Database azzerato (${total} record). Nessun backup.`);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : 'Reset database failed');
     }
   }
 
@@ -510,6 +538,11 @@ export default function App() {
               onLoad={() => void refreshNotifPrefs()}
               onToggle={(key) => void toggleNotifPref(key)}
             />
+            <Panel title="Modalità sviluppatore" className="wide">
+              <p className="hint">Azzera tutto il database: trade, decisioni, posizioni, PnL, portfolio e grafici. Impostazioni e watchlist restano. Prima di azzerare puoi salvare un backup con un nome.</p>
+              <button className="danger" onClick={() => void submitResetDb()} disabled={!canAdmin}>🗑 Resetta database</button>
+              {!canAdmin && <p className="hint">Admin token required.</p>}
+            </Panel>
           </div>
         )}
         {tab === 'onboarding' && (

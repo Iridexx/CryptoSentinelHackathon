@@ -171,6 +171,28 @@ async def risk_close_all(session: SessionDep, _: AdminAccessDep) -> dict:
     return await get_agent_service().close_all_and_pause(session, reason="manual_risk")
 
 
+class ResetDbRequest(BaseModel):
+    backup_name: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/dev/reset-db")
+async def dev_reset_db(request: ResetDbRequest, session: SessionDep, _: AdminAccessDep) -> dict:
+    """Modalità sviluppatore: azzera l'intero dataset di trading (trade, decisioni,
+    posizioni, PnL, portfolio, grafici).
+
+    Se ``backup_name`` è valorizzato, salva PRIMA uno snapshot completo recuperabile
+    in archived_runs. Le impostazioni e la watchlist NON vengono toccate.
+    """
+
+    from backend.app.persistence.archive import reset_all_data
+
+    settings = get_settings()
+    label = (request.backup_name or "").strip() or None
+    return await reset_all_data(
+        session, user_id=str(settings.default_user_id), backup_label=label
+    )
+
+
 # Cache leggera della summary spesa Claude: evita una query DB a ogni refresh dell'app.
 _CLAUDE_USAGE_CACHE: dict[str, object] = {"at": 0.0, "view": None}
 _CLAUDE_USAGE_TTL_SECONDS = 300.0

@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.persistence.models.archives import ArchivedRun
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot, PortfolioState
+from backend.app.persistence.models.positions import PerpPosition, SpotPosition
+from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
 
 
@@ -75,6 +77,83 @@ async def archive_dry_run_records(
     await session.commit()
     await session.refresh(archive)
     return archive
+
+
+async def reset_all_data(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    backup_label: str | None = None,
+) -> dict:
+    """Azzera l'intero dataset di trading dell'utente.
+
+    Cancella trade, decisioni, posizioni aperte, snapshot PnL, portfolio e grafici
+    congelati. Se ``backup_label`` è valorizzato, salva PRIMA uno snapshot completo
+    (tutti i record, non solo i dry-run) in ``archived_runs``, così è recuperabile.
+    Non tocca: archived_runs, runtime_state (impostazioni), device token, alert.
+    """
+
+    archived_at = datetime.now(UTC)
+    spot_trades = await _scalars(session, select(SpotTrade).where(SpotTrade.user_id == user_id))
+    perp_trades = await _scalars(session, select(PerpTrade).where(PerpTrade.user_id == user_id))
+    decisions = await _scalars(session, select(AgentDecision).where(AgentDecision.user_id == user_id))
+    snapshots = await _scalars(session, select(PnlSnapshot).where(PnlSnapshot.user_id == user_id))
+    spot_positions = await _scalars(session, select(SpotPosition).where(SpotPosition.user_id == user_id))
+    perp_positions = await _scalars(session, select(PerpPosition).where(PerpPosition.user_id == user_id))
+    charts = await _scalars(session, select(TradeChartSnapshot).where(TradeChartSnapshot.user_id == user_id))
+    portfolio = (
+        await session.execute(select(PortfolioState).where(PortfolioState.user_id == user_id))
+    ).scalar_one_or_none()
+
+    counts = {
+        "spot_trades": len(spot_trades),
+        "perp_trades": len(perp_trades),
+        "agent_decisions": len(decisions),
+        "pnl_snapshots": len(snapshots),
+        "spot_positions": len(spot_positions),
+        "perp_positions": len(perp_positions),
+        "trade_chart_snapshots": len(charts),
+        "portfolio_state": 1 if portfolio is not None else 0,
+    }
+
+    archived_run_id: str | None = None
+    if backup_label:
+        payload = {
+            "spot_trades": [_model_payload(row) for row in spot_trades],
+            "perp_trades": [_model_payload(row) for row in perp_trades],
+            "agent_decisions": [_model_payload(row) for row in decisions],
+            "pnl_snapshots": [_model_payload(row) for row in snapshots],
+            "spot_positions": [_model_payload(row) for row in spot_positions],
+            "perp_positions": [_model_payload(row) for row in perp_positions],
+            "portfolio_state": [_model_payload(portfolio)] if portfolio is not None else [],
+        }
+        archive = ArchivedRun(
+            run_id=f"arch_{archived_at.strftime('%Y%m%dT%H%M%S')}_{uuid4().hex[:10]}",
+            user_id=user_id,
+            archive_label=backup_label,
+            archived_at=archived_at,
+            is_simulated=True,
+            payload_json=json.dumps(payload, default=_json_default, separators=(",", ":")),
+        )
+        session.add(archive)
+        archived_run_id = archive.run_id
+
+    await session.execute(delete(SpotTrade).where(SpotTrade.user_id == user_id))
+    await session.execute(delete(PerpTrade).where(PerpTrade.user_id == user_id))
+    await session.execute(delete(AgentDecision).where(AgentDecision.user_id == user_id))
+    await session.execute(delete(PnlSnapshot).where(PnlSnapshot.user_id == user_id))
+    await session.execute(delete(SpotPosition).where(SpotPosition.user_id == user_id))
+    await session.execute(delete(PerpPosition).where(PerpPosition.user_id == user_id))
+    await session.execute(delete(TradeChartSnapshot).where(TradeChartSnapshot.user_id == user_id))
+    await session.execute(delete(PortfolioState).where(PortfolioState.user_id == user_id))
+
+    await session.commit()
+    return {
+        "status": "ok",
+        "archived_run_id": archived_run_id,
+        "backup_label": backup_label if archived_run_id else None,
+        "deleted": counts,
+    }
 
 
 async def list_archived_runs(session: AsyncSession, *, user_id: str) -> list[dict]:

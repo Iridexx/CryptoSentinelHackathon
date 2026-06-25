@@ -203,6 +203,20 @@ export function validateOnboarding(session: DashboardSession) {
   });
 }
 
+export type ResetDbResponse = {
+  status: string;
+  archived_run_id: string | null;
+  backup_label: string | null;
+  deleted: Record<string, number>;
+};
+
+export function resetDatabase(session: DashboardSession, backupName: string | null) {
+  return requestJson<ResetDbResponse>(session, '/api/v1/agent/dev/reset-db', 'admin', {
+    method: 'POST',
+    body: JSON.stringify({ backup_name: backupName }),
+  });
+}
+
 export function fetchMarkets(session: DashboardSession, limit = 50) {
   return requestJson<MarketListResponse>(session, `/api/v1/market-data/markets?currency=usd&limit=${limit}&page=1`);
 }

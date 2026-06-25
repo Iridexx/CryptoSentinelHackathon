@@ -501,3 +501,18 @@ export function riskCloseAll(adminToken: string): Promise<RiskCloseAllResponse> 
     token: adminToken,
   });
 }
+
+export interface ResetDbResponse {
+  status: string;
+  archived_run_id: string | null;
+  backup_label: string | null;
+  deleted: Record<string, number>;
+}
+
+export function resetDatabase(backupName: string | null, adminToken: string): Promise<ResetDbResponse> {
+  return request<ResetDbResponse>('/api/v1/agent/dev/reset-db', {
+    method: 'POST',
+    body: { backup_name: backupName },
+    token: adminToken,
+  });
+}
