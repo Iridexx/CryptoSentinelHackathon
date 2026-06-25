@@ -78,3 +78,7 @@ backend/storage/
 *.njsproj
 *.sln
 *.sw?
+
+# Artefatti locali Claude Code (backup TS + worktree annidate)
+.claude/ts_backup/
+.claude/worktrees/
