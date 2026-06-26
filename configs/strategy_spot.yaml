@@ -7,7 +7,7 @@ spot:
   atr_stop_multiplier: 2.2        # A (v3): stop = entry - ATR*2.2, nessun floor in %
   tp1_atr_multiplier: 2.0         # B (v3): TP1 = entry + ATR*2.0
   tp2_atr_multiplier: 3.5         # B (v3): TP2 = entry + ATR*3.5 (target trailing finale)
-  breakeven_trigger_atr: 1.0      # C (v3): a +1*ATR sposta lo stop a breakeven
+  breakeven_trigger_atr: 0.6      # C (v3): a +0.6*ATR sposta lo stop a breakeven (protegge i pump piccoli)
   breakeven_offset_costs: true    # C (v3): breakeven = entry + costi stimati (fee/slippage)
   trailing_atr_multiplier: 2.5    # C (v3): trailing = max_price - ATR*2.5
   trailing_active_from_start: true # C (v3): trailing attivo PRIMA di TP1

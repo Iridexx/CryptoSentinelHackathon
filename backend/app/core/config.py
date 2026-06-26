@@ -506,7 +506,7 @@ class Settings(BaseSettings):
     spot_atr_stop_multiplier: float = Field(default=2.2, alias="SPOT_ATR_STOP_MULTIPLIER")
     spot_tp1_atr_multiplier: float = Field(default=2.0, alias="SPOT_TP1_ATR_MULTIPLIER")
     spot_tp2_atr_multiplier: float = Field(default=3.5, alias="SPOT_TP2_ATR_MULTIPLIER")
-    spot_breakeven_trigger_atr: float = Field(default=1.0, alias="SPOT_BREAKEVEN_TRIGGER_ATR")
+    spot_breakeven_trigger_atr: float = Field(default=0.6, alias="SPOT_BREAKEVEN_TRIGGER_ATR")
     spot_breakeven_offset_costs: bool = Field(default=True, alias="SPOT_BREAKEVEN_OFFSET_COSTS")
     spot_trailing_atr_multiplier: float = Field(default=2.5, alias="SPOT_TRAILING_ATR_MULTIPLIER")
     spot_trailing_active_from_start: bool = Field(default=True, alias="SPOT_TRAILING_ACTIVE_FROM_START")

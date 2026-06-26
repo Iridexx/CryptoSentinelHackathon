@@ -1031,6 +1031,45 @@ async def test_spot_breakeven_prevents_loss_after_one_atr(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_spot_small_pump_below_one_atr_locks_breakeven_not_loss(db) -> None:
+    """Scenario DEXE: un pump sotto +1*ATR (qui +0.7) deve comunque armare il
+    breakeven con soglia 0.6, così il rientro chiude a pari, non in perdita."""
+    service = AgentService(
+        settings(spot_breakeven_trigger_atr=0.6, spot_scale_in_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="p-be-small",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("107"),       # +0.7*ATR: sotto +1*ATR ma sopra la soglia 0.6
+        stop_loss=Decimal("78"),            # entry - 2.2*ATR
+        take_profit_1=Decimal("130"),
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("10"),
+        max_price=Decimal("100"),
+        swap_fee_usd=Decimal("0"),
+        slippage_usd=Decimal("0"),
+        scale_in_count=0,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos], [], now)
+        # Breakeven armato anche se il pump è < 1*ATR.
+        assert pos.stop_loss >= pos.entry_price
+        # Rientro all'entrata: chiude a pari (non in perdita).
+        pos.current_price = Decimal("100")
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.status == "closed"
+
+
+@pytest.mark.asyncio
 async def test_spot_spike_filter_rejects_signal() -> None:
     """§5.3: quando ATR_now supera la soglia (ratio_max) il segnale è rifiutato."""
     base = candles()
