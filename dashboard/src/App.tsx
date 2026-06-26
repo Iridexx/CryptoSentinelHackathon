@@ -1102,6 +1102,7 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
           </div>
           <div className="metric-grid">
             <Metric label="Stop loss" value={detail.stop_loss ? fmtPrice(detail.stop_loss) : '—'} />
+            <Metric label="Breakeven" value={detail.breakeven_price ? fmtPrice(detail.breakeven_price) : '---'} />
             <Metric label="Take profit 1" value={detail.take_profit_1 ? fmtPrice(detail.take_profit_1) : '—'} />
             <Metric label="Take profit 2" value={detail.take_profit_2 ? fmtPrice(detail.take_profit_2) : '—'} />
             <Metric label="Trailing" value={detail.trailing_stop ? fmtPrice(detail.trailing_stop) : 'Non attivo'} />

@@ -176,6 +176,7 @@ export type TradeDetail = {
   take_profit_1?: string | null;
   take_profit_2?: string | null;
   trailing_stop?: string | null;
+  breakeven_price?: string | null;
   size: string;
   leverage?: number | null;
   exposure_usd: string;

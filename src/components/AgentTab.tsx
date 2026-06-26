@@ -1370,6 +1370,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <h3 className="text-sm font-semibold text-white">Risk levels</h3>
       {[
         ['Stop loss', detail.stop_loss],
+        ['Breakeven', detail.breakeven_price],
         ['Take profit 1', detail.take_profit_1],
         ['Take profit 2', detail.take_profit_2],
         ['Trailing stop', detail.trailing_stop],
@@ -1377,7 +1378,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
         <div key={label} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
           <span className="text-gray-500">{label}</span>
           <span className={value ? 'text-white' : 'text-gray-600'}>
-            {value ? fmtPriceFull(value) : (label === 'Trailing stop' ? 'Non attivo' : '-')}
+            {value ? fmtPriceFull(value) : (label === 'Trailing stop' ? 'Non attivo' : '---')}
           </span>
         </div>
       ))}

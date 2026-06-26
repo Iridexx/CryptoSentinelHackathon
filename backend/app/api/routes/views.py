@@ -456,6 +456,17 @@ def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
     return None
 
 
+def _breakeven_price(position, is_long: bool) -> str | None:
+    """Prezzo di breakeven: valorizzato solo quando lo stop è già stato spostato
+    a breakeven (≥ entry per i long, ≤ entry per gli short). Altrimenti None → "---"."""
+    if position is None or position.stop_loss is None:
+        return None
+    stop = Decimal(str(position.stop_loss))
+    entry = Decimal(str(position.entry_price))
+    active = stop >= entry if is_long else stop <= entry
+    return _fmt_price(stop) if active else None
+
+
 def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tuple[str, str | None]:
     """(opened_at, closed_at) coerenti: lo snapshot e la posizione sono piu' affidabili
     del timestamp del trade (che per un cls_ e' il momento della chiusura, non dell'apertura)."""
@@ -518,6 +529,7 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
         "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
+        "breakeven_price": _breakeven_price(position, True),
         "size": _fmt_price(size),
         "leverage": None,
         "exposure_usd": _q2(size * entry),
@@ -582,6 +594,7 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
         "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
+        "breakeven_price": _breakeven_price(position, (position.side == "long") if position else True),
         "size": _fmt_price(size),
         "leverage": leverage,
         "exposure_usd": _q2(size * entry * (leverage or 1)),

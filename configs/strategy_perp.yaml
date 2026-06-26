@@ -11,7 +11,7 @@ perp:
   # Protezione posizione: breakeven anticipato + trailing dinamico sulla leva.
   breakeven_trigger_atr: 1.0     # a +1×ATR lo SL sale a entry (+costi andata+ritorno)
   breakeven_offset_costs: true
-  breakeven_buffer_pct: 0.3      # cuscinetto extra entry+0.3% (copre le fee; 0 = off)
+  breakeven_buffer_pct: 0.1      # cuscinetto extra entry+0.1% (copre le fee; 0 = off)
   # Trailing: il moltiplicatore ATR scala con la leva del trade (base=leva min,
   # floor=leva max). Più alta la leva → trailing più stretto in prezzo.
   trailing_base_atr_largo: 4.0     # Largo: leva minima
