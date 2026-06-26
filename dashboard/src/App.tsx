@@ -775,14 +775,15 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'Invested', 'Value', 'PnL', '%', 'Status']}
+                columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status']}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
                 }}
                 rows={data.open_positions.map((item) => {
-                  const invested = Number(item.entry_price) * Number(item.size);
-                  const value = invested + Number(item.pnl_unrealized);
+                  const notional = Number(item.entry_price) * Number(item.size);
+                  const margin = item.leverage ? notional / Number(item.leverage) : notional;
+                  const value = margin + Number(item.pnl_unrealized);
                   const pnl = Number(item.pnl_unrealized);
                   const pct = item.pnl_pct ?? '0.00';
                   return [
@@ -791,8 +792,9 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
                     item.leverage ? `${item.leverage}x` : '-',
                     fmtPrice(item.entry_price),
                     fmtPrice(item.current_price),
-                    money(String(invested)),
-                    <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
+                    money(String(margin)),
+                    money(String(notional)),
+                    <span className={value >= margin ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
                     <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
                     <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
                     item.status,
@@ -1153,6 +1155,7 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
             <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="Size" value={detail.size} />
             <Metric label="Leverage" value={detail.leverage ? `${detail.leverage}x` : '—'} />
+            {detail.margin_usd != null && <Metric label="Margine" value={money(detail.margin_usd)} />}
             <Metric label="Exposure" value={money(detail.exposure_usd)} />
             <Metric label="Motivo" value={detail.close_reason ? (CLOSE_REASON_LABELS[detail.close_reason] ?? detail.close_reason) : '—'} />
           </div>
