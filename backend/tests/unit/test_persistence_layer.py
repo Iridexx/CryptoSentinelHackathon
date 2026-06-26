@@ -327,6 +327,31 @@ async def test_global_view_assembles_from_portfolio(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_global_view_perp_exposure_is_margin_not_notional(db) -> None:
+    """L'esposizione perp deve essere il MARGINE (nozionale/leva), non il nozionale,
+    così riflette il capitale realmente consumato dall'equity."""
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await PnlRepository(session).upsert_portfolio(
+            USER, total_equity_usd=Decimal("1000"), initial_equity_usd=Decimal("1000"),
+            peak_equity_usd=Decimal("1000"),
+        )
+        # entry 100 * size 10 = 1000 nozionale; leva 10 -> margine 100.
+        await PerpPositionRepository(session).save(
+            PerpPosition(
+                position_id="pp-exp", user_id=USER, asset="ETH", side="long",
+                size=Decimal("10"), entry_price=Decimal("100"), current_price=Decimal("100"),
+                leverage=10, opened_at=now, updated_at=now,
+            )
+        )
+        await session.commit()
+    async with factory() as session:
+        view = await ViewService(session, drawdown_cap_pct=-15.0).global_view(USER)
+        assert view.perp_exposure_usd == Decimal("100")  # margine, non 1000
+
+
+@pytest.mark.asyncio
 async def test_spot_and_perp_views_return_open_positions(db) -> None:
     factory = get_session_factory()
     now = datetime.now(UTC)

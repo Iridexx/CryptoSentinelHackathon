@@ -1021,8 +1021,14 @@ class AgentService:
             (daily_pnl / total * 100).quantize(Decimal("0.01")) if total > 0 else Decimal("0")
         )
 
+        # Esposizione = capitale impegnato (margine), non il nozionale: per il perp
+        # si divide per la leva, così riflette quanto si consuma davvero dell'equity
+        # (coerente col risk guard, che ragiona già in margine).
         spot_exposure = sum((p.entry_price * p.size for p in spot_positions), Decimal("0"))
-        perp_exposure = sum((p.entry_price * p.size for p in perp_positions), Decimal("0"))
+        perp_exposure = sum(
+            (p.entry_price * p.size / Decimal(max(int(p.leverage or 1), 1)) for p in perp_positions),
+            Decimal("0"),
+        )
         raw_exposure_pct = (spot_exposure + perp_exposure) / total * 100 if total > 0 else Decimal("0")
         exposure_pct = raw_exposure_pct.quantize(Decimal("0.01"))
 

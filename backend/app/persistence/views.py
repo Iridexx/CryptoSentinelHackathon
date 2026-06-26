@@ -186,11 +186,14 @@ class ViewService:
         open_spot = await spot_pos.open_for_user(user_id)
         open_perp = await perp_pos.open_for_user(user_id)
 
+        # Esposizione = margine impegnato (capitale che consumi dall'equity), non il
+        # nozionale: per il perp si divide per la leva. Spot = entry*size (no leva).
         spot_exposure_usd = sum(
             (Decimal(p.entry_price) * Decimal(p.size) for p in open_spot), Decimal("0")
         )
         perp_exposure_usd = sum(
-            (Decimal(p.entry_price) * Decimal(p.size) for p in open_perp), Decimal("0")
+            (Decimal(p.entry_price) * Decimal(p.size) / Decimal(max(int(p.leverage or 1), 1)) for p in open_perp),
+            Decimal("0"),
         )
         unrealized = (
             sum((p.pnl_unrealized for p in open_spot), Decimal("0"))
