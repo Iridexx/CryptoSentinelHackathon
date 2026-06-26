@@ -29,6 +29,14 @@ spot:
   spike_atr_avg_period: 50        # media ATR di riferimento
   spike_action: skip              # "skip" | "reduce_size"
   spike_reduced_size_fraction: 0.5
+  # Filtro regime mercato: niente nuovi buy spot quando BTC è in caduta forte.
+  # Blocca se BTC (15m) è sotto EMA50 E fa un nuovo minimo (ultime 12 candele).
+  # Sblocca SOLO quando BTC richiude sopra la EMA50 (macchina a stati, niente flip-flop).
+  market_regime_filter_enabled: true
+  market_regime_symbol: BTCUSDT
+  market_regime_interval: 15m
+  market_regime_ema_period: 50
+  market_regime_low_lookback: 12
   trailing_distance_pct: 2.0      # LEGACY: non più usato (sostituito da trailing_atr_multiplier)
   partial_take_profit_pct: 3.0    # LEGACY: non più usato per i livelli TP (sostituito da tp*_atr_multiplier)
   time_stop_hours: 6              # LEGACY: sostituito da time_stop_mode/atr

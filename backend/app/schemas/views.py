@@ -51,6 +51,8 @@ class SpotView(BaseModel):
     unrealized_pnl_usd: Decimal
     win_rate_pct: float
     trade_count: int
+    # Regime mercato: True se i nuovi ingressi spot sono bloccati (BTC in downtrend forte).
+    market_risk_off: bool = False
 
 
 class PerpPositionView(BaseModel):

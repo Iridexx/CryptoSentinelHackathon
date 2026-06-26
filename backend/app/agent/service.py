@@ -41,7 +41,7 @@ from backend.app.persistence.repositories.trades import PerpTradeRepository, Spo
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import AgentMobileSettings
 from backend.app.execution.perp_fees import fetch_perp_fees, compute_opening_costs, accrue_funding
-from backend.app.agent.signals.common.indicators import atr_series
+from backend.app.agent.signals.common.indicators import atr_series, ema
 from backend.app.execution.spot_fees import compute_spot_costs
 
 logger = get_logger("agent.service")
@@ -56,6 +56,8 @@ HEARTBEAT_TRADE_ASSET = "ETH"
 HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 # Distanza trailing-stop per il perp (coerente col livello generato dal segnale, 1%).
 PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
+# TTL cache del regime mercato (BTC 15m): evita un fetch BTC per ogni asset dello scan.
+SPOT_REGIME_CACHE_TTL_SECONDS = 90
 # Sentinel per la lazy-init del resolver token (distingue "non inizializzato" da "None").
 _UNSET = object()
 
@@ -267,7 +269,89 @@ class AgentService:
 
     async def evaluate_spot(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.spot_signal.evaluate(payload)
+        # Filtro regime mercato: blocca i nuovi ingressi spot in downtrend forte di BTC.
+        if signal.get("action") == "enter_long":
+            regime = await self._spot_market_regime()
+            if regime.get("risk_off"):
+                signal["action"] = "skip"
+                signal["reason"] = "market_risk_off"
+                signal.setdefault("components", {})["market_regime"] = regime
         return await self._handle_signal(signal, session)
+
+    async def _spot_market_regime(self) -> dict:
+        """Regime di mercato su BTC (15m), con isteresi e cache per ciclo.
+
+        Blocca i nuovi buy spot quando BTC è sotto la EMA50 E sta facendo nuovi
+        minimi (downtrend forte). Una volta in blocco ci resta finché BTC non
+        richiude SOPRA la EMA50 (macchina a stati → niente flip-flop). In caso di
+        dati insufficienti non blocca (fail-open).
+        """
+        if not self.settings.spot_market_regime_filter_enabled:
+            return {"risk_off": False, "enabled": False}
+
+        now = datetime.now(UTC)
+        cached = getattr(self, "_regime_cache", None)
+        if cached and (now - cached["at"]).total_seconds() < SPOT_REGIME_CACHE_TTL_SECONDS:
+            return cached["value"]
+
+        period = self.settings.spot_market_regime_ema_period
+        lookback = self.settings.spot_market_regime_low_lookback
+        try:
+            candles = await self.price_feed.fetch(
+                symbol=self.settings.spot_market_regime_symbol,
+                interval=self.settings.spot_market_regime_interval,
+                limit=max(period + 5, lookback + 5),
+                market="spot",
+            )
+        except Exception:
+            candles = []
+
+        if len(candles) < max(period + 1, lookback):
+            value = {"risk_off": False, "enabled": True, "reason": "insufficient_btc_klines"}
+            self._regime_cache = {"at": now, "value": value}
+            return value
+
+        closes = [c.close for c in candles]
+        ema_value = ema(closes, period)
+        btc_close = closes[-1]
+        above_ema = ema_value is not None and btc_close > ema_value
+        new_low = candles[-1].low <= min(c.low for c in candles[-lookback:])
+
+        prev_off = self._regime_risk_off_persisted()
+        if prev_off:
+            risk_off = not above_ema            # esce SOLO quando BTC torna sopra la EMA50
+        else:
+            risk_off = (not above_ema) and new_low  # entra: sotto media E nuovo minimo
+        if risk_off != prev_off:
+            self._set_regime_persisted(risk_off)
+
+        value = {
+            "risk_off": risk_off,
+            "enabled": True,
+            "btc_price": float(btc_close),
+            "ema": float(ema_value) if ema_value is not None else None,
+            "above_ema": above_ema,
+            "new_low": new_low,
+            "reason": "btc_downtrend_new_lows" if risk_off else "ok",
+        }
+        self._regime_cache = {"at": now, "value": value}
+        return value
+
+    def _regime_risk_off_persisted(self) -> bool:
+        raw = get_runtime_value(str(self.settings.default_user_id), "spot_market_regime")
+        if not raw:
+            return False
+        try:
+            return bool(json.loads(raw).get("risk_off", False))
+        except (ValueError, AttributeError):
+            return False
+
+    def _set_regime_persisted(self, risk_off: bool) -> None:
+        set_runtime_value(
+            str(self.settings.default_user_id),
+            "spot_market_regime",
+            json.dumps({"risk_off": risk_off, "updated_at": datetime.now(UTC).isoformat()}),
+        )
 
     async def evaluate_perp(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.perp_signal.evaluate(payload)

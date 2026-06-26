@@ -203,6 +203,11 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "spike_atr_avg_period": "spot_spike_atr_avg_period",
         "spike_action": "spot_spike_action",
         "spike_reduced_size_fraction": "spot_spike_reduced_size_fraction",
+        "market_regime_filter_enabled": "spot_market_regime_filter_enabled",
+        "market_regime_symbol": "spot_market_regime_symbol",
+        "market_regime_interval": "spot_market_regime_interval",
+        "market_regime_ema_period": "spot_market_regime_ema_period",
+        "market_regime_low_lookback": "spot_market_regime_low_lookback",
         "trailing_distance_pct": "spot_trailing_distance_pct",
         "partial_take_profit_pct": "spot_partial_take_profit_pct",
         "time_stop_hours": "spot_time_stop_hours",
@@ -525,6 +530,14 @@ class Settings(BaseSettings):
     spot_spike_atr_avg_period: int = Field(default=50, alias="SPOT_SPIKE_ATR_AVG_PERIOD")
     spot_spike_action: str = Field(default="skip", alias="SPOT_SPIKE_ACTION")  # skip | reduce_size
     spot_spike_reduced_size_fraction: float = Field(default=0.5, alias="SPOT_SPIKE_REDUCED_SIZE_FRACTION")
+    # Filtro regime mercato: blocca i nuovi buy spot quando BTC è in downtrend
+    # forte (sotto EMA50 sul 15m E fa nuovi minimi). Sblocco solo se BTC richiude
+    # sopra la EMA50 (macchina a stati con isteresi → niente flip-flop).
+    spot_market_regime_filter_enabled: bool = Field(default=True, alias="SPOT_MARKET_REGIME_FILTER_ENABLED")
+    spot_market_regime_symbol: str = Field(default="BTCUSDT", alias="SPOT_MARKET_REGIME_SYMBOL")
+    spot_market_regime_interval: str = Field(default="15m", alias="SPOT_MARKET_REGIME_INTERVAL")
+    spot_market_regime_ema_period: int = Field(default=50, alias="SPOT_MARKET_REGIME_EMA_PERIOD")
+    spot_market_regime_low_lookback: int = Field(default=12, alias="SPOT_MARKET_REGIME_LOW_LOOKBACK")
     spot_trailing_distance_pct: float = Field(default=2.0, alias="SPOT_TRAILING_DISTANCE_PCT")
     spot_partial_take_profit_pct: float = Field(default=3.0, alias="SPOT_PARTIAL_TAKE_PROFIT_PCT")
     spot_time_stop_hours: int = Field(default=6, alias="SPOT_TIME_STOP_HOURS")

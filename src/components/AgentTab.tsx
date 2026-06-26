@@ -494,6 +494,7 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
   const hasPositions = (data?.open_positions.length ?? 0) > 0;
   const hasHistory = (data?.history.length ?? 0) > 0;
   const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
+  const riskOff = data?.market_risk_off ?? false;
 
   return (
     <div className="space-y-3">
@@ -504,7 +505,9 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
         <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
       </div>
       {!hasActivity && (
-        <EmptyState title="In attesa di segnali spot" detail="Nessuna posizione aperta e nessun trade registrato." />
+        riskOff
+          ? <EmptyState title="Mercato bloccato per condizioni sfavorevoli" detail="BTC in downtrend: nuovi acquisti spot sospesi finché non rientra sopra la media." />
+          : <EmptyState title="In attesa di segnali spot" detail="Nessuna posizione aperta e nessun trade registrato." />
       )}
       {hasPositions ? (
         <div className="space-y-2">
@@ -540,7 +543,9 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
           ))}
         </div>
       ) : hasActivity && (
-        <EmptyState title="Nessuna posizione aperta" detail="Lo Spot e' pronto: le nuove entrate appariranno qui." />
+        riskOff
+          ? <EmptyState title="Mercato bloccato per condizioni sfavorevoli" detail="BTC in downtrend: nuovi acquisti spot sospesi finché non rientra sopra la media." />
+          : <EmptyState title="Nessuna posizione aperta" detail="Lo Spot e' pronto: le nuove entrate appariranno qui." />
       )}
       {hasHistory ? (
         <div className="space-y-2">

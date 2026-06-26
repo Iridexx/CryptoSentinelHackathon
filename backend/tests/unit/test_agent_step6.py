@@ -102,6 +102,11 @@ def settings(**overrides):
         spot_spike_atr_avg_period=50,
         spot_spike_action="skip",
         spot_spike_reduced_size_fraction=0.5,
+        spot_market_regime_filter_enabled=False,
+        spot_market_regime_symbol="BTCUSDT",
+        spot_market_regime_interval="15m",
+        spot_market_regime_ema_period=50,
+        spot_market_regime_low_lookback=12,
         spot_vwap_atr_extension_limit=10.0,
         spot_rsi_weight_pct=15.0,
         spot_trend_structure_weight_pct=30.0,
@@ -1234,3 +1239,62 @@ async def test_perp_trailing_inactive_until_protective_then_activates(db) -> Non
         pos.current_price = Decimal("101")
         await service._check_sl_tp(session, [], [pos], now)
         assert pos.status == "closed"
+
+
+# ── Filtro regime mercato (SPOT) ─────────────────────────────────────────────
+
+
+def _btc_candles(closes: list[float]) -> list[Candle]:
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    return [
+        Candle(timestamp=base + timedelta(minutes=15 * i), open=c, high=c + 0.2, low=c - 0.2, close=c, volume=100.0)
+        for i, c in enumerate(closes)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_spot_market_regime_blocks_and_reactivates_only_above_ema(db) -> None:
+    """Blocca in downtrend forte (sotto EMA + nuovo minimo), resta bloccato per
+    isteresi finché BTC non richiude sopra la EMA (niente flip-flop)."""
+    service = AgentService(
+        settings(spot_market_regime_filter_enabled=True, spot_market_regime_ema_period=10, spot_market_regime_low_lookback=5),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+
+    class FakeFeed:
+        def __init__(self) -> None:
+            self.candles: list[Candle] = []
+
+        async def fetch(self, **kwargs):
+            return self.candles
+
+    feed = FakeFeed()
+    service.price_feed = feed
+
+    # 1. Downtrend forte (sotto EMA + nuovo minimo) -> blocca.
+    feed.candles = _btc_candles([100 - i for i in range(20)])
+    service._regime_cache = None
+    assert (await service._spot_market_regime())["risk_off"] is True
+
+    # 2. Isteresi: ancora sotto EMA ma SENZA nuovo minimo -> resta bloccato.
+    feed.candles = _btc_candles([100 - i for i in range(15)] + [86, 86, 86, 86, 87])
+    service._regime_cache = None
+    assert (await service._spot_market_regime())["risk_off"] is True
+
+    # 3. BTC richiude sopra la EMA -> sblocca.
+    feed.candles = _btc_candles([100 - i for i in range(15)] + [90, 98, 106, 114, 122, 130])
+    service._regime_cache = None
+    assert (await service._spot_market_regime())["risk_off"] is False
+
+
+@pytest.mark.asyncio
+async def test_spot_market_regime_disabled_never_blocks(db) -> None:
+    service = AgentService(
+        settings(spot_market_regime_filter_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    regime = await service._spot_market_regime()
+    assert regime["risk_off"] is False
+    assert regime["enabled"] is False

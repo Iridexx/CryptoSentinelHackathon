@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from collections import OrderedDict
 from decimal import Decimal
 from math import sqrt
 from statistics import mean, stdev
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.app.persistence.runtime_state import get_runtime_value
 
 from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.positions import (
@@ -30,6 +33,17 @@ from backend.app.schemas.views import (
 )
 
 
+def _market_risk_off(user_id: str) -> bool:
+    """Legge il flag regime mercato persistito dall'agente (vedi service._spot_market_regime)."""
+    raw = get_runtime_value(user_id, "spot_market_regime")
+    if not raw:
+        return False
+    try:
+        return bool(json.loads(raw).get("risk_off", False))
+    except (ValueError, AttributeError):
+        return False
+
+
 class ViewService:
     """Assembles the Spot / Perp / Global dashboard payloads."""
 
@@ -46,6 +60,7 @@ class ViewService:
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
         return SpotView(
+            market_risk_off=_market_risk_off(user_id),
             open_positions=[
                 SpotPositionView(
                     position_id=p.position_id,
