@@ -1336,3 +1336,45 @@ button.danger {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* Equity chart (header + range selector) */
+.equity-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.equity-readouts {
+  display: flex;
+  gap: 24px;
+}
+.equity-big {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.equity-legend {
+  font-size: 11px;
+  color: #7a9ab0;
+  margin-top: 2px;
+}
+.equity-ranges {
+  display: flex;
+  gap: 4px;
+}
+.equity-ranges button {
+  background: #1a1f2e;
+  border: 1px solid #2a3142;
+  color: #7a9ab0;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.equity-ranges button.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}

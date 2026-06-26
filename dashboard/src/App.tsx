@@ -48,6 +48,7 @@ import type {
   DataCoverageItem,
   DataCoverageResponse,
   EquityCurveResponse,
+  EquityRange,
   ExecutionStatus,
   ExecutionWalletsResponse,
   GlobalView,
@@ -131,6 +132,9 @@ export default function App() {
   const [perp, setPerp] = useState<LoadState<PerpView>>(emptyState());
   const [global, setGlobal] = useState<LoadState<GlobalView>>(emptyState());
   const [equity, setEquity] = useState<LoadState<EquityCurveResponse>>(emptyState());
+  const [equityRange, setEquityRange] = useState<EquityRange>('24h');
+  const equityRangeRef = useRef<EquityRange>('24h');
+  equityRangeRef.current = equityRange;
   const [decisions, setDecisions] = useState<LoadState<AgentDecisionResponse>>(emptyState());
   const [decisionsOffset, setDecisionsOffset] = useState(0);
   const decisionsOffsetRef = useRef(0);
@@ -167,6 +171,14 @@ export default function App() {
     void refreshCore();
   }, []);
 
+  // Refetch della sola curva equity quando cambia il range (24h/7g/Tutto).
+  const equityInitialized = useRef(false);
+  useEffect(() => {
+    if (!equityInitialized.current) { equityInitialized.current = true; return; }
+    if (!canRead) return;
+    void silentLoad(setEquity, () => fetchEquityCurve(session, 'global', equityRange));
+  }, [equityRange]);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       void refreshCore(true);
@@ -201,7 +213,7 @@ export default function App() {
       canRead ? fetch(setSpot, () => fetchSpot(session)) : Promise.resolve(null),
       canRead ? fetch(setPerp, () => fetchPerp(session)) : Promise.resolve(null),
       canRead ? fetch(setGlobal, () => fetchGlobal(session)) : Promise.resolve(null),
-      canRead ? fetch(setEquity, () => fetchEquityCurve(session, 'global', '24h')) : Promise.resolve(null),
+      canRead ? fetch(setEquity, () => fetchEquityCurve(session, 'global', equityRangeRef.current)) : Promise.resolve(null),
       canRead ? fetch(setDecisions, () => fetchAgentDecisions(session, undefined, decisionsOffsetRef.current)) : Promise.resolve(null),
       canRead ? fetch(setAssetBreakdown, () => fetchAssetBreakdown(session, 'spot')) : Promise.resolve(null),
       canRead ? fetch(setOperationalStats, () => fetchOperationalStats(session)) : Promise.resolve(null),
@@ -520,7 +532,7 @@ export default function App() {
 
         {tab === 'overview' && (
           <div className="grid overview-grid">
-            <GlobalPanel global={global} />
+            <GlobalPanel global={global} equity={equity} />
             <SpotPanel spot={spot} session={session} />
             <PerpPanel perp={perp} session={session} />
             <HealthPanel live={live} ready={ready} heartbeat={heartbeat} execution={execution} coverage={coverage} />
@@ -529,10 +541,12 @@ export default function App() {
         )}
         {tab === 'spot' && <SpotPanel spot={spot} session={session} expanded />}
         {tab === 'perp' && <PerpPanel perp={perp} session={session} expanded />}
-        {tab === 'global' && <GlobalPanel global={global} expanded />}
+        {tab === 'global' && <GlobalPanel global={global} equity={equity} expanded />}
         {tab === 'analytics' && (
           <AnalyticsPanel
             equity={equity}
+            equityRange={equityRange}
+            onEquityRange={setEquityRange}
             decisions={decisions}
             decisionsOffset={decisionsOffset}
             onDecisionsPage={(offset) => void loadDecisionsPage(offset)}
@@ -646,7 +660,7 @@ function Panel({
   );
 }
 
-function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalView>; expanded?: boolean }) {
+function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<GlobalView>; equity: LoadState<EquityCurveResponse>; expanded?: boolean }) {
   const data = global.data;
   return (
     <Panel title="Global Agent" className={expanded ? 'wide' : ''}>
@@ -672,18 +686,10 @@ function GlobalPanel({ global, expanded = false }: { global: LoadState<GlobalVie
               />
             )}
           </div>
-          {data.pnl_history.length === 0 ? (
+          {(equity.data?.items.length ?? 0) < 2 ? (
             <Empty title="No PnL history" detail="Global tracking is ready and waiting for confirmed activity." />
           ) : (
-            <EquityLineChart
-              points={data.pnl_history.map((pt) => {
-                const base = Number(data.pnl_history[0].total_equity_usd);
-                const pct = base > 0 ? ((Number(pt.total_equity_usd) - base) / base) * 100 : 0;
-                const d = new Date(pt.timestamp_utc);
-                const label = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                return { pct, label, equity: pt.total_equity_usd };
-              })}
-            />
+            <EquityChart equity={equity.data} />
           )}
         </>
       )}
@@ -794,6 +800,8 @@ const DECISIONS_PAGE_SIZE = 200;
 
 function AnalyticsPanel({
   equity,
+  equityRange,
+  onEquityRange,
   decisions,
   decisionsOffset,
   onDecisionsPage,
@@ -802,6 +810,8 @@ function AnalyticsPanel({
   onTradeDetail,
 }: {
   equity: LoadState<EquityCurveResponse>;
+  equityRange: EquityRange;
+  onEquityRange: (r: EquityRange) => void;
   decisions: LoadState<AgentDecisionResponse>;
   decisionsOffset: number;
   onDecisionsPage: (offset: number) => void;
@@ -857,13 +867,7 @@ function AnalyticsPanel({
         <StateBlock state={equity} empty="No equity curve data" />
         {equity.data && equity.data.items.length > 0 ? (
           <>
-            <EquityLineChart
-              points={equity.data.items.map((pt) => ({
-                pct: Number(pt.pnl_pct),
-                label: new Date(pt.timestamp_utc).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-                equity: pt.equity_usd,
-              }))}
-            />
+            <EquityChart equity={equity.data} range={equityRange} onRange={onEquityRange} />
             <Table
               columns={['Time', 'Equity', 'PnL', 'ROI', 'Drawdown']}
               rows={equity.data.items.slice(-12).map((item) => [
@@ -2212,7 +2216,53 @@ function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   );
 }
 
-function EquityLineChart({ points }: { points: { pct: number; label: string; equity?: string | number }[] }) {
+function EquityChart({ equity, range, onRange }: {
+  equity: EquityCurveResponse | null;
+  range?: EquityRange;
+  onRange?: (r: EquityRange) => void;
+}) {
+  const items = equity?.items ?? [];
+  if (items.length < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
+  const points = items.map((pt) => ({
+    pct: Number(pt.pnl_pct),
+    btc: pt.btc_pct != null ? Number(pt.btc_pct) : null,
+    label: new Date(pt.timestamp_utc).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+    equity: pt.equity_usd,
+  }));
+  const lastPnl = points[points.length - 1].pct;
+  const hasBtc = (equity?.benchmark_available ?? false) && points.some((p) => p.btc != null);
+  const lastBtc = hasBtc ? points[points.length - 1].btc ?? 0 : null;
+  const RANGES: EquityRange[] = ['24h', '7d', 'all'];
+  const rangeLabel: Record<EquityRange, string> = { '24h': '24h', '7d': '7g', 'all': 'Tutto' };
+  return (
+    <div className="equity-chart">
+      <div className="equity-chart-head">
+        <div className="equity-readouts">
+          <div>
+            <div className={`equity-big ${lastPnl >= 0 ? 'ok-text' : 'error-text'}`}>{lastPnl >= 0 ? '+' : ''}{lastPnl.toFixed(2)}%</div>
+            <div className="equity-legend"><span style={{ color: '#F0B90B' }}>●</span> PnL cumulato</div>
+          </div>
+          {hasBtc && lastBtc != null && (
+            <div>
+              <div className={`equity-big ${lastBtc >= 0 ? 'ok-text' : 'error-text'}`}>{lastBtc >= 0 ? '+' : ''}{lastBtc.toFixed(2)}%</div>
+              <div className="equity-legend"><span style={{ color: '#3B82F6' }}>●</span> BTC trend</div>
+            </div>
+          )}
+        </div>
+        {onRange && range && (
+          <div className="equity-ranges">
+            {RANGES.map((r) => (
+              <button key={r} className={r === range ? 'active' : ''} onClick={() => onRange(r)}>{rangeLabel[r]}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      <EquityLineChart points={points} />
+    </div>
+  );
+}
+
+function EquityLineChart({ points }: { points: { pct: number; label: string; equity?: string | number; btc?: number | null }[] }) {
   const n = points.length;
   if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
 
@@ -2220,13 +2270,16 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
   const svgRef = useRef<SVGSVGElement>(null);
 
   const PNL_COLOR = '#F0B90B';
+  const BTC_COLOR = '#3B82F6';
+  const hasBtc = points.some((p) => p.btc != null);
   const W = 520, H = 180, padL = 48, padR = 16, padT = 12, padB = 24;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
 
   const vals = points.map((p) => p.pct);
-  let lo = Math.min(...vals, 0);
-  let hi = Math.max(...vals, 0);
+  const btcVals = points.map((p) => (p.btc != null ? p.btc : null)).filter((v): v is number => v != null);
+  let lo = Math.min(...vals, ...btcVals, 0);
+  let hi = Math.max(...vals, ...btcVals, 0);
   if (lo === hi) { lo -= 1; hi += 1; }
   const pad = (hi - lo) * 0.12;
   lo -= pad; hi += pad;
@@ -2236,6 +2289,9 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
   const y0 = yAt(0);
 
   const pnlLine = points.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.pct).toFixed(1)}`).join(' ');
+  const btcLine = hasBtc
+    ? points.map((p, i) => (p.btc != null ? `${xAt(i).toFixed(1)},${yAt(p.btc).toFixed(1)}` : null)).filter(Boolean).join(' ')
+    : '';
   const areaPath =
     `M ${xAt(0).toFixed(1)},${y0.toFixed(1)} ` +
     points.map((p, i) => `L ${xAt(i).toFixed(1)},${yAt(p.pct).toFixed(1)}`).join(' ') +
@@ -2289,6 +2345,7 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
       ))}
       <line x1={padL} y1={y0} x2={W - padR} y2={y0} stroke="#9ca3af" strokeOpacity="0.5" strokeWidth="1" strokeDasharray="4 3" />
       <path d={areaPath} fill="url(#dashPnlFill)" />
+      {btcLine && <polyline points={btcLine} fill="none" stroke={BTC_COLOR} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />}
       <polyline points={pnlLine} fill="none" stroke={PNL_COLOR} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={xAt(n - 1)} cy={yAt(lastPct)} r="3.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1.5" />
       {xIdxs.map((idx) => (

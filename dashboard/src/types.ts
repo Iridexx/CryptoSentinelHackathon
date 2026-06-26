@@ -117,12 +117,16 @@ export type EquityCurvePoint = {
   pnl_usd: string;
   pnl_pct: string;
   drawdown_pct: string;
+  btc_pct?: string;
 };
+
+export type EquityRange = '24h' | '7d' | 'all';
 
 export type EquityCurveResponse = {
   market: 'spot' | 'perp' | 'global';
-  range: '24h' | '7d' | 'all';
+  range: EquityRange;
   initial_equity_usd: string;
+  benchmark_available?: boolean;
   items: EquityCurvePoint[];
 };
 
