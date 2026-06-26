@@ -9,8 +9,9 @@ perp:
   tp2_atr_multiplier: 4.0    # TP2 = entry ± 4.0×ATR (R:R ~2.67)
   use_poc_for_tp2: true      # TP2 → POC se più ambizioso del target ATR
   # Protezione posizione: breakeven anticipato + trailing dinamico sulla leva.
-  breakeven_trigger_atr: 1.0     # a +1×ATR lo SL sale a entry (+costi)
+  breakeven_trigger_atr: 1.0     # a +1×ATR lo SL sale a entry (+costi andata+ritorno)
   breakeven_offset_costs: true
+  breakeven_buffer_pct: 2.0      # cuscinetto extra entry+2% (su perp a leva spesso oltre i TP -> non scatta, vale la copertura fee)
   # Trailing: il moltiplicatore ATR scala con la leva del trade (base=leva min,
   # floor=leva max). Più alta la leva → trailing più stretto in prezzo.
   trailing_base_atr_largo: 4.0     # Largo: leva minima

@@ -186,6 +186,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "tp2_atr_multiplier": "spot_tp2_atr_multiplier",
         "breakeven_trigger_atr": "spot_breakeven_trigger_atr",
         "breakeven_offset_costs": "spot_breakeven_offset_costs",
+        "breakeven_buffer_pct": "spot_breakeven_buffer_pct",
         "trailing_atr_multiplier": "spot_trailing_atr_multiplier",
         "trailing_active_from_start": "spot_trailing_active_from_start",
         "tp1_close_fraction": "spot_tp1_close_fraction",
@@ -227,6 +228,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "use_poc_for_tp2": "perp_use_poc_for_tp2",
         "breakeven_trigger_atr": "perp_breakeven_trigger_atr",
         "breakeven_offset_costs": "perp_breakeven_offset_costs",
+        "breakeven_buffer_pct": "perp_breakeven_buffer_pct",
         "trailing_base_atr_largo": "perp_trailing_base_atr_largo",
         "trailing_floor_atr_largo": "perp_trailing_floor_atr_largo",
         "trailing_base_atr_stretto": "perp_trailing_base_atr_stretto",
@@ -513,6 +515,10 @@ class Settings(BaseSettings):
     spot_tp2_atr_multiplier: float = Field(default=3.5, alias="SPOT_TP2_ATR_MULTIPLIER")
     spot_breakeven_trigger_atr: float = Field(default=0.6, alias="SPOT_BREAKEVEN_TRIGGER_ATR")
     spot_breakeven_offset_costs: bool = Field(default=True, alias="SPOT_BREAKEVEN_OFFSET_COSTS")
+    # Cuscinetto extra del breakeven, in % sul prezzo di entry: lo stop si alza a
+    # entry+X% (si applica solo se il prezzo l'ha già superato → niente chiusura
+    # immediata). Garantisce di coprire le fee con margine. 0 = disattivato.
+    spot_breakeven_buffer_pct: float = Field(default=2.0, alias="SPOT_BREAKEVEN_BUFFER_PCT")
     spot_trailing_atr_multiplier: float = Field(default=2.5, alias="SPOT_TRAILING_ATR_MULTIPLIER")
     spot_trailing_active_from_start: bool = Field(default=True, alias="SPOT_TRAILING_ACTIVE_FROM_START")
     spot_tp1_close_fraction: float = Field(default=0.30, alias="SPOT_TP1_CLOSE_FRACTION")
@@ -561,6 +567,10 @@ class Settings(BaseSettings):
     # Breakeven: a +N×ATR dall'entry lo SL sale a entry (+costi), niente più perdita.
     perp_breakeven_trigger_atr: float = Field(default=1.0, alias="PERP_BREAKEVEN_TRIGGER_ATR")
     perp_breakeven_offset_costs: bool = Field(default=True, alias="PERP_BREAKEVEN_OFFSET_COSTS")
+    # Cuscinetto extra del breakeven, in % sul prezzo di entry (vedi spot). Su perp
+    # con leva può cadere oltre i TP: in quel caso non scatta (i TP chiudono prima)
+    # e resta valida la copertura fee andata+ritorno. 0 = disattivato.
+    perp_breakeven_buffer_pct: float = Field(default=2.0, alias="PERP_BREAKEVEN_BUFFER_PCT")
     # Trailing ATR dinamico: il moltiplicatore scala con la leva del trade tra base
     # (leva minima → largo) e floor (leva massima → stretto). Due preset Largo/Stretto.
     perp_trailing_base_atr_largo: float = Field(default=4.0, alias="PERP_TRAILING_BASE_ATR_LARGO")

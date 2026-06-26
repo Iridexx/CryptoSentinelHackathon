@@ -833,8 +833,18 @@ class AgentService:
                 if price >= be_trigger:
                     be_stop = pos.entry_price
                     if self.settings.spot_breakeven_offset_costs and pos.size > 0:
-                        costs = (pos.swap_fee_usd or Decimal("0")) + (pos.slippage_usd or Decimal("0"))
+                        # Costi andata+ritorno (×2): coprono anche la fee di chiusura,
+                        # così chiudere a breakeven non lascia una mini-perdita.
+                        costs = ((pos.swap_fee_usd or Decimal("0")) + (pos.slippage_usd or Decimal("0"))) * 2
                         be_stop = pos.entry_price + costs / pos.size
+                    # Cuscinetto extra: alza lo stop a entry+X% MA solo se il prezzo
+                    # l'ha già superato (altrimenti lo stop starebbe sopra il prezzo →
+                    # chiusura immediata). Copre le fee con un margine confortevole.
+                    buf_pct = Decimal(str(self.settings.spot_breakeven_buffer_pct))
+                    if buf_pct > 0:
+                        buffer_be = pos.entry_price * (Decimal("1") + buf_pct / Decimal("100"))
+                        if price > buffer_be and buffer_be > be_stop:
+                            be_stop = buffer_be
                     if pos.stop_loss is None or be_stop > pos.stop_loss:
                         pos.stop_loss = be_stop
                         pos.updated_at = now
@@ -925,9 +935,22 @@ class AgentService:
                 if (is_long and price >= be_trigger) or (not is_long and price <= be_trigger):
                     be_stop = pos.entry_price
                     if self.settings.perp_breakeven_offset_costs and pos.size > 0:
-                        fee_only = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
+                        # Fee andata+ritorno (×2): copre anche la chiusura.
+                        fee_only = ((pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))) * 2
                         offset = fee_only / pos.size
                         be_stop = pos.entry_price + offset if is_long else pos.entry_price - offset
+                    # Cuscinetto extra entry±X%, applicato solo se il prezzo l'ha superato
+                    # (mai oltre il prezzo corrente → niente chiusura immediata).
+                    buf_pct = Decimal(str(self.settings.perp_breakeven_buffer_pct))
+                    if buf_pct > 0:
+                        if is_long:
+                            buffer_be = pos.entry_price * (Decimal("1") + buf_pct / Decimal("100"))
+                            if price > buffer_be and buffer_be > be_stop:
+                                be_stop = buffer_be
+                        else:
+                            buffer_be = pos.entry_price * (Decimal("1") - buf_pct / Decimal("100"))
+                            if price < buffer_be and buffer_be < be_stop:
+                                be_stop = buffer_be
                     if is_long and (pos.stop_loss is None or be_stop > pos.stop_loss):
                         pos.stop_loss = be_stop; pos.updated_at = now; session.add(pos)
                     elif not is_long and (pos.stop_loss is None or be_stop < pos.stop_loss):

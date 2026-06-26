@@ -82,6 +82,7 @@ def settings(**overrides):
         spot_tp2_atr_multiplier=3.5,
         spot_breakeven_trigger_atr=1.0,
         spot_breakeven_offset_costs=True,
+        spot_breakeven_buffer_pct=0.0,
         spot_trailing_atr_multiplier=2.5,
         spot_trailing_active_from_start=True,
         spot_tp1_close_fraction=0.30,
@@ -121,6 +122,7 @@ def settings(**overrides):
         perp_use_poc_for_tp2=True,
         perp_breakeven_trigger_atr=1.0,
         perp_breakeven_offset_costs=True,
+        perp_breakeven_buffer_pct=0.0,
         perp_trailing_base_atr_largo=4.0,
         perp_trailing_floor_atr_largo=2.5,
         perp_trailing_base_atr_stretto=2.5,
@@ -1299,3 +1301,89 @@ async def test_spot_market_regime_disabled_never_blocks(db) -> None:
     regime = await service._spot_market_regime()
     assert regime["risk_off"] is False
     assert regime["enabled"] is False
+
+
+# ── Breakeven: copertura fee + cuscinetto % ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_spot_breakeven_buffer_locks_profit_above_entry(db) -> None:
+    """Col buffer 2% lo stop sale a entry+2% (quando il prezzo l'ha superato):
+    chiudere lì è un piccolo profitto, non una mini-perdita da fee."""
+    service = AgentService(
+        settings(spot_breakeven_buffer_pct=2.0, spot_scale_in_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="p-bebuf",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("112"),     # > trigger (+1*ATR=110) e > buffer (+2%=102)
+        stop_loss=Decimal("78"),
+        take_profit_1=Decimal("130"),
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("10"),
+        max_price=Decimal("100"),
+        swap_fee_usd=Decimal("0"),
+        slippage_usd=Decimal("0"),
+        scale_in_count=0,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.stop_loss == Decimal("102")   # entry + 2%, non solo entry
+        assert pos.status == "open"
+        # Ritraccia a 101 (sotto il buffer 102): chiude in piccolo profitto.
+        pos.current_price = Decimal("101")
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.status == "closed"
+
+
+@pytest.mark.asyncio
+async def test_perp_breakeven_buffer_not_applied_below_buffer(db) -> None:
+    """Il buffer NON deve scattare se il prezzo non l'ha ancora superato (niente
+    chiusura immediata): a breakeven lo stop sta a entry+costi, non a entry+2%."""
+    service = AgentService(
+        settings(perp_breakeven_buffer_pct=2.0),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    service.price_feed = _OfflineFeed()
+    now = datetime.now(UTC)
+    # entry 100, ATR 1 -> trigger +1*ATR=101; buffer +2%=102.
+    pos = PerpPosition(
+        position_id="perp-bebuf",
+        user_id=str(USER_ID),
+        asset="DOGE",
+        side="long",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("101.5"),   # > trigger 101 ma < buffer 102
+        leverage=4,
+        stop_loss=Decimal("97"),
+        take_profit_1=Decimal("130"),
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("1"),
+        max_price=None,
+        funding_accrued_usd=Decimal("0"),
+        tp1_reached=False,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [], [pos], now)
+        # Breakeven scattato ma sotto il buffer: stop a entry (no fee), NON a 102.
+        assert pos.stop_loss == Decimal("100")
+        assert pos.status == "open"
+        # Sopra il buffer (103 > 102): ora lo stop sale a entry+2% = 102.
+        pos.current_price = Decimal("103")
+        await service._check_sl_tp(session, [], [pos], now)
+        assert pos.stop_loss == Decimal("102")
+        assert pos.status == "open"
