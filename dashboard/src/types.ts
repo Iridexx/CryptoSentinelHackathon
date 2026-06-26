@@ -2,6 +2,7 @@ export type KillSwitchState = 'running' | 'soft_stop' | 'hard_stop' | 'degraded'
 
 export type SpotPosition = {
   position_id: string;
+  open_trade_id?: string | null;
   asset: string;
   size: string;
   entry_price: string;
@@ -48,6 +49,7 @@ export type PnlPoint = {
 
 export type PerpPosition = {
   position_id: string;
+  open_trade_id?: string | null;
   asset: string;
   side: string;
   size: string;

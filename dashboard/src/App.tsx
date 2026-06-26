@@ -699,6 +699,7 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
 
 function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotView>; session: DashboardSession; expanded?: boolean }) {
   const data = spot.data;
+  const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
     <Panel title="Spot Ranking View" className={expanded ? 'wide' : ''}>
       <StateBlock state={spot} empty="No Spot data loaded" />
@@ -713,26 +714,34 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
           {data.open_positions.length === 0 ? (
             <Empty title="No open Spot positions" detail="The agent has no active Spot exposure." />
           ) : (
-            <Table
-              columns={['Asset', 'Size', 'Entry', 'Price Now', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
-              rows={data.open_positions.map((item) => {
-                const invested = Number(item.entry_price) * Number(item.size);
-                const value = invested + Number(item.pnl_unrealized);
-                const pnl = Number(item.pnl_unrealized);
-                const pct = item.pnl_pct ?? '+0.00';
-                return [
-                  item.asset,
-                  item.size,
-                  fmtPrice(item.entry_price),
-                  fmtPrice(item.current_price),
-                  money(String(invested)),
-                  <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
-                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
-                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
-                  item.status,
-                ];
-              })}
-            />
+            <>
+              <p className="hint">Clicca una posizione per il dettaglio.</p>
+              <Table
+                columns={['Asset', 'Size', 'Entry', 'Price Now', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
+                onRowClick={(i) => {
+                  const tid = data.open_positions[i].open_trade_id;
+                  if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
+                }}
+                rows={data.open_positions.map((item) => {
+                  const invested = Number(item.entry_price) * Number(item.size);
+                  const value = invested + Number(item.pnl_unrealized);
+                  const pnl = Number(item.pnl_unrealized);
+                  const pct = item.pnl_pct ?? '+0.00';
+                  return [
+                    item.asset,
+                    item.size,
+                    fmtPrice(item.entry_price),
+                    fmtPrice(item.current_price),
+                    money(String(invested)),
+                    <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
+                    <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
+                    <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
+                    item.status,
+                  ];
+                })}
+              />
+              {openTrade && <TradeDetailInline tradeId={openTrade} session={session} />}
+            </>
           )}
           {expanded && (
             <div className="history-section">
@@ -748,6 +757,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
 
 function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpView>; session: DashboardSession; expanded?: boolean }) {
   const data = perp.data;
+  const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
     <Panel title="Perp Futures View" className={expanded ? 'wide' : ''}>
       <StateBlock state={perp} empty="No Perp data loaded" />
@@ -762,27 +772,35 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
           {data.open_positions.length === 0 ? (
             <Empty title="No open Perp positions" detail="The agent has no active Perp exposure." />
           ) : (
-            <Table
-              columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'Invested', 'Value', 'PnL', '%', 'Status']}
-              rows={data.open_positions.map((item) => {
-                const invested = Number(item.entry_price) * Number(item.size);
-                const value = invested + Number(item.pnl_unrealized);
-                const pnl = Number(item.pnl_unrealized);
-                const pct = item.pnl_pct ?? '0.00';
-                return [
-                  item.asset,
-                  <span className={item.side === 'long' ? 'ok-text' : 'error-text'}>{item.side}</span>,
-                  item.leverage ? `${item.leverage}x` : '-',
-                  fmtPrice(item.entry_price),
-                  fmtPrice(item.current_price),
-                  money(String(invested)),
-                  <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
-                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
-                  <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
-                  item.status,
-                ];
-              })}
-            />
+            <>
+              <p className="hint">Clicca una posizione per il dettaglio.</p>
+              <Table
+                columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'Invested', 'Value', 'PnL', '%', 'Status']}
+                onRowClick={(i) => {
+                  const tid = data.open_positions[i].open_trade_id;
+                  if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
+                }}
+                rows={data.open_positions.map((item) => {
+                  const invested = Number(item.entry_price) * Number(item.size);
+                  const value = invested + Number(item.pnl_unrealized);
+                  const pnl = Number(item.pnl_unrealized);
+                  const pct = item.pnl_pct ?? '0.00';
+                  return [
+                    item.asset,
+                    <span className={item.side === 'long' ? 'ok-text' : 'error-text'}>{item.side}</span>,
+                    item.leverage ? `${item.leverage}x` : '-',
+                    fmtPrice(item.entry_price),
+                    fmtPrice(item.current_price),
+                    money(String(invested)),
+                    <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
+                    <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
+                    <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
+                    item.status,
+                  ];
+                })}
+              />
+              {openTrade && <TradeDetailInline tradeId={openTrade} session={session} />}
+            </>
           )}
           {expanded && (
             <div className="history-section">
@@ -2200,7 +2218,7 @@ function Empty({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
+function Table({ columns, rows, onRowClick }: { columns: string[]; rows: ReactNode[][]; onRowClick?: (index: number) => void }) {
   return (
     <div className="table-wrap">
       <table>
@@ -2209,7 +2227,13 @@ function Table({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={index}>{row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`}>{cell}</td>)}</tr>
+            <tr
+              key={index}
+              onClick={onRowClick ? () => onRowClick(index) : undefined}
+              style={onRowClick ? { cursor: 'pointer' } : undefined}
+            >
+              {row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`}>{cell}</td>)}
+            </tr>
           ))}
         </tbody>
       </table>
