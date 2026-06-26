@@ -44,7 +44,7 @@ agent:
   mode: conservative
   markets_enabled: both
   execution_mode: dry_run
-  heartbeat_interval_seconds: 30
+  heartbeat_interval_seconds: 5   # fast loop: refresh prezzi/PnL + check SL/TP ogni 5s
   test_scaling_pct: 10.0
   operating_hours_utc: "00:00-23:59"
 

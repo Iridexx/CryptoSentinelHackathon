@@ -103,6 +103,8 @@ const defaultSettings: AgentMobileSettings = {
 };
 
 const AGENT_REFRESH_MS = 45_000;
+// Refresh leggero (solo posizioni/PnL) per un aggiornamento quasi-realtime.
+const AGENT_FAST_REFRESH_MS = 5_000;
 
 const EmptyState: FC<{ title: string; detail: string }> = ({ title, detail }) => (
   <div className="rounded-xl border border-dashed border-dark-600 bg-dark-800/60 px-4 py-8 text-center">
@@ -1509,6 +1511,17 @@ const AgentTab: FC<AgentTabProps> = ({
     }, AGENT_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [refresh]);
+
+  // Refresh leggero ogni 5s: solo le viste con posizioni aperte e PnL, così i
+  // risultati dei trade si aggiornano in quasi-realtime senza ricaricare tutto.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetchSpotView().then(setSpot).catch(() => {});
+      fetchPerpView().then(setPerp).catch(() => {});
+      fetchGlobalView().then(setGlobal).catch(() => {});
+    }, AGENT_FAST_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Refetch immediato della curva quando l'utente cambia il range (24h/7g/Tutto),
   // senza ricaricare tutte le altre schede.

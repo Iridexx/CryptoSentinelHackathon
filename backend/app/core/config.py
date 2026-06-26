@@ -484,7 +484,7 @@ class Settings(BaseSettings):
     agent_mode: str = Field(default="conservative", alias="AGENT_MODE")
     markets_enabled: str = Field(default="both", alias="MARKETS_ENABLED")
     execution_mode: str = Field(default="dry_run", alias="EXECUTION_MODE")
-    heartbeat_interval_seconds: int = Field(default=30, alias="HEARTBEAT_INTERVAL_SECONDS")
+    heartbeat_interval_seconds: int = Field(default=5, alias="HEARTBEAT_INTERVAL_SECONDS")
     test_scaling_pct: float = Field(default=10.0, alias="TEST_SCALING_PCT")
     operating_hours_utc: str = Field(default="00:00-23:59", alias="OPERATING_HOURS_UTC")
 
