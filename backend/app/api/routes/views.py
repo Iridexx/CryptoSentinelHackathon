@@ -178,14 +178,17 @@ async def trade_detail(
 
 async def _find_trade_position(session, model, trade):
     """Trova la posizione del trade: via open_trade_id (apertura) o, per i trade
-    di chiusura (cls_<position_id>_<hex>), estraendo il position_id dal trade_id."""
+    di chiusura (cls_<position_id>_<hex>) e di scaling-in (add_<position_id>_<hex>),
+    estraendo il position_id dal trade_id."""
     pos = (await session.execute(select(model).where(model.open_trade_id == trade.trade_id))).scalar_one_or_none()
     if pos is not None:
         return pos
-    if trade.trade_id.startswith("cls_"):
-        position_id = trade.trade_id.rsplit("_", 1)[0][len("cls_"):]
-        pos = (await session.execute(select(model).where(model.position_id == position_id))).scalar_one_or_none()
-        return pos
+    for prefix in ("cls_", "add_"):
+        if trade.trade_id.startswith(prefix):
+            position_id = trade.trade_id.rsplit("_", 1)[0][len(prefix):]
+            return (
+                await session.execute(select(model).where(model.position_id == position_id))
+            ).scalar_one_or_none()
     return None
 
 
@@ -367,6 +370,14 @@ def _q2_opt(value) -> str | None:
     return _q2(value)
 
 
+def _fee_opt(value) -> str | None:
+    """Importi piccoli (fee/slippage): virgola fissa fino a 8 decimali, così le
+    fee sub-cent dei trade dry-run non vengono arrotondate a 0.00 da _q2."""
+    if value is None:
+        return None
+    return _fmt_price(value)
+
+
 def _fmt_price(value) -> str:
     """Prezzo come stringa a virgola fissa: niente notazione scientifica,
     minimo 2 decimali, massimo 8, senza zeri finali superflui.
@@ -481,12 +492,18 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
         "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
-        "size": _q2(size),
+        "size": _fmt_price(size),
         "leverage": None,
         "exposure_usd": _q2(size * entry),
-        "fee_mode": trade.fee_mode,
-        "swap_fee_usd": _q2(Decimal(str(trade.swap_fee_usd))) if trade.swap_fee_usd is not None else None,
-        "slippage_usd": _q2(Decimal(str(trade.slippage_usd))) if trade.slippage_usd is not None else None,
+        # Le fee sono pagate all'apertura e salvate sulla posizione: i trade di
+        # chiusura (cls_) le hanno a None, quindi si legge prima dalla posizione.
+        "fee_mode": (position.fee_mode if position and position.fee_mode else trade.fee_mode),
+        "swap_fee_usd": _fee_opt(
+            position.swap_fee_usd if position and position.swap_fee_usd is not None else trade.swap_fee_usd
+        ),
+        "slippage_usd": _fee_opt(
+            position.slippage_usd if position and position.slippage_usd is not None else trade.slippage_usd
+        ),
         "gas_cost_bnb": str(Decimal(str(trade.gas_cost_bnb)).normalize()) if trade.gas_cost_bnb is not None else None,
         "opened_at": opened_at,
         "closed_at": closed_at,
@@ -539,16 +556,16 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
         "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
-        "size": _q2(size),
+        "size": _fmt_price(size),
         "leverage": leverage,
         "exposure_usd": _q2(size * entry * (leverage or 1)),
         "fee_mode": position.fee_mode if position else trade.fee_mode,
         "margin_usd": _q2(position.margin_usd) if position and position.margin_usd is not None else None,
-        "opening_fee_usd": _q2(position.opening_fee_usd) if position and position.opening_fee_usd is not None else None,
-        "taker_fee_usd": _q2_opt(position.taker_fee_usd if position and position.taker_fee_usd is not None else trade.taker_fee_usd),
-        "maker_fee_usd": _q2_opt(position.maker_fee_usd if position and position.maker_fee_usd is not None else trade.maker_fee_usd),
-        "slippage_usd": _q2_opt(position.slippage_usd if position and position.slippage_usd is not None else trade.slippage_usd),
-        "funding_accrued_usd": _q2(position.funding_accrued_usd) if position else None,
+        "opening_fee_usd": _fee_opt(position.opening_fee_usd) if position and position.opening_fee_usd is not None else None,
+        "taker_fee_usd": _fee_opt(position.taker_fee_usd if position and position.taker_fee_usd is not None else trade.taker_fee_usd),
+        "maker_fee_usd": _fee_opt(position.maker_fee_usd if position and position.maker_fee_usd is not None else trade.maker_fee_usd),
+        "slippage_usd": _fee_opt(position.slippage_usd if position and position.slippage_usd is not None else trade.slippage_usd),
+        "funding_accrued_usd": _fee_opt(position.funding_accrued_usd) if position else None,
         "funding_rate_8h": str(position.funding_rate) if position and position.funding_rate is not None else None,
         "opened_at": opened_at,
         "closed_at": closed_at,
