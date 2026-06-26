@@ -1223,20 +1223,21 @@ async def test_perp_trailing_inactive_until_protective_then_activates(db) -> Non
     pos = _perp_pos("perp-trail", Decimal("103"), stop=Decimal("97"), leverage=4)  # mult=base=4.0
 
     async with get_session_factory()() as session:
-        # +1*ATR: breakeven a 100. trail = 103 - 4*2 = 95 < 100 -> resta None.
+        # mult cappato al TP1 (=2.5). +1*ATR: breakeven a 100.
+        # trail = 103 - 2.5*2 = 98 < 100 -> resta None.
         await service._check_sl_tp(session, [], [pos], now)
         assert pos.status == "open"
         assert pos.stop_loss == Decimal("100")
         assert pos.trailing_stop is None
 
-        # Sale a 110: trail = 110 - 8 = 102 > stop 100 -> trailing si attiva.
+        # Sale a 110: trail = 110 - 2.5*2 = 105 > stop 100 -> trailing si attiva.
         pos.current_price = Decimal("110")
         await service._check_sl_tp(session, [], [pos], now)
-        assert pos.trailing_stop == Decimal("102")
+        assert pos.trailing_stop == Decimal("105")
         assert pos.status == "open"
 
-        # Ritraccia a 101 (sotto il trailing 102): chiude per trailing.
-        pos.current_price = Decimal("101")
+        # Ritraccia a 104 (sotto il trailing 105): chiude per trailing.
+        pos.current_price = Decimal("104")
         await service._check_sl_tp(session, [], [pos], now)
         assert pos.status == "closed"
 

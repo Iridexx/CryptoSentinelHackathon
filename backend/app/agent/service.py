@@ -840,8 +840,15 @@ class AgentService:
                         pos.updated_at = now
                         session.add(pos)
                 # C (v3): trailing ATR attivo DA SUBITO (max_price - ATR*mult), solo verso l'alto.
+                # Il moltiplicatore è cappato al TP1: così l'attivazione del trailing
+                # (≈ entry + mult*ATR) non supera mai il TP1, altrimenti il trailing si
+                # accenderebbe oltre il primo take-profit (inutile).
                 if self.settings.spot_trailing_active_from_start:
-                    trail = (pos.max_price or price) - atr_v * Decimal(str(self.settings.spot_trailing_atr_multiplier))
+                    trail_mult = min(
+                        Decimal(str(self.settings.spot_trailing_atr_multiplier)),
+                        Decimal(str(self.settings.spot_tp1_atr_multiplier)),
+                    )
+                    trail = (pos.max_price or price) - atr_v * trail_mult
                     if pos.trailing_stop is None or trail > pos.trailing_stop:
                         pos.trailing_stop = trail
                         pos.updated_at = now
@@ -931,6 +938,12 @@ class AgentService:
                     leverage=pos.leverage, min_lev=ms.perp_min_leverage, max_lev=ms.perp_max_leverage,
                     base=trail_base, floor=trail_floor,
                 )
+                # Cappa il moltiplicatore al TP1: l'attivazione del trailing
+                # (≈ entry + mult*ATR) non deve mai superare il primo take-profit,
+                # altrimenti il trailing si accende oltre TP1 (quasi a TP2) ed è inutile.
+                tp1_cap = Decimal(str(self.settings.perp_tp1_atr_multiplier))
+                if mult > tp1_cap:
+                    mult = tp1_cap
                 if is_long:
                     trail = extreme - atr_v * mult
                     # Si popola solo quando è più protettivo dello stop; altrimenti resta
