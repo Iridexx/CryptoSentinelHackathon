@@ -1089,6 +1089,13 @@ class AgentService:
         trade_heartbeat = await self._daily_trade_heartbeat(session, now=_now)
         selected_assets = selected_watchlist(self.settings)
         markets = _active_markets(self._ms.markets_enabled)
+        # Aggiorna il regime mercato una volta per ciclo, così il flag (e il messaggio
+        # in app) riflette sempre lo stato reale anche se nessun segnale prova a entrare.
+        if "spot" in markets:
+            try:
+                await self._spot_market_regime()
+            except Exception as exc:
+                logger.warning("spot_market_regime_error", error=str(exc))
         scanner_results = []
         for asset in selected_assets:
             if "spot" in markets and asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
