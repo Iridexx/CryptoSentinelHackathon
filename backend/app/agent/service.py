@@ -872,7 +872,9 @@ class AgentService:
                 if price <= pos.trailing_stop:
                     reason = "trailing_stop"
             if reason is None and pos.stop_loss is not None and price <= pos.stop_loss:
-                reason = "stop_loss"
+                # Se lo stop è già a breakeven (>= entry) la chiusura non è una perdita:
+                # etichettala "breakeven" invece di "stop_loss".
+                reason = "breakeven" if pos.stop_loss >= pos.entry_price else "stop_loss"
             # TP2 (uscita finale) solo dopo che TP1 e' stato preso.
             if reason is None and pos.tp1_reached and pos.take_profit_2 and price >= pos.take_profit_2:
                 reason = "take_profit_2"
@@ -989,7 +991,9 @@ class AgentService:
 
             if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
-                    reason = "stop_loss"
+                    # Stop già a breakeven (>= entry long / <= entry short) → non è perdita.
+                    at_be = pos.stop_loss >= pos.entry_price if is_long else pos.stop_loss <= pos.entry_price
+                    reason = "breakeven" if at_be else "stop_loss"
 
             if reason is None and pos.tp1_reached and pos.take_profit_2:
                 if (is_long and price >= pos.take_profit_2) or (not is_long and price <= pos.take_profit_2):
@@ -1786,7 +1790,7 @@ def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
     leva alta). Le chiusure NON su livello (time_stop, manuali) usano il mercato.
     """
     level = None
-    if reason == "stop_loss":
+    if reason in ("stop_loss", "breakeven"):
         level = pos.stop_loss
     elif reason == "trailing_stop":
         level = pos.trailing_stop

@@ -2044,6 +2044,7 @@ type PerpHistoryItem = PerpView['history'][number];
 
 const CLOSE_REASON_LABELS: Record<string, string> = {
   stop_loss: 'Stop Loss',
+  breakeven: 'Breakeven',
   take_profit_1: 'Take Profit 1',
   take_profit_2: 'Take Profit 2',
   trailing_stop: 'Trailing Stop',

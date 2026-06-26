@@ -364,6 +364,7 @@ type PerpHistoryRow = NonNullable<PerpView['history']>[number];
 
 const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> = {
   stop_loss: { label: 'Stop Loss', className: 'text-accent-red' },
+  breakeven: { label: 'Breakeven', className: 'text-gray-300' },
   take_profit_1: { label: 'Take Profit 1', className: 'text-accent-green' },
   take_profit_2: { label: 'Take Profit 2', className: 'text-accent-green' },
   trailing_stop: { label: 'Trailing Stop', className: 'text-accent-green' },

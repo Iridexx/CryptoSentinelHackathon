@@ -1387,3 +1387,40 @@ async def test_perp_breakeven_buffer_not_applied_below_buffer(db) -> None:
         await service._check_sl_tp(session, [], [pos], now)
         assert pos.stop_loss == Decimal("102")
         assert pos.status == "open"
+
+
+@pytest.mark.asyncio
+async def test_spot_close_at_breakeven_is_labeled_breakeven(db) -> None:
+    """Se lo stop che chiude è già a breakeven (>= entry) il motivo è 'breakeven',
+    non 'stop_loss' (chiusura in pari/profitto, non perdita)."""
+    service = AgentService(
+        settings(spot_scale_in_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="p-belabel",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("100"),   # rientra all'entry
+        stop_loss=Decimal("100"),       # stop già a breakeven
+        take_profit_1=Decimal("130"),
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("10"),
+        max_price=Decimal("112"),
+        swap_fee_usd=Decimal("0"),
+        slippage_usd=Decimal("0"),
+        scale_in_count=0,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.status == "closed"
+        trades = await SpotTradeRepository(session).list_for_user(str(USER_ID))
+        closes = [t for t in trades if t.trade_id.startswith("cls_")]
+        assert closes and "auto_close:breakeven" in (closes[0].notes or "")
