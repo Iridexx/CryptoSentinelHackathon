@@ -518,7 +518,7 @@ class Settings(BaseSettings):
     # Cuscinetto extra del breakeven, in % sul prezzo di entry: lo stop si alza a
     # entry+X% (si applica solo se il prezzo l'ha già superato → niente chiusura
     # immediata). Garantisce di coprire le fee con margine. 0 = disattivato.
-    spot_breakeven_buffer_pct: float = Field(default=2.0, alias="SPOT_BREAKEVEN_BUFFER_PCT")
+    spot_breakeven_buffer_pct: float = Field(default=0.3, alias="SPOT_BREAKEVEN_BUFFER_PCT")
     spot_trailing_atr_multiplier: float = Field(default=2.5, alias="SPOT_TRAILING_ATR_MULTIPLIER")
     spot_trailing_active_from_start: bool = Field(default=True, alias="SPOT_TRAILING_ACTIVE_FROM_START")
     spot_tp1_close_fraction: float = Field(default=0.30, alias="SPOT_TP1_CLOSE_FRACTION")
@@ -570,7 +570,7 @@ class Settings(BaseSettings):
     # Cuscinetto extra del breakeven, in % sul prezzo di entry (vedi spot). Su perp
     # con leva può cadere oltre i TP: in quel caso non scatta (i TP chiudono prima)
     # e resta valida la copertura fee andata+ritorno. 0 = disattivato.
-    perp_breakeven_buffer_pct: float = Field(default=2.0, alias="PERP_BREAKEVEN_BUFFER_PCT")
+    perp_breakeven_buffer_pct: float = Field(default=0.3, alias="PERP_BREAKEVEN_BUFFER_PCT")
     # Trailing ATR dinamico: il moltiplicatore scala con la leva del trade tra base
     # (leva minima → largo) e floor (leva massima → stretto). Due preset Largo/Stretto.
     perp_trailing_base_atr_largo: float = Field(default=4.0, alias="PERP_TRAILING_BASE_ATR_LARGO")
