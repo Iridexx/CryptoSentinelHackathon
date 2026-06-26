@@ -1034,9 +1034,13 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
     return <p className="muted">Grafico non disponibile per questo trade.</p>;
   }
   const W = 520;
-  const H = 220;
-  const padX = 8;
-  const padY = 12;
+  const H = 230;
+  const padL = 8;        // sinistra
+  const padR = 48;       // destra: etichette prezzo (Y)
+  const padT = 10;       // alto
+  const padB = 20;       // basso: etichette orario (X)
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
   const entry = Number(chart.entry_price);
   const exit = Number(chart.exit_price);
   const sl = chart.stop_loss != null ? Number(chart.stop_loss) : null;
@@ -1048,9 +1052,9 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   let lo = Math.min(...candles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
   const range = hi - lo;
-  const y = (price: number) => padY + (1 - (price - lo) / range) * (H - 2 * padY);
-  const colW = (W - 2 * padX) / candles.length;
-  const cx = (i: number) => padX + colW * (i + 0.5);
+  const y = (price: number) => padT + (1 - (price - lo) / range) * plotH;
+  const colW = plotW / candles.length;
+  const cx = (i: number) => padL + colW * (i + 0.5);
 
   const ts = (s: string) => new Date(s).getTime();
   const nearest = (target: number) => {
@@ -1065,11 +1069,32 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
 
   const levelLine = (price: number | null, color: string, dash: string) =>
     price == null || Number.isNaN(price) ? null : (
-      <line x1={padX} x2={W - padX} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
+      <line x1={padL} x2={W - padR} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
     );
+
+  // Etichette assi: prezzo (Y, destra) e orario (X, basso).
+  const axisPrice = (v: number) => {
+    const a = Math.abs(v);
+    if (a >= 1000) return v.toFixed(0);
+    if (a >= 1) return v.toFixed(2);
+    if (a >= 0.01) return v.toFixed(4);
+    return v.toExponential(1);
+  };
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => lo + range * f);
+  const fmtClock = (s: string) => new Date(s).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const xTickIdx = candles.length <= 4
+    ? candles.map((_, i) => i)
+    : [0, Math.floor(candles.length / 3), Math.floor((2 * candles.length) / 3), candles.length - 1];
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+      {/* griglia + prezzo (Y) a destra */}
+      {yTicks.map((p, i) => (
+        <g key={`y${i}`}>
+          <line x1={padL} x2={W - padR} y1={y(p)} y2={y(p)} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
+          <text x={W - padR + 4} y={y(p) + 3} fontSize="8" fill="#6b7280">{axisPrice(p)}</text>
+        </g>
+      ))}
       {candles.map((c, i) => {
         const up = c.c >= c.o;
         const color = up ? '#22c55e' : '#ef4444';
@@ -1089,6 +1114,19 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
       {levelLine(entry, '#9ca3af', '1 0')}
       <circle cx={cx(entryIdx)} cy={y(entry)} r="4" fill="#e5e7eb" stroke="#0b0e11" strokeWidth="1" />
       <circle cx={cx(exitIdx)} cy={y(exit)} r="4" fill={exitGood ? '#22c55e' : '#ef4444'} stroke="#0b0e11" strokeWidth="1" />
+      {/* orario (X) in basso */}
+      {xTickIdx.map((idx) => (
+        <text
+          key={`x${idx}`}
+          x={cx(idx)}
+          y={H - 6}
+          fontSize="8"
+          fill="#6b7280"
+          textAnchor={idx === 0 ? 'start' : idx === candles.length - 1 ? 'end' : 'middle'}
+        >
+          {fmtClock(candles[idx].t)}
+        </text>
+      ))}
     </svg>
   );
 }
