@@ -538,6 +538,35 @@ async def test_adjust_equity_initialises_missing_portfolio(db) -> None:
     assert portfolio.initial_equity_usd == Decimal("300")
 
 
+def test_equity_curve_deposits_up_to_is_time_weighted() -> None:
+    """Un versamento non deve rebaselinare la storia: il capitale versato cresce
+    solo dal momento del deposito in poi (somma cumulativa fino a t)."""
+    from datetime import timedelta
+    from types import SimpleNamespace
+
+    from backend.app.api.routes.views import _deposits_up_to
+
+    t0 = datetime(2026, 6, 26, 10, 0, tzinfo=UTC)
+    adjustments = [
+        SimpleNamespace(amount=Decimal("200"), created_at=t0),
+        SimpleNamespace(amount=Decimal("-50"), created_at=t0 + timedelta(hours=2)),
+        SimpleNamespace(amount=Decimal("550"), created_at=t0 + timedelta(hours=5)),
+    ]
+    assert _deposits_up_to(adjustments, t0 - timedelta(hours=1)) == Decimal("0")   # prima di tutto
+    assert _deposits_up_to(adjustments, t0 + timedelta(hours=1)) == Decimal("200")  # dopo il 1°
+    assert _deposits_up_to(adjustments, t0 + timedelta(hours=3)) == Decimal("150")  # dopo +200 e -50
+    assert _deposits_up_to(adjustments, t0 + timedelta(hours=6)) == Decimal("700")  # dopo tutti
+
+    # Ricostruzione baseline: initial (post-versamenti) - totale = base pre-versamenti.
+    initial_post = Decimal("900")   # es. 200 base + 700 versamenti netti
+    total = _deposits_up_to(adjustments, t0 + timedelta(hours=6))
+    base_initial = initial_post - total
+    assert base_initial == Decimal("200")
+    # Punto storico prima dei versamenti: contributed = base (storia invariata).
+    contributed_old = base_initial + _deposits_up_to(adjustments, t0 - timedelta(hours=1))
+    assert contributed_old == Decimal("200")
+
+
 @pytest.mark.asyncio
 async def test_reset_all_data_without_backup_does_not_archive(db) -> None:
     factory = get_session_factory()

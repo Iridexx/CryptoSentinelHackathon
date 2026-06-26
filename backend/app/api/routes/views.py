@@ -75,14 +75,29 @@ async def equity_curve(
         stmt = stmt.where(PnlSnapshot.timestamp_utc >= since)
     stmt = stmt.order_by(PnlSnapshot.timestamp_utc.asc())
     snapshots = list((await session.execute(stmt)).scalars().all())
-    portfolio = await PnlRepository(session).get_portfolio(user_id)
+    pnl_repo = PnlRepository(session)
+    portfolio = await pnl_repo.get_portfolio(user_id)
     initial = _initial_equity(snapshots, settings, portfolio, market)
     benchmark = await _btc_benchmark(snapshots)
+    # Versamenti/prelievi manuali: sono capitale aggiunto, non PnL. Il grafico va
+    # misurato contro il capitale versato FINO A QUEL MOMENTO, altrimenti un
+    # deposito odierno rebaselina tutta la storia (i punti vecchi sembrano in
+    # grossa perdita). Riguarda solo il 'global' (spot/perp non includono la cassa).
+    adjustments = (
+        sorted(await pnl_repo.list_equity_adjustments(user_id, limit=1000), key=lambda a: a.created_at)
+        if market == "global" else []
+    )
+    total_deposits = sum((Decimal(str(a.amount)) for a in adjustments), Decimal("0"))
+    base_initial = initial - total_deposits  # base prima di ogni versamento
     items = []
     for snapshot in snapshots:
         equity = _market_equity(snapshot, market)
-        pnl_usd = equity - initial
-        pnl_pct = (pnl_usd / initial * Decimal("100")) if initial > 0 else Decimal("0")
+        if adjustments:
+            contributed = base_initial + _deposits_up_to(adjustments, snapshot.timestamp_utc)
+        else:
+            contributed = initial
+        pnl_usd = equity - contributed
+        pnl_pct = (pnl_usd / contributed * Decimal("100")) if contributed > 0 else Decimal("0")
         item = {
             "timestamp_utc": snapshot.timestamp_utc.isoformat(),
             "equity_usd": _q2(equity),
@@ -349,6 +364,17 @@ def _initial_equity(snapshots: list[PnlSnapshot], settings, portfolio=None, mark
     if snapshots:
         return Decimal(_market_equity(snapshots[0], market))
     return Decimal(str(settings.dry_run_capital_usd))
+
+
+def _deposits_up_to(adjustments: list, ts) -> Decimal:
+    """Somma dei versamenti/prelievi (importi con segno) effettuati fino a `ts`."""
+    total = Decimal("0")
+    for adjustment in adjustments:
+        if adjustment.created_at <= ts:
+            total += Decimal(str(adjustment.amount))
+        else:
+            break  # lista ordinata per created_at asc
+    return total
 
 
 def _market_equity(snapshot: PnlSnapshot, market: str) -> Decimal:
