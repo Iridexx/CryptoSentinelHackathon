@@ -106,6 +106,8 @@ export type GlobalView = {
   perp_exposure_usd: string;
   total_fees_usd: string;
   daily_pnl_usd: string;
+  daily_pnl_net_pct: number;
+  pnl_total_net_pct: number;
   agent_status: string;
   trades_today: number;
   open_spot_positions: number;

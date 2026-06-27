@@ -224,6 +224,8 @@ class ViewService:
                 perp_exposure_usd=perp_exposure_usd,
                 total_fees_usd=total_fees_usd,
                 daily_pnl_usd=Decimal("0"),
+                daily_pnl_net_pct=0.0,
+                pnl_total_net_pct=0.0,
                 agent_status="idle",
                 trades_today=0,
                 open_spot_positions=len(open_spot),
@@ -235,12 +237,13 @@ class ViewService:
         # (evita sfasature tra fast_tick aggiornamenti e letture API)
         total_equity = portfolio.initial_equity_usd + realized + unrealized
         pnl_total = realized + unrealized
+        initial = portfolio.initial_equity_usd
         sharpe = _daily_sharpe(snapshots)
-        pnl_pct = (
-            float(pnl_total / portfolio.initial_equity_usd * 100)
-            if portfolio.initial_equity_usd > 0
-            else 0.0
-        )
+        pnl_pct = float(pnl_total / initial * 100) if initial > 0 else 0.0
+        # pnl_usd nei trade è già al netto delle fee: % giornaliero e globale
+        # si calcolano direttamente dai valori già netti.
+        daily_pnl = portfolio.daily_pnl_usd
+        daily_pnl_net_pct = float(daily_pnl / initial * 100) if initial > 0 else 0.0
         return GlobalView(
             total_equity_usd=total_equity,
             initial_equity_usd=portfolio.initial_equity_usd,
@@ -257,7 +260,9 @@ class ViewService:
             spot_exposure_usd=spot_exposure_usd,
             perp_exposure_usd=perp_exposure_usd,
             total_fees_usd=total_fees_usd,
-            daily_pnl_usd=portfolio.daily_pnl_usd,
+            daily_pnl_usd=daily_pnl,
+            daily_pnl_net_pct=round(daily_pnl_net_pct, 2),
+            pnl_total_net_pct=round(pnl_pct, 2),
             agent_status=portfolio.agent_status,
             trades_today=portfolio.trades_today,
             open_spot_positions=len(open_spot),

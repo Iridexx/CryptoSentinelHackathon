@@ -673,6 +673,8 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
             <Metric label="PnL realizzato" value={money(data.realized_pnl_usd)} tone={Number(data.realized_pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="PnL aperto" value={money(data.unrealized_pnl_usd)} tone={Number(data.unrealized_pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="Daily" value={money(data.daily_pnl_usd)} />
+            <Metric label="PnL % Day" value={`${data.daily_pnl_net_pct >= 0 ? '+' : ''}${data.daily_pnl_net_pct.toFixed(2)}%`} tone={data.daily_pnl_net_pct >= 0 ? 'good' : 'bad'} />
+            <Metric label="PnL % Global" value={`${data.pnl_total_net_pct >= 0 ? '+' : ''}${data.pnl_total_net_pct.toFixed(2)}%`} tone={data.pnl_total_net_pct >= 0 ? 'good' : 'bad'} />
             <Metric label="Trades" value={String(data.trades_today)} />
             <Metric label="Drawdown" value={`${data.drawdown_pct}%`} tone="warn" />
             <Metric label="Exposure" value={`${data.exposure_pct}%`} />

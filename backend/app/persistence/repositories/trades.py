@@ -96,13 +96,15 @@ class SpotTradeRepository:
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
 
-    async def sum_fees(self, user_id: str) -> Decimal:
-        """Somma fees_quote di tutti i trade spot dry-run (fee pagate all'apertura)."""
+    async def sum_fees(self, user_id: str, *, since: datetime | None = None) -> Decimal:
+        """Somma fees_quote dei trade spot (fee pagate). `since` filtra per giorno."""
         stmt = (
             select(func.sum(SpotTrade.fees_quote))
             .where(SpotTrade.user_id == user_id)
             .where(SpotTrade.fees_quote.is_not(None))
         )
+        if since is not None:
+            stmt = stmt.where(SpotTrade.timestamp_utc >= since)
         result = await self._session.execute(stmt)
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
@@ -171,14 +173,16 @@ class PerpTradeRepository:
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
 
-    async def sum_fees(self, user_id: str) -> Decimal:
-        """Somma fees_quote dei trade perp di apertura dry-run (fee pagate)."""
+    async def sum_fees(self, user_id: str, *, since: datetime | None = None) -> Decimal:
+        """Somma fees_quote dei trade perp (fee pagate). `since` filtra per giorno."""
         stmt = (
             select(func.sum(PerpTrade.fees_quote))
             .where(PerpTrade.user_id == user_id)
             .where(PerpTrade.fees_quote.is_not(None))
             .where(PerpTrade.direction == "open")
         )
+        if since is not None:
+            stmt = stmt.where(PerpTrade.timestamp_utc >= since)
         result = await self._session.execute(stmt)
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")

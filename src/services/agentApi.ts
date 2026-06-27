@@ -148,6 +148,8 @@ export interface GlobalView {
   open_spot_positions: number;
   open_perp_positions: number;
   total_fees_usd: string;
+  daily_pnl_net_pct: number;
+  pnl_total_net_pct: number;
   pnl_history: PnlPoint[];
 }
 

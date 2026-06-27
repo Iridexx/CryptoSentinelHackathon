@@ -653,7 +653,8 @@ const GlobalPane: FC<{
         <Stat label="PnL tot." value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL aperto" value={fmtUsd(data?.unrealized_pnl_usd)} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL realizzato" value={fmtUsd(data?.realized_pnl_usd)} tone={Number(data?.realized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
-        <Stat label="PnL %" value={`${Number(data?.pnl_total_pct ?? 0) >= 0 ? '+' : ''}${Number(data?.pnl_total_pct ?? 0).toFixed(2)}%`} tone={Number(data?.pnl_total_pct ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="PnL % Global" value={`${Number(data?.pnl_total_net_pct ?? 0) >= 0 ? '+' : ''}${Number(data?.pnl_total_net_pct ?? 0).toFixed(2)}%`} tone={Number(data?.pnl_total_net_pct ?? 0) >= 0 ? 'good' : 'bad'} />
+        <Stat label="PnL % Day" value={`${Number(data?.daily_pnl_net_pct ?? 0) >= 0 ? '+' : ''}${Number(data?.daily_pnl_net_pct ?? 0).toFixed(2)}%`} tone={Number(data?.daily_pnl_net_pct ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="Drawdown" value={fmtPct(data?.drawdown_pct)} tone={Number(data?.drawdown_pct ?? 0) < -10 ? 'bad' : 'neutral'} />
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
         <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />

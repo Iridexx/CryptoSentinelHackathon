@@ -143,6 +143,8 @@ class GlobalView(BaseModel):
     perp_exposure_usd: Decimal = Decimal("0")
     total_fees_usd: Decimal = Decimal("0")
     daily_pnl_usd: Decimal
+    daily_pnl_net_pct: float = 0.0
+    pnl_total_net_pct: float = 0.0
     agent_status: str
     trades_today: int
     open_spot_positions: int
