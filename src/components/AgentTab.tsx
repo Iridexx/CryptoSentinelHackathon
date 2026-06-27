@@ -505,7 +505,8 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
         <Stat label="Spot PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0)) >= 0 ? 'good' : 'bad'} />
         <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
-        <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
+        <Stat label="Trade Tot" value={String(data?.trade_count ?? 0)} />
+        <Stat label="Trade Day" value={String(data?.trade_count_today ?? 0)} />
       </div>
       {!hasActivity && (
         riskOff
@@ -573,7 +574,8 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
         <Stat label="Perp PnL" value={fmtUsd(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0))} tone={(Number(data?.realized_pnl_usd ?? 0) + Number(data?.unrealized_pnl_usd ?? 0)) >= 0 ? 'good' : 'bad'} />
         <Stat label="Win rate" value={fmtPct(data?.win_rate_pct ?? 0)} />
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
-        <Stat label="Trades" value={String(data?.trade_count ?? 0)} />
+        <Stat label="Trade Tot" value={String(data?.trade_count ?? 0)} />
+        <Stat label="Trade Day" value={String(data?.trade_count_today ?? 0)} />
       </div>
       {!hasActivity && (
         <EmptyState title="In attesa di segnali perp" detail="Nessuna posizione aperta e nessun trade registrato." />

@@ -68,6 +68,7 @@ export interface SpotView {
   unrealized_pnl_usd: string;
   win_rate_pct: number;
   trade_count: number;
+  trade_count_today: number;
   market_risk_off?: boolean;
 }
 
@@ -123,6 +124,7 @@ export interface PerpView {
   unrealized_pnl_usd: string;
   win_rate_pct: number;
   trade_count: number;
+  trade_count_today: number;
 }
 
 export interface PnlPoint {

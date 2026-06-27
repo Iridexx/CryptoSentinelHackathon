@@ -711,7 +711,8 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
             <Metric label="Realized" value={money(data.realized_pnl_usd)} />
             <Metric label="Unrealized" value={money(data.unrealized_pnl_usd)} />
             <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(2)}%`} />
-            <Metric label="Trades" value={String(data.trade_count)} />
+            <Metric label="Trade Tot" value={String(data.trade_count)} />
+            <Metric label="Trade Day" value={String(data.trade_count_today ?? 0)} />
           </div>
           {data.open_positions.length === 0 ? (
             <Empty title="No open Spot positions" detail="The agent has no active Spot exposure." />
@@ -769,7 +770,8 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
             <Metric label="Realized" value={money(data.realized_pnl_usd)} />
             <Metric label="Unrealized" value={money(data.unrealized_pnl_usd)} />
             <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(2)}%`} />
-            <Metric label="Trades" value={String(data.trade_count)} />
+            <Metric label="Trade Tot" value={String(data.trade_count)} />
+            <Metric label="Trade Day" value={String(data.trade_count_today ?? 0)} />
           </div>
           {data.open_positions.length === 0 ? (
             <Empty title="No open Perp positions" detail="The agent has no active Perp exposure." />

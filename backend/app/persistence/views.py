@@ -59,6 +59,10 @@ class ViewService:
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
+        from datetime import UTC, datetime as _dt
+        day_start_spot = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        spot_trade_count_tot = await trade_repo.count_closed(user_id)
+        spot_trade_count_today = await trade_repo.count_closed(user_id, since=day_start_spot)
         return SpotView(
             market_risk_off=_market_risk_off(user_id),
             open_positions=[
@@ -105,7 +109,8 @@ class ViewService:
             realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
             win_rate_pct=win["win_rate_pct"],
-            trade_count=len(trades),
+            trade_count=spot_trade_count_tot,
+            trade_count_today=spot_trade_count_today,
         )
 
     async def perp_view(self, user_id: str) -> PerpView:
@@ -117,6 +122,10 @@ class ViewService:
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
         history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
+        from datetime import UTC, datetime as _dt
+        day_start = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        trade_count_tot = await trade_repo.count_closed(user_id)
+        trade_count_today = await trade_repo.count_closed(user_id, since=day_start)
         return PerpView(
             open_positions=[
                 PerpPositionView(
@@ -172,7 +181,8 @@ class ViewService:
             realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
             win_rate_pct=win["win_rate_pct"],
-            trade_count=len(trades),
+            trade_count=trade_count_tot,
+            trade_count_today=trade_count_today,
         )
 
     async def global_view(self, user_id: str) -> GlobalView:

@@ -39,6 +39,7 @@ export type SpotView = {
   unrealized_pnl_usd: string;
   win_rate_pct: number;
   trade_count: number;
+  trade_count_today: number;
 };
 
 export type PnlPoint = {
@@ -87,6 +88,7 @@ export type PerpView = {
   unrealized_pnl_usd: string;
   win_rate_pct: number;
   trade_count: number;
+  trade_count_today: number;
 };
 
 export type GlobalView = {

@@ -72,6 +72,19 @@ class SpotTradeRepository:
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
+    async def count_closed(self, user_id: str, *, since: datetime | None = None) -> int:
+        """Conta posizioni spot chiuse (trade con pnl_usd registrato). `since` filtra per giorno."""
+        stmt = (
+            select(func.count())
+            .select_from(SpotTrade)
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.pnl_usd.is_not(None))
+        )
+        if since is not None:
+            stmt = stmt.where(SpotTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
+        return int(result.scalar_one())
+
     async def count_today(self, user_id: str, now: datetime) -> int:
         """Conta trade spot dell'utente nel giorno corrente (da mezzanotte UTC)."""
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -158,6 +171,19 @@ class PerpTradeRepository:
             .where(PerpTrade.user_id == user_id)
             .where(PerpTrade.timestamp_utc >= start)
         )
+        return int(result.scalar_one())
+
+    async def count_closed(self, user_id: str, *, since: datetime | None = None) -> int:
+        """Conta posizioni perp chiuse (trade con pnl_usd registrato). `since` filtra per giorno."""
+        stmt = (
+            select(func.count())
+            .select_from(PerpTrade)
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.pnl_usd.is_not(None))
+        )
+        if since is not None:
+            stmt = stmt.where(PerpTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
     async def sum_realized_pnl(self, user_id: str, *, since: datetime | None = None) -> Decimal:
