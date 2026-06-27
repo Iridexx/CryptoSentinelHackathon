@@ -115,6 +115,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_value_area_pct: 68,
   perp_atr_stop_multiplier: 0.5,
   perp_trailing_mode: 'largo' as const,
+  perp_trailing_pnl_pct: 0,
   perp_time_stop_hours: 8,
   perp_fee_mode: 'taker' as const,
   spot_fee_mode: 'all' as const,
@@ -1296,10 +1297,11 @@ const SetupPane: FC<{
           <NumberInput label="Leva max (bassa vol.)" value={settings.perp_max_leverage} onChange={(perp_max_leverage) => patch({ perp_max_leverage })} />
           <NumberInput label="Value area %" value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
           <NumberInput label="ATR stop" value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
-          <SelectInput label="Trailing (adatta alla leva)" value={settings.perp_trailing_mode} onChange={(v) => patch({ perp_trailing_mode: v as 'largo' | 'stretto' })} options={[
+          <SelectInput label="Trailing ATR (adatta alla leva)" value={settings.perp_trailing_mode} onChange={(v) => patch({ perp_trailing_mode: v as 'largo' | 'stretto' })} options={[
             { value: 'largo', label: 'Largo — lascia correre' },
             { value: 'stretto', label: 'Stretto — blocca prima' },
           ]} />
+          <NumberInput label="Trailing dist. % (0=solo ATR)" value={settings.perp_trailing_pnl_pct} step={0.1} onChange={(perp_trailing_pnl_pct) => patch({ perp_trailing_pnl_pct })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(v) => patch({ perp_fee_mode: v as 'taker' | 'maker' | 'none' })} options={[
             { value: 'taker', label: 'Taker (market) — 0.06%' },
             { value: 'maker', label: 'Maker (limit) — 0.02%' },

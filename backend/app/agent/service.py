@@ -995,13 +995,27 @@ class AgentService:
                 if mult > tp1_cap:
                     mult = tp1_cap
                 if is_long:
-                    trail = extreme - atr_v * mult
+                    trail_atr = extreme - atr_v * mult
+                    # Se perp_trailing_pnl_pct > 0, calcola anche il trailing a distanza
+                    # fissa (% del prezzo dal massimo). Vince il più alto tra i due.
+                    pnl_pct = Decimal(str(ms.perp_trailing_pnl_pct))
+                    if pnl_pct > 0:
+                        trail_pnl = extreme * (1 - pnl_pct / Decimal("100"))
+                        trail = max(trail_atr, trail_pnl)
+                    else:
+                        trail = trail_atr
                     # Si popola solo quando è più protettivo dello stop; altrimenti resta
                     # None → UI "non attivo". Si alza soltanto, mai scende.
                     if (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
                 else:
-                    trail = extreme + atr_v * mult
+                    trail_atr = extreme + atr_v * mult
+                    pnl_pct = Decimal(str(ms.perp_trailing_pnl_pct))
+                    if pnl_pct > 0:
+                        trail_pnl = extreme * (1 + pnl_pct / Decimal("100"))
+                        trail = min(trail_atr, trail_pnl)
+                    else:
+                        trail = trail_atr
                     if (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
 

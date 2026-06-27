@@ -57,6 +57,9 @@ class AgentMobileSettings(BaseModel):
     # Ampiezza del trailing perp: "largo" lascia correre (restituisce di più),
     # "stretto" blocca prima. Il moltiplicatore effettivo scala con la leva del trade.
     perp_trailing_mode: str = Field(default="largo", pattern="^(largo|stretto)$")
+    # Se > 0, viene calcolato anche un trailing a distanza fissa dal massimo (% del prezzo).
+    # Vince il più protettivo tra ATR e questa %. Con 0 si usa solo l'ATR.
+    perp_trailing_pnl_pct: float = Field(default=0.0, ge=0.0, le=20.0)
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)
     perp_fee_mode: str = Field(default="taker", pattern="^(taker|maker|none)$")
     spot_fee_mode: str = Field(default="all", pattern="^(all|none)$")
