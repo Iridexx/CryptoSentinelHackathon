@@ -25,17 +25,12 @@ from backend.app.schemas.mobile_agent import (
 router = APIRouter(prefix="/api/v1/mobile/agent", tags=["mobile-agent"])
 SETTINGS_KEY = "mobile_agent_settings"
 
-# Mapping mobile_field → Settings attribute name
+# Mapping mobile_field → Settings attribute name (solo parametri globali e di strategia;
+# i parametri risk market-specific vengono letti direttamente dall'_ms nel risk manager).
 _MOBILE_TO_SETTINGS: dict[str, str] = {
-    "capital_per_trade_pct": "risk_capital_per_trade_pct",
-    "per_trade_pct": "risk_per_trade_pct",
-    "max_open_positions": "risk_max_open_positions",
-    "max_total_exposure_pct": "risk_max_total_exposure_pct",
     "daily_loss_limit_pct": "risk_daily_loss_limit_pct",
     "drawdown_cap_pct": "risk_max_drawdown_pct",
     "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
-    "max_slippage_pct": "risk_max_slippage_pct",
-    "cooldown_minutes": "risk_cooldown_minutes",
     "spot_confidence_threshold": "spot_confidence_threshold",
     "spot_atr_stop_multiplier": "spot_atr_stop_multiplier",
     "spot_time_stop_hours": "spot_time_stop_hours_fallback",
@@ -76,6 +71,12 @@ def _settings_from_runtime(settings: SettingsDep) -> tuple[AgentMobileSettings, 
 
 
 def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
+    cap = settings.risk_capital_per_trade_pct
+    slippage = settings.risk_max_slippage_pct
+    cooldown = settings.risk_cooldown_minutes
+    max_open = settings.risk_max_open_positions
+    exposure = settings.risk_max_total_exposure_pct
+    per_trade = settings.risk_per_trade_pct
     return AgentMobileSettings(
         mode=settings.agent_mode,
         markets_enabled=settings.markets_enabled,
@@ -83,15 +84,31 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         network=settings.bsc_network,
         test_scaling_pct=settings.test_scaling_pct,
         operating_hours_utc=settings.operating_hours_utc,
-        capital_per_trade_pct=settings.risk_capital_per_trade_pct,
-        per_trade_pct=settings.risk_per_trade_pct,
-        max_open_positions=settings.risk_max_open_positions,
-        max_total_exposure_pct=settings.risk_max_total_exposure_pct,
         daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         min_pool_liquidity_usd=settings.risk_min_pool_liquidity_usd,
-        max_slippage_pct=settings.risk_max_slippage_pct,
-        cooldown_minutes=settings.risk_cooldown_minutes,
+        # Parametri spot (default = valore condiviso dal YAML)
+        spot_capital_per_trade_pct=cap,
+        spot_per_trade_pct=per_trade,
+        spot_max_open_positions=max_open,
+        spot_max_exposure_pct=exposure,
+        spot_cooldown_minutes=cooldown,
+        spot_max_slippage_pct=slippage,
+        # Parametri perp (default = valore condiviso dal YAML)
+        perp_capital_per_trade_pct=cap,
+        perp_per_trade_pct=per_trade,
+        perp_max_open_positions=max_open,
+        perp_max_exposure_pct=exposure,
+        perp_cooldown_minutes=cooldown,
+        perp_max_slippage_pct=slippage,
+        # Legacy
+        capital_per_trade_pct=cap,
+        per_trade_pct=per_trade,
+        max_open_positions=max_open,
+        max_total_exposure_pct=exposure,
+        max_slippage_pct=slippage,
+        cooldown_minutes=cooldown,
+        # Spot strategy
         spot_confidence_threshold=settings.spot_confidence_threshold,
         spot_volatility_trigger_pct=settings.spot_volatility_trigger_pct,
         spot_relative_volume_threshold=settings.spot_relative_volume_threshold,
@@ -99,6 +116,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         spot_trailing_distance_pct=settings.spot_trailing_distance_pct,
         spot_partial_take_profit_pct=settings.spot_partial_take_profit_pct,
         spot_time_stop_hours=settings.spot_time_stop_hours,
+        # Perp strategy
         perp_direction_mode=settings.perp_direction_mode,
         perp_min_leverage=settings.perp_min_leverage,
         perp_max_leverage=settings.perp_max_leverage,

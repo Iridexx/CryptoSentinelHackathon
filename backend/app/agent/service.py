@@ -124,6 +124,11 @@ class AgentService:
                 return AgentMobileSettings.model_validate_json(raw)
             except ValueError:
                 pass
+        cap = self.settings.risk_capital_per_trade_pct
+        slippage = self.settings.risk_max_slippage_pct
+        cooldown = self.settings.risk_cooldown_minutes
+        max_open = self.settings.risk_max_open_positions
+        exposure = self.settings.risk_max_total_exposure_pct
         return AgentMobileSettings(
             mode=self.settings.agent_mode,
             markets_enabled=self.settings.markets_enabled,
@@ -131,14 +136,31 @@ class AgentService:
             network=self.settings.bsc_network,
             test_scaling_pct=self.settings.test_scaling_pct,
             operating_hours_utc=self.settings.operating_hours_utc,
-            capital_per_trade_pct=self.settings.risk_capital_per_trade_pct,
-            max_open_positions=self.settings.risk_max_open_positions,
-            max_total_exposure_pct=self.settings.risk_max_total_exposure_pct,
             daily_loss_limit_pct=self.settings.risk_daily_loss_limit_pct,
             drawdown_cap_pct=self.settings.risk_max_drawdown_pct,
             min_pool_liquidity_usd=self.settings.risk_min_pool_liquidity_usd,
-            max_slippage_pct=self.settings.risk_max_slippage_pct,
-            cooldown_minutes=self.settings.risk_cooldown_minutes,
+            # Parametri spot
+            spot_capital_per_trade_pct=cap,
+            spot_per_trade_pct=self.settings.risk_per_trade_pct,
+            spot_max_open_positions=max_open,
+            spot_max_exposure_pct=exposure,
+            spot_cooldown_minutes=cooldown,
+            spot_max_slippage_pct=slippage,
+            # Parametri perp
+            perp_capital_per_trade_pct=cap,
+            perp_per_trade_pct=self.settings.risk_per_trade_pct,
+            perp_max_open_positions=max_open,
+            perp_max_exposure_pct=exposure,
+            perp_cooldown_minutes=cooldown,
+            perp_max_slippage_pct=slippage,
+            # Legacy (backward compat)
+            capital_per_trade_pct=cap,
+            per_trade_pct=self.settings.risk_per_trade_pct,
+            max_open_positions=max_open,
+            max_total_exposure_pct=exposure,
+            max_slippage_pct=slippage,
+            cooldown_minutes=cooldown,
+            # Spot strategy
             spot_confidence_threshold=self.settings.spot_confidence_threshold,
             spot_volatility_trigger_pct=self.settings.spot_volatility_trigger_pct,
             spot_relative_volume_threshold=self.settings.spot_relative_volume_threshold,
@@ -146,6 +168,8 @@ class AgentService:
             spot_trailing_distance_pct=self.settings.spot_trailing_distance_pct,
             spot_partial_take_profit_pct=self.settings.spot_partial_take_profit_pct,
             spot_time_stop_hours=self.settings.spot_time_stop_hours,
+            spot_fee_mode="all",
+            # Perp strategy
             perp_direction_mode=self.settings.perp_direction_mode,
             perp_min_leverage=self.settings.perp_min_leverage,
             perp_max_leverage=self.settings.perp_max_leverage,
@@ -153,7 +177,6 @@ class AgentService:
             perp_atr_stop_multiplier=self.settings.perp_atr_stop_multiplier,
             perp_trailing_mode=self.settings.perp_trailing_mode,
             perp_time_stop_hours=self.settings.perp_time_stop_hours,
-            spot_fee_mode="all",
         )
 
     def status(self) -> dict:
@@ -1221,6 +1244,7 @@ class AgentService:
             portfolio=portfolio,
             open_spot_positions=spot_positions,
             open_perp_positions=perp_positions,
+            ms=self._ms,
         )
         brain_decision = await self._brain_decision(session, signal, risk_decision)
         decision = await self._record_decision(session, signal, risk_decision, brain_decision)
@@ -1260,7 +1284,9 @@ class AgentService:
 
     async def _in_cooldown(self, session: AsyncSession, signal: dict, now: datetime) -> bool:
         """True se esiste un trade recente sull'asset entro la finestra di cooldown."""
-        minutes = self._ms.cooldown_minutes
+        ms = self._ms
+        market = signal.get("market", "spot")
+        minutes = ms.perp_cooldown_minutes if market == "perp" else ms.spot_cooldown_minutes
         asset = signal.get("asset")
         if minutes <= 0 or not asset:
             return False
@@ -1540,7 +1566,7 @@ class AgentService:
             from_asset=str(from_asset),
             to_asset=str(to_asset),
             wallet_address=self.settings.wallet_address,
-            slippage_pct=Decimal(str(self._ms.max_slippage_pct)),
+            slippage_pct=Decimal(str(self._ms.spot_max_slippage_pct)),
         )
         return {"status": "prepared", "provider": self.spot_registry.active_name.value, "quote": quote.model_dump()}
 

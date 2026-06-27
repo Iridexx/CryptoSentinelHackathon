@@ -270,13 +270,29 @@ export interface AgentMobileSettings {
   network: string;
   test_scaling_pct: number;
   operating_hours_utc: string;
+  // Globali
+  daily_loss_limit_pct: number;
+  drawdown_cap_pct: number;
+  min_pool_liquidity_usd: number;
+  // Spot
+  spot_capital_per_trade_pct: number;
+  spot_per_trade_pct: number;
+  spot_max_open_positions: number;
+  spot_max_exposure_pct: number;
+  spot_cooldown_minutes: number;
+  spot_max_slippage_pct: number;
+  // Perp
+  perp_capital_per_trade_pct: number;
+  perp_per_trade_pct: number;
+  perp_max_open_positions: number;
+  perp_max_exposure_pct: number;
+  perp_cooldown_minutes: number;
+  perp_max_slippage_pct: number;
+  // Legacy (backward compat)
   capital_per_trade_pct: number;
   per_trade_pct: number;
   max_open_positions: number;
   max_total_exposure_pct: number;
-  daily_loss_limit_pct: number;
-  drawdown_cap_pct: number;
-  min_pool_liquidity_usd: number;
   max_slippage_pct: number;
   cooldown_minutes: number;
   spot_confidence_threshold: number;

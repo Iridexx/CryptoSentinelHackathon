@@ -81,13 +81,25 @@ const defaultSettings: AgentMobileSettings = {
   network: 'testnet',
   test_scaling_pct: 10,
   operating_hours_utc: '00:00-23:59',
+  daily_loss_limit_pct: -8,
+  drawdown_cap_pct: -15,
+  min_pool_liquidity_usd: 50000,
+  spot_capital_per_trade_pct: 6,
+  spot_per_trade_pct: 1.5,
+  spot_max_open_positions: 3,
+  spot_max_exposure_pct: 30,
+  spot_cooldown_minutes: 30,
+  spot_max_slippage_pct: 1,
+  perp_capital_per_trade_pct: 4,
+  perp_per_trade_pct: 1.5,
+  perp_max_open_positions: 5,
+  perp_max_exposure_pct: 20,
+  perp_cooldown_minutes: 15,
+  perp_max_slippage_pct: 0.5,
   capital_per_trade_pct: 6,
   per_trade_pct: 1.5,
   max_open_positions: 3,
   max_total_exposure_pct: 30,
-  daily_loss_limit_pct: -8,
-  drawdown_cap_pct: -15,
-  min_pool_liquidity_usd: 50000,
   max_slippage_pct: 1,
   cooldown_minutes: 30,
   spot_confidence_threshold: 0.7,
@@ -1227,20 +1239,27 @@ const SetupPane: FC<{
       </section>
 
       <section className="space-y-3">
-        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Risk</h3>
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Risk globale</h3>
         <div className="grid grid-cols-2 gap-3">
-          <NumberInput label="Size %" value={settings.capital_per_trade_pct} onChange={(capital_per_trade_pct) => patch({ capital_per_trade_pct })} />
-          <NumberInput label="Risk %" value={settings.per_trade_pct} step={0.1} onChange={(per_trade_pct) => patch({ per_trade_pct })} />
-          <NumberInput label="Max positions" value={settings.max_open_positions} onChange={(max_open_positions) => patch({ max_open_positions })} />
-          <NumberInput label="Exposure %" value={settings.max_total_exposure_pct} onChange={(max_total_exposure_pct) => patch({ max_total_exposure_pct })} />
           <NumberInput label="Daily loss %" value={settings.daily_loss_limit_pct} onChange={(daily_loss_limit_pct) => patch({ daily_loss_limit_pct })} />
-          <NumberInput label="Slippage %" value={settings.max_slippage_pct} step={0.1} onChange={(max_slippage_pct) => patch({ max_slippage_pct })} />
-          <NumberInput label="Cooldown min" value={settings.cooldown_minutes} onChange={(cooldown_minutes) => patch({ cooldown_minutes })} />
+          <NumberInput label="Drawdown cap %" value={settings.drawdown_cap_pct} onChange={(drawdown_cap_pct) => patch({ drawdown_cap_pct })} />
         </div>
       </section>
 
       <section className="space-y-3">
-        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot</h3>
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot — risk</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <NumberInput label="Size %" value={settings.spot_capital_per_trade_pct} onChange={(spot_capital_per_trade_pct) => patch({ spot_capital_per_trade_pct })} />
+          <NumberInput label="Rischio %" value={settings.spot_per_trade_pct} step={0.1} onChange={(spot_per_trade_pct) => patch({ spot_per_trade_pct })} />
+          <NumberInput label="Max posizioni" value={settings.spot_max_open_positions} onChange={(spot_max_open_positions) => patch({ spot_max_open_positions })} />
+          <NumberInput label="Exposure %" value={settings.spot_max_exposure_pct} onChange={(spot_max_exposure_pct) => patch({ spot_max_exposure_pct })} />
+          <NumberInput label="Slippage %" value={settings.spot_max_slippage_pct} step={0.1} onChange={(spot_max_slippage_pct) => patch({ spot_max_slippage_pct })} />
+          <NumberInput label="Cooldown min" value={settings.spot_cooldown_minutes} onChange={(spot_cooldown_minutes) => patch({ spot_cooldown_minutes })} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Spot — strategia</h3>
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Confidence" value={settings.spot_confidence_threshold} step={0.01} onChange={(spot_confidence_threshold) => patch({ spot_confidence_threshold })} />
           <NumberInput label="Vol trigger %" value={settings.spot_volatility_trigger_pct} onChange={(spot_volatility_trigger_pct) => patch({ spot_volatility_trigger_pct })} />
@@ -1254,7 +1273,19 @@ const SetupPane: FC<{
       </section>
 
       <section className="space-y-3">
-        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Perp</h3>
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Perp — risk</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <NumberInput label="Size % (margine)" value={settings.perp_capital_per_trade_pct} onChange={(perp_capital_per_trade_pct) => patch({ perp_capital_per_trade_pct })} />
+          <NumberInput label="Rischio %" value={settings.perp_per_trade_pct} step={0.1} onChange={(perp_per_trade_pct) => patch({ perp_per_trade_pct })} />
+          <NumberInput label="Max posizioni" value={settings.perp_max_open_positions} onChange={(perp_max_open_positions) => patch({ perp_max_open_positions })} />
+          <NumberInput label="Exposure %" value={settings.perp_max_exposure_pct} onChange={(perp_max_exposure_pct) => patch({ perp_max_exposure_pct })} />
+          <NumberInput label="Slippage %" value={settings.perp_max_slippage_pct} step={0.1} onChange={(perp_max_slippage_pct) => patch({ perp_max_slippage_pct })} />
+          <NumberInput label="Cooldown min" value={settings.perp_cooldown_minutes} onChange={(perp_cooldown_minutes) => patch({ perp_cooldown_minutes })} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Perp — strategia</h3>
         <div className="grid grid-cols-2 gap-3">
           <SelectInput label="Direction" value={settings.perp_direction_mode} onChange={(perp_direction_mode) => patch({ perp_direction_mode })} options={[
             { value: 'long_only', label: 'Long' },

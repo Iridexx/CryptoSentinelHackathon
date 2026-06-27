@@ -10,6 +10,7 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
+from backend.app.schemas.mobile_agent import AgentMobileSettings
 
 logger = get_logger("agent.risk")
 
@@ -80,6 +81,7 @@ class RiskManager:
         portfolio: PortfolioState | None,
         open_spot_positions: list[SpotPosition],
         open_perp_positions: list[PerpPosition],
+        ms: AgentMobileSettings | None = None,
     ) -> RiskDecision:
         if self.kill_switch == KillSwitchState.HARD_STOP:
             return RiskDecision(False, "hard_stop_enabled")
@@ -92,12 +94,15 @@ class RiskManager:
                 return RiskDecision(False, "portfolio_floor_guard")
             # drawdown_pct e' memorizzato come valore POSITIVO (entita' del calo dal picco),
             # mentre risk_max_drawdown_pct e' negativo (es. -15). Confronto su valore assoluto.
-            if Decimal(portfolio.drawdown_pct) >= abs(Decimal(str(self.settings.risk_max_drawdown_pct))):
+            drawdown_cap = abs(Decimal(str(ms.drawdown_cap_pct if ms else self.settings.risk_max_drawdown_pct)))
+            if Decimal(portfolio.drawdown_pct) >= drawdown_cap:
                 return RiskDecision(False, "drawdown_cap_guard")
             # daily_loss_limit_used_pct e' negativo in perdita (es. -8); cap negativo (es. -8).
-            if Decimal(portfolio.daily_loss_limit_used_pct) <= Decimal(str(self.settings.risk_daily_loss_limit_pct)):
+            daily_cap = Decimal(str(ms.daily_loss_limit_pct if ms else self.settings.risk_daily_loss_limit_pct))
+            if Decimal(portfolio.daily_loss_limit_used_pct) <= daily_cap:
                 return RiskDecision(False, "daily_loss_limit_guard")
-        if intent.liquidity_usd is not None and intent.liquidity_usd < Decimal(str(self.settings.risk_min_pool_liquidity_usd)):
+        liquidity_floor = Decimal(str(ms.min_pool_liquidity_usd if ms else self.settings.risk_min_pool_liquidity_usd))
+        if intent.liquidity_usd is not None and intent.liquidity_usd < liquidity_floor:
             return RiskDecision(False, "liquidity_guard")
 
         # Dedup per-asset: una sola posizione aperta per asset (spot o perp).
@@ -106,8 +111,21 @@ class RiskManager:
         if asset_upper in open_assets:
             return RiskDecision(False, "asset_already_open")
 
-        open_count = len(open_spot_positions) + len(open_perp_positions)
-        if open_count >= self.settings.risk_max_open_positions:
+        # Limiti posizioni e size separati per mercato
+        is_perp = intent.market == "perp"
+        if ms is not None:
+            cap_pct = ms.perp_capital_per_trade_pct if is_perp else ms.spot_capital_per_trade_pct
+            per_trade_pct = ms.perp_per_trade_pct if is_perp else ms.spot_per_trade_pct
+            max_open = ms.perp_max_open_positions if is_perp else ms.spot_max_open_positions
+            max_exposure = ms.perp_max_exposure_pct if is_perp else ms.spot_max_exposure_pct
+        else:
+            cap_pct = self.settings.risk_capital_per_trade_pct
+            per_trade_pct = self.settings.risk_per_trade_pct
+            max_open = self.settings.risk_max_open_positions
+            max_exposure = self.settings.risk_max_total_exposure_pct
+
+        market_open = len(open_perp_positions) if is_perp else len(open_spot_positions)
+        if market_open >= max_open:
             return RiskDecision(False, "max_open_positions_guard")
 
         equity = intent.quote_equity
@@ -116,20 +134,31 @@ class RiskManager:
         if equity <= Decimal("0"):
             return RiskDecision(False, "portfolio_equity_unavailable")
 
-        nominal_size = equity * Decimal(str(self.settings.risk_capital_per_trade_pct)) / Decimal("100")
+        nominal_size = equity * Decimal(str(cap_pct)) / Decimal("100")
         risk_size = nominal_size
-        # A (v3): rischio per trade da config (era hardcoded 0.015). La size si adatta
-        # alla distanza dello stop; lo stop NON si stringe per rientrare nel rischio.
-        risk_amount = equity * Decimal(str(self.settings.risk_per_trade_pct)) / Decimal("100")
+        # La size si adatta alla distanza dello stop; lo stop NON si stringe per rientrare nel rischio.
+        risk_amount = equity * Decimal(str(per_trade_pct)) / Decimal("100")
         if intent.stop_loss is not None and intent.price > Decimal("0"):
             stop_distance_pct = abs(intent.price - intent.stop_loss) / intent.price
             if stop_distance_pct > 0:
                 risk_size = min(nominal_size, risk_amount / stop_distance_pct)
 
-        current_exposure_pct = Decimal(portfolio.exposure_pct) if portfolio is not None else Decimal("0")
+        # Esposizione calcolata per-mercato: spot = nozionale, perp = margine (nozionale/leva)
+        if equity > Decimal("0"):
+            if is_perp:
+                market_exposure = sum(
+                    p.entry_price * p.size / Decimal(max(int(p.leverage or 1), 1))
+                    for p in open_perp_positions
+                )
+            else:
+                market_exposure = sum(p.entry_price * p.size for p in open_spot_positions)
+            current_exposure_pct = market_exposure / equity * Decimal("100")
+        else:
+            current_exposure_pct = Decimal("0")
+
         added_exposure_pct = risk_size / equity * Decimal("100")
         exposure_after = current_exposure_pct + added_exposure_pct
-        if exposure_after > Decimal(str(self.settings.risk_max_total_exposure_pct)):
+        if exposure_after > Decimal(str(max_exposure)):
             return RiskDecision(False, "max_total_exposure_guard", exposure_after_pct=exposure_after)
 
         scaled = False
