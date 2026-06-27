@@ -13,6 +13,7 @@ class AgentMobileSettings(BaseModel):
     test_scaling_pct: float = Field(default=10.0, ge=1.0, le=100.0)
     operating_hours_utc: str = "00:00-23:59"
     capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)
+    per_trade_pct: float = Field(default=1.5, gt=0.0, le=20.0)
     max_open_positions: int = Field(default=3, ge=1, le=20)
     max_total_exposure_pct: float = Field(default=30.0, gt=0.0, le=100.0)
     daily_loss_limit_pct: float = Field(default=-8.0, ge=-50.0, lt=0.0)

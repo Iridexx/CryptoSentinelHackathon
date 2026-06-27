@@ -18,6 +18,7 @@ from backend.app.agent.loops import slow_loop as agent_slow_loop
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.agent.watchlist import seed_perp_watchlist_if_empty
 from backend.app.api.routes import api_router
+from backend.app.api.routes.mobile_agent import apply_mobile_settings_to_config, _settings_from_runtime
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.core.security.headers import add_security_headers
@@ -90,6 +91,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             fcm_tokens_path=settings.fcm_token_store_path,
         )
     seed_perp_watchlist_if_empty(settings)
+    # Ripristina i parametri di rischio/strategia salvati dall'utente nel DB.
+    mobile_settings, _, persisted = _settings_from_runtime(settings)
+    if persisted:
+        apply_mobile_settings_to_config(mobile_settings, settings)
+        logger.info("mobile_settings_restored_from_runtime", capital_per_trade_pct=mobile_settings.capital_per_trade_pct)
     warmup_task = asyncio.create_task(_startup_ohlcv_warmup(settings))
     heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
     price_checker_task = asyncio.create_task(price_checker_loop())

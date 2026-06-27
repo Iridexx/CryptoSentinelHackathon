@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SettingsDep
+from backend.app.core.config import Settings
 from backend.app.execution.rpc import MultiRpcClient, RpcUnavailableError
 from backend.app.execution.rpc_selection import ordered_bsc_rpc_urls
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
@@ -23,6 +24,42 @@ from backend.app.schemas.mobile_agent import (
 
 router = APIRouter(prefix="/api/v1/mobile/agent", tags=["mobile-agent"])
 SETTINGS_KEY = "mobile_agent_settings"
+
+# Mapping mobile_field → Settings attribute name
+_MOBILE_TO_SETTINGS: dict[str, str] = {
+    "capital_per_trade_pct": "risk_capital_per_trade_pct",
+    "per_trade_pct": "risk_per_trade_pct",
+    "max_open_positions": "risk_max_open_positions",
+    "max_total_exposure_pct": "risk_max_total_exposure_pct",
+    "daily_loss_limit_pct": "risk_daily_loss_limit_pct",
+    "drawdown_cap_pct": "risk_max_drawdown_pct",
+    "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
+    "max_slippage_pct": "risk_max_slippage_pct",
+    "cooldown_minutes": "risk_cooldown_minutes",
+    "spot_confidence_threshold": "spot_confidence_threshold",
+    "spot_atr_stop_multiplier": "spot_atr_stop_multiplier",
+    "spot_time_stop_hours": "spot_time_stop_hours_fallback",
+    "perp_min_leverage": "perp_min_leverage",
+    "perp_max_leverage": "perp_max_leverage",
+    "perp_value_area_pct": "perp_value_area_pct",
+    "perp_atr_stop_multiplier": "perp_atr_stop_multiplier",
+    "perp_time_stop_hours": "perp_time_stop_hours",
+    "test_scaling_pct": "test_scaling_pct",
+}
+
+
+def apply_mobile_settings_to_config(mobile: AgentMobileSettings, settings: Settings) -> None:
+    """Applica i parametri di AgentMobileSettings al Settings live dell'agente.
+
+    Permette di cambiare i parametri di rischio/strategia senza riavviare il backend.
+    """
+    for mobile_field, settings_field in _MOBILE_TO_SETTINGS.items():
+        value = getattr(mobile, mobile_field, None)
+        if value is not None and hasattr(settings, settings_field):
+            try:
+                object.__setattr__(settings, settings_field, value)
+            except Exception:
+                pass  # campo frozen o non applicabile, ignora silenziosamente
 ONBOARDING_LOCK_SECONDS = 600
 WEI_PER_BNB = 10**18
 
@@ -47,6 +84,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         test_scaling_pct=settings.test_scaling_pct,
         operating_hours_utc=settings.operating_hours_utc,
         capital_per_trade_pct=settings.risk_capital_per_trade_pct,
+        per_trade_pct=settings.risk_per_trade_pct,
         max_open_positions=settings.risk_max_open_positions,
         max_total_exposure_pct=settings.risk_max_total_exposure_pct,
         daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
@@ -88,10 +126,12 @@ async def update_mobile_agent_settings(
     settings: SettingsDep,
     _: AdminAccessDep,
 ) -> AgentMobileSettingsResponse:
-    """Persist the mobile agent settings view for the current single user."""
+    """Persist the mobile agent settings and apply them immediately to the live agent."""
 
     serialized = request.model_dump_json()
     set_runtime_value(str(settings.default_user_id), SETTINGS_KEY, serialized)
+    # Applica subito al Settings singleton: nessun riavvio necessario.
+    apply_mobile_settings_to_config(request, settings)
     return AgentMobileSettingsResponse(settings=request, source="runtime", persisted=True)
 
 

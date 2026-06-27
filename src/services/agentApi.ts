@@ -271,6 +271,7 @@ export interface AgentMobileSettings {
   test_scaling_pct: number;
   operating_hours_utc: string;
   capital_per_trade_pct: number;
+  per_trade_pct: number;
   max_open_positions: number;
   max_total_exposure_pct: number;
   daily_loss_limit_pct: number;

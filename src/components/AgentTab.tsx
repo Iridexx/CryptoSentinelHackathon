@@ -82,6 +82,7 @@ const defaultSettings: AgentMobileSettings = {
   test_scaling_pct: 10,
   operating_hours_utc: '00:00-23:59',
   capital_per_trade_pct: 6,
+  per_trade_pct: 1.5,
   max_open_positions: 3,
   max_total_exposure_pct: 30,
   daily_loss_limit_pct: -8,
@@ -1229,6 +1230,7 @@ const SetupPane: FC<{
         <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Risk</h3>
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Size %" value={settings.capital_per_trade_pct} onChange={(capital_per_trade_pct) => patch({ capital_per_trade_pct })} />
+          <NumberInput label="Risk %" value={settings.per_trade_pct} step={0.1} onChange={(per_trade_pct) => patch({ per_trade_pct })} />
           <NumberInput label="Max positions" value={settings.max_open_positions} onChange={(max_open_positions) => patch({ max_open_positions })} />
           <NumberInput label="Exposure %" value={settings.max_total_exposure_pct} onChange={(max_total_exposure_pct) => patch({ max_total_exposure_pct })} />
           <NumberInput label="Daily loss %" value={settings.daily_loss_limit_pct} onChange={(daily_loss_limit_pct) => patch({ daily_loss_limit_pct })} />

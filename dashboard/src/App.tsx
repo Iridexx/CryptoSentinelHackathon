@@ -88,6 +88,7 @@ const settingFields = [
   'execution_mode',
   'network',
   'capital_per_trade_pct',
+  'per_trade_pct',
   'max_open_positions',
   'max_total_exposure_pct',
   'daily_loss_limit_pct',
