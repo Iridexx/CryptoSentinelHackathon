@@ -870,7 +870,7 @@ class AgentService:
             # Uscite — priorità massima: SL / trailing (il maggiore dei due).
             if pos.trailing_stop is not None and (pos.stop_loss is None or pos.trailing_stop > pos.stop_loss):
                 if price <= pos.trailing_stop:
-                    reason = "trailing_stop"
+                    reason = "breakeven" if pos.trailing_stop >= pos.entry_price else "trailing_stop"
             if reason is None and pos.stop_loss is not None and price <= pos.stop_loss:
                 # Se lo stop è già a breakeven (>= entry) la chiusura non è una perdita:
                 # etichettala "breakeven" invece di "stop_loss".
@@ -987,7 +987,8 @@ class AgentService:
                 or (not is_long and pos.trailing_stop < pos.stop_loss)
             ):
                 if (is_long and price <= pos.trailing_stop) or (not is_long and price >= pos.trailing_stop):
-                    reason = "trailing_stop"
+                    at_be = pos.trailing_stop >= pos.entry_price if is_long else pos.trailing_stop <= pos.entry_price
+                    reason = "breakeven" if at_be else "trailing_stop"
 
             if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
@@ -1790,8 +1791,19 @@ def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
     leva alta). Le chiusure NON su livello (time_stop, manuali) usano il mercato.
     """
     level = None
-    if reason in ("stop_loss", "breakeven"):
+    if reason == "stop_loss":
         level = pos.stop_loss
+    elif reason == "breakeven":
+        # Può arrivare dallo stop_loss spostato a BE o dal trailing arrivato sopra l'entry.
+        # Spot è sempre long; perp usa pos.side. Il livello che ha scattato è il più
+        # protettivo: il più alto per long (max), il più basso per short (min).
+        sl = pos.stop_loss
+        tr = pos.trailing_stop
+        if sl is not None and tr is not None:
+            is_long = getattr(pos, "side", "long") == "long"
+            level = max(sl, tr) if is_long else min(sl, tr)
+        else:
+            level = sl if sl is not None else tr
     elif reason == "trailing_stop":
         level = pos.trailing_stop
     elif reason == "take_profit_1":
