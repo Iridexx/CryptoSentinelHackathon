@@ -221,9 +221,12 @@ async def _load_chart_snapshot(
 
 
 async def _live_chart_if_open(snapshot, position, market: str) -> dict | None:
-    """Per una posizione ancora aperta (nessuno snapshot congelato) costruisce un
-    grafico dal vivo: candele dall'apertura ad ora + livelli entry/SL/TP."""
-    if snapshot is not None or position is None or position.status == "closed":
+    """Per una posizione ancora aperta costruisce un grafico dal vivo.
+
+    Lo snapshot parziale (TP1) viene ignorato: la posizione è ancora aperta
+    e i dati live devono prevalere sul grafico congelato al momento del TP1.
+    """
+    if position is None or position.status == "closed":
         return None
     return await _build_live_chart(position, market)
 
@@ -491,7 +494,8 @@ def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tupl
 
 
 def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None) -> dict:
-    chart = json.loads(snapshot.payload) if snapshot else live_chart
+    # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
+    chart = live_chart if live_chart is not None else (json.loads(snapshot.payload) if snapshot else None)
     is_close = trade.trade_id.startswith("cls_")
     entry = (
         Decimal(position.entry_price) if position is not None
@@ -500,12 +504,10 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
     )
     if is_close:
         current = Decimal(trade.price)
-    elif position is not None and position.status == "closed":
+    elif position is not None:
         current = Decimal(position.current_price)
     elif chart:
         current = Decimal(str(chart["exit_price"]))
-    elif position is not None:
-        current = Decimal(position.current_price)
     else:
         current = Decimal(trade.price)
     size = Decimal(trade.amount) if (is_close or position is None) else Decimal(position.size)
@@ -555,7 +557,8 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
 
 
 def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None) -> dict:
-    chart = json.loads(snapshot.payload) if snapshot else live_chart
+    # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
+    chart = live_chart if live_chart is not None else (json.loads(snapshot.payload) if snapshot else None)
     is_close = trade.trade_id.startswith("cls_")
     entry = (
         Decimal(position.entry_price) if position is not None
@@ -564,12 +567,10 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
     )
     if is_close:
         current = Decimal(trade.price)
-    elif position is not None and position.status == "closed":
+    elif position is not None:
         current = Decimal(position.current_price)
     elif chart:
         current = Decimal(str(chart["exit_price"]))
-    elif position is not None:
-        current = Decimal(position.current_price)
     else:
         current = Decimal(trade.price)
     size = Decimal(trade.size) if (is_close or position is None) else Decimal(position.size)
