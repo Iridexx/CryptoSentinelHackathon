@@ -1,111 +1,83 @@
-# Strategia di Uscita — SPOT
+# Strategia di Uscita - SPOT
 
-> Come l'agente chiude le posizioni **spot** in profitto e in perdita.
-> Riferimento codice: `backend/app/agent/service.py` (chiusure) e
-> `backend/app/agent/signals/spot/momentum.py` (livelli).
+> Come l'agente chiude le posizioni spot in profitto e in perdita.
+> Riferimento codice: `backend/app/agent/service.py` e `backend/app/agent/signals/spot/momentum.py`.
 > Parametri attivi: `configs/strategy_spot.yaml`.
 
-Lo spot è **solo LONG** (si compra e si rivende). Quindi si guadagna se il
-prezzo sale e si perde se scende.
+Lo spot e' solo long: l'agente compra e poi rivende. Il comportamento corrente non usa piu' target percentuali fissi: stop, take profit e trailing sono ancorati all'ATR congelato all'ingresso.
 
----
+## 1. Livelli fissati all'apertura
 
-## 1. I livelli vengono fissati all'apertura
+| Livello | Formula corrente | Default | Uso |
+|---|---|---:|---|
+| Stop Loss | `entry - ATR * atr_stop_multiplier` | `2.2 ATR` | uscita in perdita |
+| Take Profit 1 | `entry + ATR * tp1_atr_multiplier` | `2.0 ATR` | chiusura parziale |
+| Take Profit 2 | `entry + ATR * tp2_atr_multiplier` | `3.5 ATR` | chiusura finale dopo TP1 |
+| Breakeven | `entry + costi round-trip + buffer` | trigger `0.6 ATR`, buffer `0.1%` | protezione trade in profitto |
+| Trailing | `max_price - ATR * trailing_multiplier` | `2.5 ATR`, cappato a TP1 | segue il massimo favorevole |
 
-Quando l'agente apre la posizione al prezzo di entrata, calcola subito 4 livelli:
+I costi dry-run spot sono stimati in `backend/app/execution/spot_fees.py`: swap fee PancakeSwap V3 e slippage simulato. Se `breakeven_offset_costs` e' attivo, lo stop a breakeven copre anche fee/slippage di apertura e chiusura.
 
-| Livello | Formula | Valore tipico | A cosa serve |
-|---|---|---|---|
-| **Stop Loss (SL)** | il più lontano tra `entrata − ATR×1.5` e `entrata − 1%` | almeno −1% sotto | uscita in **perdita** |
-| **Take Profit 1 (TP1)** | `entrata + 3%` | +3% | primo incasso (**parziale**) |
-| **Take Profit 2 (TP2)** | `entrata + 6%` | +6% | incasso finale |
-| **Trailing stop** | segue il prezzo a `−2%` dal massimo | dinamico | protegge il profitto |
+## 2. Ordine di controllo
 
-> Lo SL non è mai più stretto dell'1%: se la volatilità (ATR) è bassissima,
-> usa comunque almeno −1% per non farsi buttare fuori dal rumore.
+Ad ogni aggiornamento prezzo l'agente controlla:
 
----
+1. Trailing stop, se piu' protettivo dello stop loss.
+2. Stop loss.
+3. TP2, solo se TP1 e' gia' stato preso.
+4. TP1, solo la prima volta.
+5. Time stop.
 
-## 2. Ordine di controllo delle uscite (vince il primo che scatta)
+Il prezzo di chiusura simulato usa il livello che ha scatenato l'uscita, non genericamente il prezzo corrente.
 
-Ad ogni aggiornamento di prezzo l'agente controlla, **in quest'ordine**:
+## 3. Uscite in profitto
 
-1. **Stop Loss** → prezzo ≤ SL
-2. **Take Profit 2** → prezzo ≥ TP2 *(solo se TP1 è già stato preso)*
-3. **Take Profit 1** → prezzo ≥ TP1 *(solo la prima volta)*
-4. **Trailing stop** → prezzo ritraccia sotto il livello trascinato *(solo dopo TP1)*
-5. **Stop temporale** → posizione aperta da troppo tempo
+TP1 chiude solo la quota configurata da `tp1_close_fraction`, oggi `0.30`: il 30% della posizione viene venduto e il 70% resta aperto. Il flag `tp1_reached` abilita TP2 come uscita finale sul residuo.
 
----
+Il trailing ATR e' attivo da subito (`trailing_active_from_start: true`) e si alza soltanto. Il moltiplicatore viene cappato al moltiplicatore di TP1, cosi' il trailing non si attiva troppo tardi.
 
-## 3. Uscita in PROFITTO
+Il breakeven scatta quando il prezzo supera `entry + 0.6 ATR`. Lo stop viene alzato almeno a entry, piu' costi round-trip se configurati, e puo' aggiungere un buffer extra dello `0.1%` solo se il prezzo lo ha gia' superato.
 
-### Passo 1 — TP1 a +3% → incasso parziale (50%)
-- Quando il prezzo tocca **+3%**, l'agente vende **metà posizione** e mette in
-  cassa il profitto su quella metà.
-- La posizione resta aperta con il **50% residuo** e si marca `tp1_reached`.
-- Da questo momento si attiva il **trailing stop**.
+## 4. Uscite in perdita
 
-### Passo 2 — gestione del residuo
-Il restante 50% può chiudersi in tre modi (in profitto):
+Lo stop loss ha priorita' alta, ma se il trailing e' piu' protettivo viene controllato prima. Non esiste media in perdita.
 
-- **TP2 a +6%** → vende tutto il residuo: massimo guadagno.
-- **Trailing stop** → se dopo TP1 il prezzo sale e poi ritraccia del **2%** dal
-  massimo raggiunto, chiude il residuo bloccando comunque un buon profitto.
-- *(Stop temporale, vedi sotto — può chiudere anche in leggero profitto.)*
+Lo spot puo' aggiungere size solo a favore: `scale_in_enabled` permette al massimo una aggiunta (`scale_in_max_adds: 1`) se la posizione e' in profitto, lo stop e' gia' a breakeven e c'e' un nuovo higher high. L'aggiunta rispetta il cap nominale per trade.
 
-> **Logica:** si "mette al sicuro" subito metà del guadagno a +3%, poi si lascia
-> correre l'altra metà puntando a +6%, ma protetti dal trailing che sale insieme
-> al prezzo e non scende mai.
+## 5. Time stop
 
----
+Il time stop corrente e' ATR-aware:
 
-## 4. Uscita in PERDITA
+| Modalita' | Regola |
+|---|---|
+| `time_stop_mode: atr` | dopo `time_stop_lookback_candles` da 5m, chiude solo se il movimento e' inferiore a `time_stop_min_move_atr * ATR` |
+| fallback orario | se `time_stop_mode: hours`, chiude oltre `time_stop_hours_fallback` |
 
-- **Stop Loss** → se il prezzo scende fino allo SL (almeno −1%, più ampio se
-  l'ATR è alto), chiude **tutta** la posizione e registra la perdita.
-- Lo SL ha **priorità massima**: viene controllato per primo, prima di ogni TP.
-- Non c'è media in perdita: l'agente non aggiunge mai size a una posizione in rosso.
+Con i default attuali, la modalita' primaria e' `atr`: il trade viene chiuso solo se e' davvero fermo rispetto alla sua volatilita'.
 
----
+## 6. Motivi di chiusura
 
-## 5. Stop temporale (uscita "neutra")
+| Motivo | Quando | Quota |
+|---|---|---|
+| `take_profit_1` | prezzo >= TP1 | 30% default |
+| `take_profit_2` | prezzo >= TP2 dopo TP1 | residuo |
+| `trailing_stop` | prezzo ritraccia sotto trailing protettivo | residuo o posizione intera |
+| `stop_loss` | prezzo <= stop loss/breakeven | posizione residua/intera |
+| `time_stop_atr` | movimento insufficiente su finestra ATR | posizione residua/intera |
+| `time_stop` | fallback orario | posizione residua/intera |
 
-- Se la posizione resta aperta **oltre 6 ore** senza aver toccato né SL né TP,
-  l'agente la chiude comunque (`time_stop`).
-- Serve a liberare capitale da trade "morti" che non si muovono.
-- Il risultato può essere un piccolo profitto o una piccola perdita, a seconda
-  di dov'è il prezzo in quel momento.
-
----
-
-## 6. Riepilogo motivi di chiusura
-
-| Motivo (`close_reason`) | Quando | Esito | Quota chiusa |
-|---|---|---|---|
-| `take_profit_1` | prezzo ≥ +3% | profitto | 50% (parziale) |
-| `take_profit_2` | prezzo ≥ +6% (dopo TP1) | profitto | residuo (100%) |
-| `trailing_stop` | ritraccia −2% dal max (dopo TP1) | profitto | residuo (100%) |
-| `stop_loss` | prezzo ≤ SL | perdita | 100% |
-| `time_stop` | aperta da > 6 ore | neutro | 100% |
-
----
-
-## 7. In una frase
-
-> **Profitto:** incassa metà a +3%, lascia correre il resto verso +6% protetto da
-> un trailing al −2%.
-> **Perdita:** taglia subito allo stop loss (almeno −1%), senza mai mediare.
-> **Tempo:** dopo 6 ore chiude comunque le posizioni ferme.
-
----
-
-### Parametri (modificabili in `configs/strategy_spot.yaml`)
+## 7. Parametri principali
 
 | Parametro | Valore attuale |
-|---|---|
-| `partial_take_profit_pct` | 3.0 (→ TP1 +3%, TP2 +6%) |
-| `atr_stop_multiplier` | 1.5 |
-| distanza minima SL | 1.0% |
-| `trailing_distance_pct` | 2.0 |
-| `time_stop_hours` | 6 |
+|---|---:|
+| `atr_stop_multiplier` | `2.2` |
+| `tp1_atr_multiplier` | `2.0` |
+| `tp2_atr_multiplier` | `3.5` |
+| `tp1_close_fraction` | `0.30` |
+| `breakeven_trigger_atr` | `0.6` |
+| `breakeven_buffer_pct` | `0.1` |
+| `trailing_atr_multiplier` | `2.5` |
+| `scale_in_max_adds` | `1` |
+| `time_stop_mode` | `atr` |
+| `time_stop_lookback_candles` | `8` |
+| `time_stop_min_move_atr` | `0.5` |

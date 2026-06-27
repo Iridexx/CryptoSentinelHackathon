@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-21
+Ultimo aggiornamento: 2026-06-26
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -54,7 +54,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing, snapshot grafici trade e provider execution astratti.
 |   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
@@ -65,8 +65,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- common/indicators.py - primitive Candle, EMA, VWAP, ATR, RSI e relative volume.
 |   |   |       |-- spot/momentum.py - Spot V1 momentum + struttura: warm-up OHLCV 5m Binance spot per asset singolo, VWAP, EMA 20/50, ATR, RSI filtro e relative volume.
 |   |   |       |-- spot/relative_strength_v2.py - placeholder relative strength V2.
-|   |   |       |-- perp/binance_klines.py - feed Binance klines 5m specializzato per signal engine (`/fapi/v1/klines` o `/api/v3/klines`) con cache in memoria per Data Coverage.
-|   |   |       |-- perp/volume_profile.py - Volume Profile Perp V1 rolling 24h con POC/VAH/VAL, VWAP trend filter e setup rientro in value.
+|   |   |       |-- perp/binance_klines.py - feed Binance klines specializzato per signal engine (`/fapi/v1/klines` o `/api/v3/klines`) con cache in memoria per Data Coverage.
+|   |   |       |-- perp/cex_fallback.py - fallback best-effort Bitget/KuCoin per candele e prezzi quando Binance non copre il token.
+|   |   |       |-- perp/volume_profile.py - Volume Profile Perp V1 rolling 24h con POC/VAH/VAL, VWAP trend filter e livelli ATR/POC.
 |   |   |       `-- perp/orderflow_delta_v2.py - placeholder order-flow delta V2.
 |   |   |-- core/ - configurazione, logging e sicurezza.
 |   |   |   |-- config.py - unico loader Settings: fonde .env + configs/*.yaml, valida guardrail hard.
@@ -101,6 +102,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- gas.py / approvals.py - riserva gas hard e approvals esatte/whitelist (riusati da entrambi i provider).
 |   |   |   |-- coordinator.py / reconciliation.py - retry limitato e verifica on-chain.
 |   |   |   |-- service.py - stato execution (provider spot+perp attivi + statuses dai registry) e verifica contratto competizione.
+|   |   |   |-- spot_fees.py - stima costi dry-run spot PancakeSwap V3: swap fee e slippage applicabile/escludibile.
+|   |   |   |-- perp_fees.py - fetch fee/funding PancakeSwap Perpetuals v2 con fallback costanti, funding accrual e confronto taker/maker.
 |   |   |   |-- spot_twak/client.py - bridge TWAK per spot, x402 e registrazione.
 |   |   |   |-- perp_bnb_sdk/client.py - bridge BNB SDK ed EIP-712 (avvolto da BnbSdkPerpProvider).
 |   |   |   `-- x402/client.py - pagamenti BSC con budget e fallback provider.
@@ -120,20 +123,23 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- database.py - engine async aiosqlite, async_sessionmaker, create_all, check_db con SELECT 1 e latency.
 |   |   |   |-- sync_database.py - engine sync sqlite3 per store legacy sincroni; stesso file SQLite.
 |   |   |   |-- backup.py - copia SQLite con timestamp UTC, pruning retention, restituisce None se DB assente.
-|   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot (FCM tokens, alert config/state).
+|   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing e funding.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato e Sharpe ratio guarded.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, esposizione a margine, fee aggregate, risk-off spot e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
 |   |   |   |   |-- alerts.py - AlertConfig (legacy, una riga per utente, config_json + state_json).
 |   |   |   |   |-- device_alert_configs.py - DeviceAlertConfig (una riga per (user_id, device_id): alert separati per device).
-|   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc e block_timestamp_utc separati.
-|   |   |   |   |-- positions.py - SpotPosition e PerpPosition (leverage, liquidation_price, funding_rate).
+|   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc/block_timestamp_utc separati, PnL, fee, slippage e funding snapshot.
+|   |   |   |   |-- positions.py - SpotPosition e PerpPosition con livelli SL/TP/trailing, ATR entry, fee/slippage/funding, margin e stato TP1.
 |   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
 |   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert).
 |   |   |   |   |-- archives.py - ArchivedRun: snapshot JSON dei dati dry-run simulati esclusi dalle viste live.
+|   |   |   |   |-- equity_adjustments.py - versamenti/prelievi manuali separati dal PnL per non rebaselinare la performance storica.
+|   |   |   |   |-- api_usage.py - tracking chiamate Claude: input/output token e costo stimato.
+|   |   |   |   |-- trade_charts.py - snapshot JSON di candele e livelli congelati alla chiusura trade per il dettaglio dashboard.
 |   |   |   |   |-- x402.py - X402DailyBudget (unique user_id + budget_date).
 |   |   |   |   |-- runtime_state.py - RuntimeState (unique user_id + key).
 |   |   |   |   `-- __init__.py - esporta tutti i modelli, registra tabelle con Base.
@@ -144,7 +150,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- trades.py - SpotTradeRepository e PerpTradeRepository (save, get, list, win_rate).
 |   |   |       |-- positions.py - SpotPositionRepository e PerpPositionRepository (save, open_for_user, history).
 |   |   |       |-- decisions.py - AgentDecisionRepository (save, get, recent_for_user con filtro market).
-|   |   |       |-- pnl.py - PnlRepository (save_snapshot, recent_for_user, upsert_portfolio, get_portfolio).
+|   |   |       |-- pnl.py - PnlRepository (save_snapshot, recent_for_user, upsert_portfolio, get_portfolio, adjust_equity, list_equity_adjustments).
+|   |   |       |-- api_usage.py - ApiUsageRepository per riepilogo costo/token Claude.
+|   |   |       |-- trade_charts.py - TradeChartRepository per snapshot o fallback posizione.
 |   |   |       `-- x402_budget.py - X402BudgetRepository (load_today, save).
 |   |   |-- schemas/ - schemi API.
 |   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti, incluse opzioni crossing/riarmo per alert prezzo.
@@ -154,7 +162,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
 |   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary con balance asset non-zero.
 |   |   |   |-- observability.py - schemi Step 8 per log viewer dashboard.
-|   |   |   `-- views.py - SpotView, PerpView, GlobalView, PnlPoint e campi analytics PnL/Sharpe per dashboard/app.
+|   |   |   `-- views.py - SpotView, PerpView, GlobalView, ClaudeUsageView, PnlPoint e campi analytics PnL/Sharpe/fee/margine per dashboard/app.
 |   |   |-- services/ - namespace application services.
 |   |   `-- tasks/ - namespace scheduled/background tasks.
 |   |-- scripts/ - script di avvio backend.
@@ -162,6 +170,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- archive_dry_run.py - helper manuale per archiviare dati dry-run simulati e pulire le tabelle live.
 |   |   |-- register_competition.py - helper manuale esplicito per `twak compete register --json`, con password TWAK via prompt nascosto.
 |   |   |-- select_twak_wallet.py - helper admin locale per aggiungere/selezionare il nuovo wallet TWAK pubblico in RuntimeState.
+|   |   |-- migrate_perp_leverage_size.py - migrazione one-shot con backup per correggere size/PnL perp storici salvati senza moltiplicatore leva.
 |   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
 |   |   |-- twak_rpc_route_probe.py - diagnostica quote-only TWAK REST ruotando manualmente le RPC BSC configurate; dominio smartchain/smartchain-testnet derivato dalla rete.
 |   |   |-- pancakeswap_smoke_test.py - smoke test PancakeSwap diretto (quote-only di default; --execute swap reale, mainnet solo con --allow-mainnet).
@@ -194,6 +203,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- PROJECT_STRUCTURE.md - questo documento aggiornato a ogni step.
 |   |-- Strategia_Spot.md - strategia Spot.
 |   |-- Strategia_Perpetual.md - strategia Perpetual.
+|   |-- Uscite_Spot.md - regole operative aggiornate per chiusure spot ATR, breakeven, trailing, TP e time stop.
+|   |-- Uscite_Perpetual.md - regole operative aggiornate per chiusure perp ATR, breakeven, trailing dinamico, TP e funding.
 |   |-- index.html - pagina documentale/statica.
 |   `-- reports/ - report step.
 |       |-- report_step0.md - report Step 0.
@@ -209,6 +220,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step9.md - report testing e vincoli qualificazione Step 9.
 |       |-- report_twak_wallet_migration.md - report migrazione nuovo wallet TWAK, fix mainnet/domain e workaround password Windows.
 |       |-- report_dashboard_analytics.md - report archiviazione dry-run, sizing realistico e analytics dashboard/mobile.
+|       |-- report_dashboard_data_coverage_filters.md - report filtri Data Coverage dashboard.
+|       |-- report_dashboard_scripts.md - report script avvio/riavvio dashboard.
+|       |-- report_docs_code_reconciliation_2026-06-26.md - report ricognizione codice e riallineamento documentazione.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
@@ -217,9 +231,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
-|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets ed Export.
+|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Export e dettaglio trade con grafico/fee/margine.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati.
-|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics e trade detail.
+|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine e trade detail.
 |       `-- styles.css - layout desktop-first e stati UI.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -357,10 +371,10 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 3 - Astrazione Dati Multi-Provider | Parziale | Adapter CMC/CoinGecko, selettore globale, checker/frontend astratti e gate completati; smoke CMC e CoinGecko reali superati. Restano i18n frontend legacy e limite Volume Profile 5m. |
 | Step 4 - Layer di Esecuzione | Parziale | TWAK spot, BNB SDK/EIP-712 perp, RPC fallback, gas/approval guardrail, x402 e verifica competizione implementati e testati; mancano transazioni reali testnet e venue perp ufficiale configurata. |
 | Step 5 - Persistenza Dati | Completato | Schema Spot/Perp/Globale su SQLite/aiosqlite; migrazione JSON→DB (FCM, alert, x402, provider selector); readiness DB reale SELECT 1; viste dashboard; backup periodico configurabile; 16 test tutti passed. |
-| Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato, risk manager, kill switch, loop fast/slow e dry-run DB implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
+| Step 6 - Agente AI Brain | Parziale | Brain/meta-controller, Spot V1, Perp Volume Profile V1, feed Binance klines dedicato con fallback CEX, risk manager, kill switch, loop fast/slow, fee/funding dry-run, breakeven/trailing ATR e snapshot grafici implementati; live execution resta fail-closed dove mancano venue/amount atomici e verifica reale. |
 | Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
-| Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
-| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV, migrazione nuovo wallet TWAK e analytics dry-run consolidati; suite completa 127 passed. |
+| Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global/Perp, dettaglio trade con grafico e margine, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
+| Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV, migrazione nuovo wallet TWAK, fix leverage perp storico e analytics dry-run consolidati; ultima suite documentata: 127 passed. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -407,9 +421,13 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Loop safe-by-default | Il loop lento valuta solo la watchlist AI selezionata dall'utente; con watchlist vuota resta idle. Il loop veloce gestisce heartbeat e stato posizioni. L'esecuzione live richiede provider astratti, dati completi e guardrail risk/brain favorevoli. |
 | Watchlist AI operativa | `eligible_tokens` definisce solo il perimetro consentito; `agent_watchlist_symbols` in RuntimeState definisce gli asset effettivamente scansionati dall'agente. Le modifiche sono admin-only e la mobile app mostra separatamente token tradabili e token attivi. |
 | Warm-up OHLCV watchlist | Il backend scalda la cache klines 5m in background all'avvio e sui token appena aggiunti alla watchlist. Data Coverage e signal engine leggono la stessa cache, quindi gli asset passano a `ready` appena lo storico richiesto è scaricato senza bloccare il bind API. |
+| Fallback CEX best-effort | Binance resta il feed primario del signal engine; Bitget e KuCoin intervengono solo quando Binance non copre un token e degradano a vuoto/None senza rompere il percorso principale. |
 | Archivio dry-run live reset | I dati simulati storici possono essere copiati in `ArchivedRun`, rimossi dalle tabelle live e il `PortfolioState` riportato al capitale dry-run; dashboard/app leggono per default solo lo stato live pulito. |
 | Dry-run sizing realistico | Il capitale dry-run default è 500 USD e il risk engine blocca i trade sotto 7 USD con `below_minimum_trade_size`, senza forzare size fuori dai parametri. |
-| Analytics read-only condivisa | Dashboard e mobile usano endpoint `/views/*` read-only per equity curve, breakdown asset, trade detail e operational stats; i numeri display sono normalizzati a due decimali. |
+| Costi dry-run espliciti | Spot e perp salvano fee/slippage/funding in posizione e trade; la dashboard mostra costi applicati e confronti taker/maker senza confonderli con PnL lordo. |
+| Analytics read-only condivisa | Dashboard e mobile usano endpoint `/views/*` read-only per equity curve, breakdown asset, trade detail, grafici trade e operational stats; i numeri display sono normalizzati a due decimali. |
+| Equity adjustment separato dal PnL | Versamenti e prelievi aggiornano capitale iniziale/equity e restano tracciati in tabella dedicata, evitando che un deposito storico appaia come profitto o perdita. |
+| Dettaglio trade riproducibile | Alla chiusura viene salvato uno snapshot JSON di candele e livelli; le posizioni aperte usano un grafico live best-effort dallo stesso feed. |
 | Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati ogni 45 secondi, dentro il vincolo 30-60s e senza refresh aggressivo. |
 | Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
 | Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |
@@ -450,9 +468,11 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
 | Step 5 | Completato: readiness DB con SELECT 1 + latency; migrazione JSON→DB (FCM, alert, x402, provider selector); schema ORM completo; 16 test passed. |
 | Step 7 | Nuova tab mobile agente additiva; verificare su APK/dispositivo reale layout, token admin session-only, onboarding validation e kill switch contro backend avviato. |
+| Documentazione uscite | Aggiornata al comportamento corrente: livelli ATR, breakeven con costi+buffer, trailing ATR/dinamico, TP1 parziale e time stop ATR-aware/orario. |
 | Step 3 CMC reale | Verificato dall'utente con chiave esportata nel processo: `1 passed, 9 deselected in 3.71s`, senza leggere `.env`. |
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
 | Step boundary | Step 9 implementato parzialmente e consolidato per revisione; Step 10 non avviato — in attesa di approvazione. |
+| Ricognizione 2026-06-26 | Git working tree inizialmente pulito; aggiornati solo documenti e report per riflettere codice già presente, senza leggere file sensibili. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |
