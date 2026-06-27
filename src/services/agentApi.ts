@@ -26,6 +26,12 @@ export interface AgentWatchlistResponse {
   selected_tokens: string[];
 }
 
+export interface AgentMarketWatchlistResponse {
+  master_tokens: string[];
+  selected_tokens: string[];
+  selected_count: number;
+}
+
 export interface SpotPositionView {
   position_id: string;
   open_trade_id?: string | null;
@@ -414,6 +420,30 @@ export function fetchAgentWatchlist(): Promise<AgentWatchlistResponse> {
 
 export function updateAgentWatchlist(tokens: string[], adminToken: string): Promise<AgentWatchlistResponse> {
   return request<AgentWatchlistResponse>('/api/v1/agent/watchlist', {
+    method: 'PUT',
+    body: { tokens },
+    token: adminToken,
+  });
+}
+
+export function fetchSpotWatchlist(): Promise<AgentMarketWatchlistResponse> {
+  return request<AgentMarketWatchlistResponse>('/api/v1/agent/watchlist/spot');
+}
+
+export function updateSpotWatchlist(tokens: string[], adminToken: string): Promise<AgentMarketWatchlistResponse> {
+  return request<AgentMarketWatchlistResponse>('/api/v1/agent/watchlist/spot', {
+    method: 'PUT',
+    body: { tokens },
+    token: adminToken,
+  });
+}
+
+export function fetchPerpWatchlist(): Promise<AgentMarketWatchlistResponse> {
+  return request<AgentMarketWatchlistResponse>('/api/v1/agent/watchlist/perp');
+}
+
+export function updatePerpWatchlist(tokens: string[], adminToken: string): Promise<AgentMarketWatchlistResponse> {
+  return request<AgentMarketWatchlistResponse>('/api/v1/agent/watchlist/perp', {
     method: 'PUT',
     body: { tokens },
     token: adminToken,

@@ -260,3 +260,31 @@ export function saveNotificationPrefs(session: DashboardSession, prefs: Notifica
     body: JSON.stringify(prefs),
   });
 }
+
+export type AgentMarketWatchlistResponse = {
+  master_tokens: string[];
+  selected_tokens: string[];
+  selected_count: number;
+};
+
+export function fetchSpotWatchlist(session: DashboardSession) {
+  return requestJson<AgentMarketWatchlistResponse>(session, '/api/v1/agent/watchlist/spot');
+}
+
+export function updateSpotWatchlist(session: DashboardSession, tokens: string[]) {
+  return requestJson<AgentMarketWatchlistResponse>(session, '/api/v1/agent/watchlist/spot', 'admin', {
+    method: 'PUT',
+    body: JSON.stringify({ tokens }),
+  });
+}
+
+export function fetchPerpWatchlist(session: DashboardSession) {
+  return requestJson<AgentMarketWatchlistResponse>(session, '/api/v1/agent/watchlist/perp');
+}
+
+export function updatePerpWatchlist(session: DashboardSession, tokens: string[]) {
+  return requestJson<AgentMarketWatchlistResponse>(session, '/api/v1/agent/watchlist/perp', 'admin', {
+    method: 'PUT',
+    body: JSON.stringify({ tokens }),
+  });
+}

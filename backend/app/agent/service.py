@@ -17,7 +17,7 @@ from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, S
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _atr_range_leverage as _perp_atr_range_leverage
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
-from backend.app.agent.watchlist import selected_watchlist
+from backend.app.agent.watchlist import selected_watchlist, selected_spot_watchlist, selected_perp_watchlist
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
 from backend.app.data.market_data.cmc import CMCProvider
@@ -166,6 +166,8 @@ class AgentService:
             "eligible_token_count": len(self.settings.eligible_tokens),
             "eligible_symbol_count": len(self.risk.eligible_symbols),
             "watchlist_count": len(selected_watchlist(self.settings)),
+            "watchlist_spot_count": len(selected_spot_watchlist(self.settings)),
+            "watchlist_perp_count": len(selected_perp_watchlist(self.settings)),
             "heartbeat": heartbeat.as_dict(),
         }
 
@@ -1134,7 +1136,6 @@ class AgentService:
         heartbeat.beat("agent_slow_tick")
         _now = now or datetime.now(UTC)
         trade_heartbeat = await self._daily_trade_heartbeat(session, now=_now)
-        selected_assets = selected_watchlist(self.settings)
         markets = _active_markets(self._ms.markets_enabled)
         # Aggiorna il regime mercato una volta per ciclo, così il flag (e il messaggio
         # in app) riflette sempre lo stato reale anche se nessun segnale prova a entrare.
@@ -1143,18 +1144,20 @@ class AgentService:
                 await self._spot_market_regime()
             except Exception as exc:
                 logger.warning("spot_market_regime_error", error=str(exc))
+        spot_assets = selected_spot_watchlist(self.settings) if "spot" in markets else []
+        perp_assets = selected_perp_watchlist(self.settings) if "perp" in markets else []
         scanner_results = []
-        for asset in selected_assets:
-            if "spot" in markets and asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
+        for asset in spot_assets:
+            if asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
                 try:
                     scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
                 except Exception as exc:
                     logger.warning("scanner_spot_asset_error", asset=asset, error=str(exc))
-            if "perp" in markets:
-                try:
-                    scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
-                except Exception as exc:
-                    logger.warning("scanner_perp_asset_error", asset=asset, error=str(exc))
+        for asset in perp_assets:
+            try:
+                scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
+            except Exception as exc:
+                logger.warning("scanner_perp_asset_error", asset=asset, error=str(exc))
         try:
             await self._snapshot_portfolio_hourly(session, _now)
         except Exception as exc:

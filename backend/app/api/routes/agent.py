@@ -14,7 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.agent.risk import KillSwitchState
 from backend.app.agent.service import get_agent_service
-from backend.app.agent.watchlist import selected_watchlist, set_selected_watchlist
+from backend.app.agent.watchlist import (
+    selected_watchlist, set_selected_watchlist,
+    selected_spot_watchlist, selected_perp_watchlist, set_market_watchlist,
+)
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.repositories.api_usage import ApiUsageRepository
@@ -155,6 +158,45 @@ async def set_agent_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep)
         "selected_tokens": selected,
         "warmup": warmup,
     }
+
+
+@router.get("/watchlist/spot")
+async def get_spot_watchlist(_: ReadAccessDep) -> dict:
+    service = get_agent_service()
+    master = selected_watchlist(service.settings)
+    selected = selected_spot_watchlist(service.settings)
+    return {"master_tokens": master, "selected_tokens": selected, "selected_count": len(selected)}
+
+
+@router.put("/watchlist/spot")
+async def set_spot_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep) -> dict:
+    service = get_agent_service()
+    try:
+        selected = set_market_watchlist(service.settings, "spot", request.tokens)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"selected_tokens": selected, "selected_count": len(selected)}
+
+
+@router.get("/watchlist/perp")
+async def get_perp_watchlist(_: ReadAccessDep) -> dict:
+    service = get_agent_service()
+    master = selected_watchlist(service.settings)
+    selected = selected_perp_watchlist(service.settings)
+    return {"master_tokens": master, "selected_tokens": selected, "selected_count": len(selected)}
+
+
+@router.put("/watchlist/perp")
+async def set_perp_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep) -> dict:
+    service = get_agent_service()
+    try:
+        selected = set_market_watchlist(service.settings, "perp", request.tokens)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    added = [t for t in selected if t not in set(selected_perp_watchlist(service.settings))]
+    if added:
+        asyncio.create_task(warmup_selected_watchlist(service.settings, assets=added))
+    return {"selected_tokens": selected, "selected_count": len(selected)}
 
 
 @router.put("/kill-switch")

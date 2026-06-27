@@ -17,7 +17,12 @@ import {
   riskCloseAll,
   adjustEquity,
   validateOnboarding,
+  fetchSpotWatchlist,
+  updateSpotWatchlist,
+  fetchPerpWatchlist,
+  updatePerpWatchlist,
   type AgentDecisionResponse,
+  type AgentMarketWatchlistResponse,
   type AgentMobileSettings,
   type AgentStatus,
   type AssetBreakdownResponse,
@@ -897,6 +902,8 @@ const WalletPane: FC<{
   );
 };
 
+type CoinSubTab = 'master' | 'spot' | 'perp';
+
 const CoinsPane: FC<{
   eligibleTokens: string[];
   selectedAiSymbols: Set<string>;
@@ -905,11 +912,50 @@ const CoinsPane: FC<{
   error: string;
   onToggle: (symbol: string) => void;
 }> = ({ eligibleTokens, selectedAiSymbols, adminToken, saving, error, onToggle }) => {
+  const [subTab, setSubTab] = useState<CoinSubTab>('master');
   const [query, setQuery] = useState('');
+  const [spotData, setSpotData] = useState<AgentMarketWatchlistResponse | null>(null);
+  const [perpData, setPerpData] = useState<AgentMarketWatchlistResponse | null>(null);
+  const [marketSaving, setMarketSaving] = useState(false);
+  const [marketError, setMarketError] = useState('');
+
+  useEffect(() => {
+    void fetchSpotWatchlist().then(setSpotData).catch(() => undefined);
+    void fetchPerpWatchlist().then(setPerpData).catch(() => undefined);
+  }, []);
+
   const normalizedQuery = query.trim().toUpperCase();
-  const selectedTokens = eligibleTokens.filter((symbol) => selectedAiSymbols.has(symbol.toUpperCase()));
-  const filteredTokens = eligibleTokens.filter((symbol) => symbol.toUpperCase().includes(normalizedQuery));
+  const masterTokens = eligibleTokens.filter((s) => selectedAiSymbols.has(s.toUpperCase()));
+  const filteredEligible = eligibleTokens.filter((s) => s.toUpperCase().includes(normalizedQuery));
+
+  const spotSelected = useMemo(() => new Set((spotData?.selected_tokens ?? []).map((s) => s.toUpperCase())), [spotData]);
+  const perpSelected = useMemo(() => new Set((perpData?.selected_tokens ?? []).map((s) => s.toUpperCase())), [perpData]);
+
+  const handleMarketToggle = async (symbol: string, market: 'spot' | 'perp') => {
+    if (!adminToken || marketSaving) return;
+    setMarketSaving(true);
+    setMarketError('');
+    try {
+      if (market === 'spot') {
+        const current = new Set(spotData?.selected_tokens ?? []);
+        if (current.has(symbol)) current.delete(symbol); else current.add(symbol);
+        const result = await updateSpotWatchlist([...current], adminToken);
+        setSpotData(result);
+      } else {
+        const current = new Set(perpData?.selected_tokens ?? []);
+        if (current.has(symbol)) current.delete(symbol); else current.add(symbol);
+        const result = await updatePerpWatchlist([...current], adminToken);
+        setPerpData(result);
+      }
+    } catch {
+      setMarketError('Errore salvataggio watchlist');
+    } finally {
+      setMarketSaving(false);
+    }
+  };
+
   const disabled = !adminToken || saving;
+  const marketDisabled = !adminToken || marketSaving;
 
   return (
     <div className="space-y-4">
@@ -917,55 +963,103 @@ const CoinsPane: FC<{
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-white">Agent coins</h3>
-            <p className="mt-0.5 truncate text-xs text-gray-500">Tradabili {eligibleTokens.length} - attive {selectedTokens.length}</p>
+            <p className="mt-0.5 truncate text-xs text-gray-500">
+              {subTab === 'master' && `Eligible ${eligibleTokens.length} · Master ${masterTokens.length}`}
+              {subTab === 'spot' && `Master ${masterTokens.length} · Spot ${spotData?.selected_count ?? 0}`}
+              {subTab === 'perp' && `Master ${masterTokens.length} · Perp ${perpData?.selected_count ?? 0}`}
+            </p>
           </div>
           <span className="rounded-full bg-accent-yellow/15 px-2 py-1 text-xs font-semibold text-accent-yellow">
-            {selectedTokens.length}
+            {subTab === 'master' ? masterTokens.length : subTab === 'spot' ? (spotData?.selected_count ?? 0) : (perpData?.selected_count ?? 0)}
           </span>
         </div>
         {!adminToken && <p className="mt-3 rounded-lg bg-dark-900 px-3 py-2 text-xs text-gray-500">Inserisci admin token in Setup per modificare.</p>}
-        {error && <p className="mt-3 rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{error}</p>}
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Selezionate</h3>
-        {selectedTokens.length > 0 ? (
-          <div className="grid grid-cols-2 gap-2">
-            {selectedTokens.map((symbol) => (
-              <TokenToggle key={`selected-${symbol}`} symbol={symbol} selected disabled={disabled} onToggle={onToggle} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="Nessuna coin attiva" detail="Seleziona una coin tradabile per passarla all'agente." />
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Tradabili</h3>
-          {saving && <span className="text-xs text-accent-yellow">Saving</span>}
-        </div>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search token"
-          className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
-        />
-        <div className="grid grid-cols-2 gap-2">
-          {filteredTokens.map((symbol) => (
-            <TokenToggle
-              key={symbol}
-              symbol={symbol}
-              selected={selectedAiSymbols.has(symbol.toUpperCase())}
-              disabled={disabled}
-              onToggle={onToggle}
-            />
+        {(error || marketError) && <p className="mt-3 rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{marketError || error}</p>}
+        <div className="mt-3 grid grid-cols-3 gap-1">
+          {(['master', 'spot', 'perp'] as CoinSubTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => { setSubTab(t); setQuery(''); }}
+              className={`rounded-lg py-1.5 text-xs font-semibold capitalize transition-colors ${subTab === t ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400 hover:text-white'}`}
+            >
+              {t}
+            </button>
           ))}
         </div>
-        {filteredTokens.length === 0 && (
-          <EmptyState title="Nessun token trovato" detail="La ricerca filtra solo l'universo eligible." />
-        )}
       </section>
+
+      {subTab === 'master' && (
+        <>
+          <section className="space-y-2">
+            <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Selezionate</h3>
+            {masterTokens.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {masterTokens.map((symbol) => (
+                  <TokenToggle key={`sel-${symbol}`} symbol={symbol} selected disabled={disabled} onToggle={onToggle} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Nessuna coin attiva" detail="Seleziona una coin tradabile per passarla all'agente." />
+            )}
+          </section>
+          <section className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Eligible</h3>
+              {saving && <span className="text-xs text-accent-yellow">Saving</span>}
+            </div>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search token"
+              className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              {filteredEligible.map((symbol) => (
+                <TokenToggle key={symbol} symbol={symbol} selected={selectedAiSymbols.has(symbol.toUpperCase())} disabled={disabled} onToggle={onToggle} />
+              ))}
+            </div>
+            {filteredEligible.length === 0 && <EmptyState title="Nessun token trovato" detail="La ricerca filtra solo l'universo eligible." />}
+          </section>
+        </>
+      )}
+
+      {(subTab === 'spot' || subTab === 'perp') && (() => {
+        const isSpot = subTab === 'spot';
+        const selected = isSpot ? spotSelected : perpSelected;
+        const activeMasterTokens = masterTokens.filter((s) => s.toUpperCase().includes(normalizedQuery));
+        return (
+          <section className="space-y-2">
+            <p className="px-1 text-xs text-gray-500">
+              Seleziona le coin dalla master watchlist da assegnare al mercato <span className="font-semibold text-white">{subTab.toUpperCase()}</span>.
+            </p>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search token"
+              className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-white outline-none focus:border-accent-blue"
+            />
+            {marketSaving && <p className="text-xs text-accent-yellow">Saving…</p>}
+            {masterTokens.length === 0 ? (
+              <EmptyState title="Master watchlist vuota" detail="Aggiungi prima coin alla master watchlist." />
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {activeMasterTokens.map((symbol) => (
+                  <TokenToggle
+                    key={symbol}
+                    symbol={symbol}
+                    selected={selected.has(symbol.toUpperCase())}
+                    disabled={marketDisabled}
+                    onToggle={(s) => void handleMarketToggle(s, subTab)}
+                  />
+                ))}
+              </div>
+            )}
+            {activeMasterTokens.length === 0 && masterTokens.length > 0 && (
+              <EmptyState title="Nessun token trovato" detail="La ricerca filtra la master watchlist." />
+            )}
+          </section>
+        );
+      })()}
     </div>
   );
 };

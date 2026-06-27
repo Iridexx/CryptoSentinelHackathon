@@ -16,6 +16,7 @@ from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.loops import fast_loop as agent_fast_loop
 from backend.app.agent.loops import slow_loop as agent_slow_loop
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
+from backend.app.agent.watchlist import seed_perp_watchlist_if_empty
 from backend.app.api.routes import api_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
@@ -88,6 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session,
             fcm_tokens_path=settings.fcm_token_store_path,
         )
+    seed_perp_watchlist_if_empty(settings)
     warmup_task = asyncio.create_task(_startup_ohlcv_warmup(settings))
     heartbeat_task = asyncio.create_task(_heartbeat_loop(settings))
     price_checker_task = asyncio.create_task(price_checker_loop())
