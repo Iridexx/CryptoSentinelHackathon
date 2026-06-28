@@ -301,6 +301,7 @@ export interface AgentMobileSettings {
   spot_atr_stop_multiplier: number;
   spot_trailing_distance_pct: number;
   spot_partial_take_profit_pct: number;
+  spot_tp1_close_pct: number;
   spot_time_stop_hours: number;
   perp_direction_mode: string;
   perp_min_leverage: number;
@@ -308,7 +309,8 @@ export interface AgentMobileSettings {
   perp_value_area_pct: number;
   perp_atr_stop_multiplier: number;
   perp_trailing_mode: 'largo' | 'stretto';
-  perp_trailing_pnl_pct: number; // 0 = solo ATR; >0 = anche trailing a distanza % dal massimo (prezzo)
+  perp_trailing_pnl_pct: number;
+  perp_tp1_close_pct: number;
   perp_time_stop_hours: number;
   perp_fee_mode: 'taker' | 'maker' | 'none';
   spot_fee_mode: 'all' | 'none';

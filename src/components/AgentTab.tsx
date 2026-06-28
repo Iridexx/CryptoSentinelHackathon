@@ -108,6 +108,7 @@ const defaultSettings: AgentMobileSettings = {
   spot_atr_stop_multiplier: 1.5,
   spot_trailing_distance_pct: 2,
   spot_partial_take_profit_pct: 50,
+  spot_tp1_close_pct: 50,
   spot_time_stop_hours: 6,
   perp_direction_mode: 'long_short',
   perp_min_leverage: 4,
@@ -116,6 +117,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_atr_stop_multiplier: 0.5,
   perp_trailing_mode: 'largo' as const,
   perp_trailing_pnl_pct: 0,
+  perp_tp1_close_pct: 70,
   perp_time_stop_hours: 8,
   perp_fee_mode: 'taker' as const,
   spot_fee_mode: 'all' as const,
@@ -1266,6 +1268,7 @@ const SetupPane: FC<{
           <NumberInput label="Vol trigger %" value={settings.spot_volatility_trigger_pct} onChange={(spot_volatility_trigger_pct) => patch({ spot_volatility_trigger_pct })} />
           <NumberInput label="Rel volume" value={settings.spot_relative_volume_threshold} step={0.1} onChange={(spot_relative_volume_threshold) => patch({ spot_relative_volume_threshold })} />
           <NumberInput label="ATR stop" value={settings.spot_atr_stop_multiplier} step={0.1} onChange={(spot_atr_stop_multiplier) => patch({ spot_atr_stop_multiplier })} />
+          <NumberInput label="Chiudi a TP1 %" value={settings.spot_tp1_close_pct} step={5} onChange={(spot_tp1_close_pct) => patch({ spot_tp1_close_pct })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.spot_fee_mode} onChange={(v) => patch({ spot_fee_mode: v as 'all' | 'none' })} options={[
             { value: 'all', label: 'Swap fee + Slippage — 0.15%' },
             { value: 'none', label: 'Nessuna (strategia lorda)' },
@@ -1302,6 +1305,7 @@ const SetupPane: FC<{
             { value: 'stretto', label: 'Stretto — blocca prima' },
           ]} />
           <NumberInput label="Trailing dist. % (0=solo ATR)" value={settings.perp_trailing_pnl_pct} step={0.1} onChange={(perp_trailing_pnl_pct) => patch({ perp_trailing_pnl_pct })} />
+          <NumberInput label="Chiudi a TP1 %" value={settings.perp_tp1_close_pct} step={5} onChange={(perp_tp1_close_pct) => patch({ perp_tp1_close_pct })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(v) => patch({ perp_fee_mode: v as 'taker' | 'maker' | 'none' })} options={[
             { value: 'taker', label: 'Taker (market) — 0.06%' },
             { value: 'maker', label: 'Maker (limit) — 0.02%' },

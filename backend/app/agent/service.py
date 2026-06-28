@@ -167,6 +167,7 @@ class AgentService:
             spot_atr_stop_multiplier=self.settings.spot_atr_stop_multiplier,
             spot_trailing_distance_pct=self.settings.spot_trailing_distance_pct,
             spot_partial_take_profit_pct=self.settings.spot_partial_take_profit_pct,
+            spot_tp1_close_pct=50.0,
             spot_time_stop_hours=self.settings.spot_time_stop_hours,
             spot_fee_mode="all",
             # Perp strategy
@@ -176,6 +177,8 @@ class AgentService:
             perp_value_area_pct=self.settings.perp_value_area_pct,
             perp_atr_stop_multiplier=self.settings.perp_atr_stop_multiplier,
             perp_trailing_mode=self.settings.perp_trailing_mode,
+            perp_trailing_pnl_pct=0.0,
+            perp_tp1_close_pct=70.0,
             perp_time_stop_hours=self.settings.perp_time_stop_hours,
         )
 
@@ -606,8 +609,7 @@ class AgentService:
         """Chiude (totalmente o per la quota TP1) una posizione spot; crea trade di chiusura con pnl_usd."""
         swap_fee = pos.swap_fee_usd or Decimal("0")
         if partial:
-            # D (v3): a TP1 chiude solo la quota configurata (default 30%), lascia correre il resto.
-            fraction = Decimal(str(self.settings.spot_tp1_close_fraction))
+            fraction = Decimal(str(self._ms.spot_tp1_close_pct)) / Decimal("100")
             close_size = (pos.size * fraction).quantize(Decimal("0.000001"))
             raw_pnl = (exit_price - pos.entry_price) * close_size
             pnl = raw_pnl - swap_fee * fraction
@@ -786,13 +788,15 @@ class AgentService:
         fee_only = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
 
         if partial:
-            close_size = (pos.size / Decimal("2")).quantize(Decimal("0.000001"))
-            funding_share = pos.funding_accrued_usd * Decimal("0.5")
+            f = Decimal(str(self._ms.perp_tp1_close_pct)) / Decimal("100")
+            close_size = (pos.size * f).quantize(Decimal("0.000001"))
+            funding_share = pos.funding_accrued_usd * f
             raw_pnl = pnl_per_unit * close_size
-            pnl = raw_pnl - fee_only / Decimal("2") + funding_share
+            pnl = raw_pnl - fee_only * f + funding_share
             pos.size = pos.size - close_size
             pos.tp1_reached = True
-            pos.pnl_unrealized = pnl_per_unit * pos.size - fee_only / Decimal("2") + pos.funding_accrued_usd * Decimal("0.5")
+            remaining = Decimal("1") - f
+            pos.pnl_unrealized = pnl_per_unit * pos.size - fee_only * remaining + pos.funding_accrued_usd * remaining
         else:
             close_size = pos.size
             raw_pnl = pnl_per_unit * close_size

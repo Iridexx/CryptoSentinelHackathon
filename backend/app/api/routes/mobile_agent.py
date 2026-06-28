@@ -115,6 +115,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         spot_atr_stop_multiplier=settings.spot_atr_stop_multiplier,
         spot_trailing_distance_pct=settings.spot_trailing_distance_pct,
         spot_partial_take_profit_pct=settings.spot_partial_take_profit_pct,
+        spot_tp1_close_pct=50.0,
         spot_time_stop_hours=settings.spot_time_stop_hours,
         # Perp strategy
         perp_direction_mode=settings.perp_direction_mode,
@@ -124,6 +125,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_atr_stop_multiplier=settings.perp_atr_stop_multiplier,
         perp_trailing_mode=settings.perp_trailing_mode,
         perp_trailing_pnl_pct=0.0,
+        perp_tp1_close_pct=70.0,
         perp_time_stop_hours=settings.perp_time_stop_hours,
     )
 

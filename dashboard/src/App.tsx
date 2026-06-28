@@ -106,6 +106,8 @@ const settingFields = [
   'perp_min_leverage',
   'perp_max_leverage',
   'perp_trailing_pnl_pct',
+  'spot_tp1_close_pct',
+  'perp_tp1_close_pct',
 ];
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';

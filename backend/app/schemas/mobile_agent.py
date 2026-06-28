@@ -46,6 +46,7 @@ class AgentMobileSettings(BaseModel):
     spot_atr_stop_multiplier: float = Field(default=1.5, gt=0.0, le=20.0)
     spot_trailing_distance_pct: float = Field(default=2.0, ge=0.0, le=100.0)
     spot_partial_take_profit_pct: float = Field(default=50.0, ge=0.0, le=100.0)
+    spot_tp1_close_pct: float = Field(default=50.0, ge=1.0, le=99.0)
     spot_time_stop_hours: int = Field(default=6, ge=0, le=168)
     perp_direction_mode: str = "long_short"
     # Leva modulata dinamicamente sull'ATR(72) in apertura: bassa volatilità → max,
@@ -60,6 +61,7 @@ class AgentMobileSettings(BaseModel):
     # Se > 0, viene calcolato anche un trailing a distanza fissa dal massimo (% del prezzo).
     # Vince il più protettivo tra ATR e questa %. Con 0 si usa solo l'ATR.
     perp_trailing_pnl_pct: float = Field(default=0.0, ge=0.0, le=20.0)
+    perp_tp1_close_pct: float = Field(default=70.0, ge=1.0, le=99.0)
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)
     perp_fee_mode: str = Field(default="taker", pattern="^(taker|maker|none)$")
     spot_fee_mode: str = Field(default="all", pattern="^(all|none)$")
