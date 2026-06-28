@@ -1580,6 +1580,7 @@ const AgentTab: FC<AgentTabProps> = ({
   const [decisions, setDecisions] = useState<AgentDecisionResponse | null>(agentCache.decisions);
   const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(agentCache.assetBreakdown);
   const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
+  const detailTradeIdRef = useRef<string | null>(null);
   const [settings, setSettings] = useState<AgentMobileSettings>(agentCache.settings ?? defaultSettings);
   const [execWallets, setExecWallets] = useState<ExecutionWalletsResponse | null>(agentCache.execWallets);
   const [claudeUsage, setClaudeUsage] = useState<ClaudeUsageView | null>(agentCache.claudeUsage);
@@ -1595,6 +1596,9 @@ const AgentTab: FC<AgentTabProps> = ({
     if (!silent) setRefreshing(true);
     // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
     // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
+    const detailFetch = detailTradeIdRef.current
+      ? fetchTradeDetail(detailTradeIdRef.current).then(setTradeDetail).catch(() => {})
+      : Promise.resolve();
     const results = await Promise.allSettled([
       fetchAgentStatus().then(setStatus),
       fetchSpotView().then(setSpot),
@@ -1605,6 +1609,7 @@ const AgentTab: FC<AgentTabProps> = ({
       fetchEquityCurve(equityRangeRef.current).then(setEquity),
       fetchAgentDecisions().then(setDecisions),
       fetchAssetBreakdown().then(setAssetBreakdown),
+      detailFetch,
     ]);
     const failed = results.filter((r) => r.status === 'rejected').length;
     setError(failed > 0 ? `${failed} endpoint non raggiungibili` : '');
@@ -1646,13 +1651,16 @@ const AgentTab: FC<AgentTabProps> = ({
     return () => window.clearInterval(timer);
   }, [refresh]);
 
-  // Refresh leggero ogni 5s: solo le viste con posizioni aperte e PnL, così i
-  // risultati dei trade si aggiornano in quasi-realtime senza ricaricare tutto.
+  // Refresh leggero ogni 5s: viste posizioni aperte + dettaglio live se aperto.
   useEffect(() => {
     const timer = window.setInterval(() => {
       fetchSpotView().then(setSpot).catch(() => {});
       fetchPerpView().then(setPerp).catch(() => {});
       fetchGlobalView().then(setGlobal).catch(() => {});
+      // Se il dettaglio di una posizione live è aperto, ricaricalo silenziosamente.
+      if (detailTradeIdRef.current) {
+        fetchTradeDetail(detailTradeIdRef.current).then(setTradeDetail).catch(() => {});
+      }
     }, AGENT_FAST_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, []);
@@ -1745,6 +1753,7 @@ const AgentTab: FC<AgentTabProps> = ({
   };
 
   const handleTradeDetail = async (tradeId: string) => {
+    detailTradeIdRef.current = tradeId;
     setLoadingDetail(true);
     setActionError('');
     try {
@@ -1774,7 +1783,7 @@ const AgentTab: FC<AgentTabProps> = ({
         <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{actionError}</p>
       )}
       {tradeDetail ? (
-        <TradeDetailScreen detail={tradeDetail} onBack={() => setTradeDetail(null)} />
+        <TradeDetailScreen detail={tradeDetail} onBack={() => { detailTradeIdRef.current = null; setTradeDetail(null); }} />
       ) : (
         <>
       <div className="rounded-xl bg-dark-800 px-4 py-3">
