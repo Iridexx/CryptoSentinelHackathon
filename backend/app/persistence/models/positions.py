@@ -23,6 +23,7 @@ class SpotPosition(Base):
     current_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
     pnl_unrealized: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False, default=Decimal("0"))
     stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    initial_stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # SL originale, mai sovrascritto
     take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
@@ -57,6 +58,7 @@ class PerpPosition(Base):
     leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     pnl_unrealized: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False, default=Decimal("0"))
     stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    initial_stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # SL originale, mai sovrascritto
     take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # bordo value area (50%)
     take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # POC (25%)
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # null finché non attivo

@@ -44,6 +44,7 @@ async def upgrade_schema(session: AsyncSession) -> None:
         ("funding_accrued_usd", "NUMERIC(20, 8) NOT NULL DEFAULT 0"),
         ("entry_atr",           "NUMERIC(30, 8)"),
         ("max_price",           "NUMERIC(30, 8)"),
+        ("initial_stop_loss",   "NUMERIC(30, 8)"),
     ]
     for col, defn in perp_pos_cols:
         if not await _has_column("perp_positions", col):
@@ -51,6 +52,18 @@ async def upgrade_schema(session: AsyncSession) -> None:
                 text(f"ALTER TABLE perp_positions ADD COLUMN {col} {defn}")
             )
             logger.info("schema_column_added", table="perp_positions", column=col)
+    # Ricostruisce initial_stop_loss per posizioni aperte precedenti all'introduzione del campo.
+    await session.execute(text("""
+        UPDATE perp_positions
+        SET initial_stop_loss = CASE
+            WHEN side = 'long' THEN entry_price - entry_atr * 0.5
+            ELSE entry_price + entry_atr * 0.5
+        END
+        WHERE status = 'open'
+          AND initial_stop_loss IS NULL
+          AND entry_atr IS NOT NULL
+    """))
+    logger.info("schema_initial_stop_loss_backfilled", table="perp_positions")
 
     # ── perp_trades ───────────────────────────────────────────────────────────
     perp_trade_cols: list[tuple[str, str]] = [
@@ -69,12 +82,13 @@ async def upgrade_schema(session: AsyncSession) -> None:
 
     # ── spot_positions ────────────────────────────────────────────────────────
     spot_pos_cols: list[tuple[str, str]] = [
-        ("fee_mode",       "VARCHAR(8)"),
-        ("swap_fee_usd",   "NUMERIC(20, 8)"),
-        ("slippage_usd",   "NUMERIC(20, 8)"),
-        ("entry_atr",      "NUMERIC(30, 8)"),
-        ("max_price",      "NUMERIC(30, 8)"),
-        ("scale_in_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("fee_mode",          "VARCHAR(8)"),
+        ("swap_fee_usd",      "NUMERIC(20, 8)"),
+        ("slippage_usd",      "NUMERIC(20, 8)"),
+        ("entry_atr",         "NUMERIC(30, 8)"),
+        ("max_price",         "NUMERIC(30, 8)"),
+        ("scale_in_count",    "INTEGER NOT NULL DEFAULT 0"),
+        ("initial_stop_loss", "NUMERIC(30, 8)"),
     ]
     for col, defn in spot_pos_cols:
         if not await _has_column("spot_positions", col):
@@ -82,6 +96,14 @@ async def upgrade_schema(session: AsyncSession) -> None:
                 text(f"ALTER TABLE spot_positions ADD COLUMN {col} {defn}")
             )
             logger.info("schema_column_added", table="spot_positions", column=col)
+    await session.execute(text("""
+        UPDATE spot_positions
+        SET initial_stop_loss = entry_price - entry_atr * 0.5
+        WHERE status = 'open'
+          AND initial_stop_loss IS NULL
+          AND entry_atr IS NOT NULL
+    """))
+    logger.info("schema_initial_stop_loss_backfilled", table="spot_positions")
 
     # ── spot_trades ───────────────────────────────────────────────────────────
     spot_trade_cols: list[tuple[str, str]] = [

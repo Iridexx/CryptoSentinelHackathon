@@ -451,9 +451,18 @@ def _decision_payload(decision: AgentDecision | None) -> dict | None:
 
 
 def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
-    """Livello (SL/TP) dalla posizione, con fallback ai dati congelati nello snapshot."""
-    if position is not None and getattr(position, attr, None):
-        return _fmt_price(getattr(position, attr))
+    """Livello (SL/TP) dalla posizione, con fallback ai dati congelati nello snapshot.
+
+    Per lo stop_loss usa initial_stop_loss se disponibile: preserva il livello
+    originale sotto l'entry anche dopo che il BE ha sovrascritto stop_loss.
+    """
+    if position is not None:
+        if attr == "stop_loss":
+            val = getattr(position, "initial_stop_loss", None) or getattr(position, "stop_loss", None)
+        else:
+            val = getattr(position, attr, None)
+        if val:
+            return _fmt_price(val)
     if chart and chart.get(key):
         return _fmt_price(chart[key])
     return None
