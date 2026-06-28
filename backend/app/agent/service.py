@@ -1055,8 +1055,8 @@ class AgentService:
             if reason:
                 exit_price = _level_fill_price(pos, reason, price)
                 pnl = await self._close_perp_position(session, pos, exit_price, reason, now, partial=partial)
-                exposure = pos.entry_price * pos.size * pos.leverage
-                pnl_pct = pnl / exposure * 100 if exposure > 0 else Decimal("0")
+                margin = pos.entry_price * pos.size / Decimal(max(int(pos.leverage or 1), 1))
+                pnl_pct = pnl / margin * 100 if margin > 0 else Decimal("0")
                 asyncio.create_task(
                     notifier.notify_trade_closed(
                         user_id=user_id,
