@@ -884,7 +884,9 @@ class AgentService:
                         Decimal(str(self.settings.spot_tp1_atr_multiplier)),
                     )
                     trail = (pos.max_price or price) - atr_v * trail_mult
-                    if pos.trailing_stop is None or trail > pos.trailing_stop:
+                    # Guard: il trailing spot si attiva solo quando supera l'entry
+                    # (non deve sostituire lo stop con uno più stretto ma in perdita).
+                    if trail >= pos.entry_price and (pos.trailing_stop is None or trail > pos.trailing_stop):
                         pos.trailing_stop = trail
                         pos.updated_at = now
                         session.add(pos)
@@ -994,29 +996,30 @@ class AgentService:
                 tp1_cap = Decimal(str(self.settings.perp_tp1_atr_multiplier))
                 if mult > tp1_cap:
                     mult = tp1_cap
+                pnl_pct = Decimal(str(ms.perp_trailing_pnl_pct))
                 if is_long:
                     trail_atr = extreme - atr_v * mult
                     # Se perp_trailing_pnl_pct > 0, calcola anche il trailing a distanza
                     # fissa (% del prezzo dal massimo). Vince il più alto tra i due.
-                    pnl_pct = Decimal(str(ms.perp_trailing_pnl_pct))
                     if pnl_pct > 0:
                         trail_pnl = extreme * (1 - pnl_pct / Decimal("100"))
                         trail = max(trail_atr, trail_pnl)
                     else:
                         trail = trail_atr
-                    # Si popola solo quando è più protettivo dello stop; altrimenti resta
-                    # None → UI "non attivo". Si alza soltanto, mai scende.
-                    if (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
+                    # Il trailing si attiva SOLO quando supera l'entry: non deve mai
+                    # sostituire lo stop originale con uno stop più stretto ma ancora
+                    # in perdita (causa chiusure precoci senza dare spazio alla posizione).
+                    if trail >= pos.entry_price and (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
                 else:
                     trail_atr = extreme + atr_v * mult
-                    pnl_pct = Decimal(str(ms.perp_trailing_pnl_pct))
                     if pnl_pct > 0:
                         trail_pnl = extreme * (1 + pnl_pct / Decimal("100"))
                         trail = min(trail_atr, trail_pnl)
                     else:
                         trail = trail_atr
-                    if (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
+                    # Stesso guard per gli short: trail deve essere <= entry (in profitto).
+                    if trail <= pos.entry_price and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
 
             # ── Uscite — trailing (se più protettivo) → stop → TP2 → TP1 → time ──
