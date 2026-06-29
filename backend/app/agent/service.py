@@ -180,6 +180,7 @@ class AgentService:
             perp_trailing_pnl_pct=0.0,
             perp_tp1_close_pct=70.0,
             perp_time_stop_hours=self.settings.perp_time_stop_hours,
+            post_close_candles=10,
         )
 
     def status(self) -> dict:

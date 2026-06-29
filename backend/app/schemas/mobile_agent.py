@@ -65,6 +65,8 @@ class AgentMobileSettings(BaseModel):
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)
     perp_fee_mode: str = Field(default="taker", pattern="^(taker|maker|none)$")
     spot_fee_mode: str = Field(default="all", pattern="^(all|none)$")
+    # Candele successive alla chiusura mostrate nel grafico del trade. 0 = disattivato.
+    post_close_candles: int = Field(default=10, ge=0, le=50)
 
     @model_validator(mode="after")
     def _check_leverage_range(self) -> "AgentMobileSettings":

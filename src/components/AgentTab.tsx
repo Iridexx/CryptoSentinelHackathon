@@ -121,6 +121,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_time_stop_hours: 8,
   perp_fee_mode: 'taker' as const,
   spot_fee_mode: 'all' as const,
+  post_close_candles: 10,
 };
 
 const AGENT_REFRESH_MS = 45_000;
@@ -1246,6 +1247,13 @@ const SetupPane: FC<{
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Daily loss %" value={settings.daily_loss_limit_pct} onChange={(daily_loss_limit_pct) => patch({ daily_loss_limit_pct })} />
           <NumberInput label="Drawdown cap %" value={settings.drawdown_cap_pct} onChange={(drawdown_cap_pct) => patch({ drawdown_cap_pct })} />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Grafico trade</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <NumberInput label="Candele post-chiusura (0=off)" value={settings.post_close_candles} step={1} onChange={(post_close_candles) => patch({ post_close_candles: Math.round(post_close_candles) })} />
         </div>
       </section>
 

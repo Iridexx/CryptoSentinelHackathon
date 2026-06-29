@@ -315,6 +315,7 @@ export interface AgentMobileSettings {
   perp_time_stop_hours: number;
   perp_fee_mode: 'taker' | 'maker' | 'none';
   spot_fee_mode: 'all' | 'none';
+  post_close_candles: number;
 }
 
 export interface AgentSettingsResponse {

@@ -108,6 +108,7 @@ const settingFields = [
   'perp_trailing_pnl_pct',
   'spot_tp1_close_pct',
   'perp_tp1_close_pct',
+  'post_close_candles',
 ];
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';

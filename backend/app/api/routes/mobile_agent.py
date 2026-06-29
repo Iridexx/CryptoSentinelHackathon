@@ -127,6 +127,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_trailing_pnl_pct=0.0,
         perp_tp1_close_pct=70.0,
         perp_time_stop_hours=settings.perp_time_stop_hours,
+        post_close_candles=10,
     )
 
 

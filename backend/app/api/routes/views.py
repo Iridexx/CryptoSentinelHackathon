@@ -172,7 +172,11 @@ async def trade_detail(
 ) -> dict:
     """Return full detail for one spot/perp trade or its open position."""
 
+    from backend.app.api.routes.mobile_agent import _settings_from_runtime
+
     user_id = str(settings.default_user_id)
+    ms, _, _ = _settings_from_runtime(settings)
+    post_close_count = ms.post_close_candles
     spot = (await session.execute(select(SpotTrade).where(SpotTrade.user_id == user_id).where(SpotTrade.trade_id == trade_id))).scalar_one_or_none()
     perp = (await session.execute(select(PerpTrade).where(PerpTrade.user_id == user_id).where(PerpTrade.trade_id == trade_id))).scalar_one_or_none()
     if spot is None and perp is None:
@@ -185,7 +189,7 @@ async def trade_detail(
         live = await _live_chart_if_open(snapshot, position, "spot")
         post_close: list[dict] = []
         if live is None and snapshot is not None:
-            post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), spot.asset, "spot")
+            post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), spot.asset, "spot", post_close_count)
         return _spot_trade_detail(spot, position, decision, snapshot, live, post_close)
     position = await _find_trade_position(session, PerpPosition, perp)
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
@@ -193,7 +197,7 @@ async def trade_detail(
     live = await _live_chart_if_open(snapshot, position, "perp")
     post_close = []
     if live is None and snapshot is not None:
-        post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), perp.asset, "futures")
+        post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), perp.asset, "futures", post_close_count)
     return _perp_trade_detail(perp, position, decision, snapshot, live, post_close)
 
 
@@ -244,14 +248,16 @@ _INTERVAL_MINUTES: dict[str, int] = {
 POST_CLOSE_CANDLES = 10
 
 
-async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str) -> list[dict]:
+async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, count: int = POST_CLOSE_CANDLES) -> list[dict]:
     """Recupera fino a POST_CLOSE_CANDLES candele successive alla chiusura del trade.
 
     Strategia: fetch delle ultime (candles_in_trade + POST_CLOSE + buffer) candele e
     filtra quelle con timestamp > closed_at. Funziona per trade chiusi di recente
     (entro ~2 giorni con chart 5m, settimane con 1h/4h).
-    Ritorna lista vuota se non ci sono ancora candele post-close disponibili.
+    Ritorna lista vuota se non ci sono ancora candele post-close disponibili o se count=0.
     """
+    if count <= 0:
+        return []
     try:
         from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 
@@ -272,9 +278,9 @@ async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str) -
         if now < closed_at + timedelta(minutes=interval_min):
             return []
         # Calcola quante candele totali servono per coprire dall'apertura del trade
-        # fino a POST_CLOSE_CANDLES dopo la chiusura (Binance restituisce le ultime N).
+        # fino a count candele dopo la chiusura (Binance restituisce le ultime N).
         elapsed_since_open_min = max(interval_min, int((now - opened_at).total_seconds() / 60))
-        needed = int(elapsed_since_open_min / interval_min) + POST_CLOSE_CANDLES + 5
+        needed = int(elapsed_since_open_min / interval_min) + count + 5
         fetch_limit = min(500, needed)
         candles = await BinanceKlineFeed().fetch(
             symbol=f"{asset}USDT",
@@ -288,7 +294,7 @@ async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str) -
             for c in candles
             if c.timestamp > closed_at
         ]
-        return post[:POST_CLOSE_CANDLES]
+        return post[:count]
     except Exception:
         return []
 
