@@ -223,6 +223,7 @@ export type TradeChart = {
   opened_at: string;
   closed_at: string;
   candles: TradeChartCandle[];
+  post_close_candles?: TradeChartCandle[];
 };
 
 export type OperationalStats = {
