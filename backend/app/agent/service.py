@@ -902,7 +902,7 @@ class AgentService:
             # Uscite — priorità massima: SL / trailing (il maggiore dei due).
             if pos.trailing_stop is not None and (pos.stop_loss is None or pos.trailing_stop > pos.stop_loss):
                 if price <= pos.trailing_stop:
-                    reason = "breakeven" if pos.trailing_stop >= pos.entry_price else "trailing_stop"
+                    reason = "trailing_stop"
             if reason is None and pos.stop_loss is not None and price <= pos.stop_loss:
                 # Se lo stop è già a breakeven (>= entry) la chiusura non è una perdita:
                 # etichettala "breakeven" invece di "stop_loss".
@@ -1034,8 +1034,7 @@ class AgentService:
                 or (not is_long and pos.trailing_stop < pos.stop_loss)
             ):
                 if (is_long and price <= pos.trailing_stop) or (not is_long and price >= pos.trailing_stop):
-                    at_be = pos.trailing_stop >= pos.entry_price if is_long else pos.trailing_stop <= pos.entry_price
-                    reason = "breakeven" if at_be else "trailing_stop"
+                    reason = "trailing_stop"
 
             if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
