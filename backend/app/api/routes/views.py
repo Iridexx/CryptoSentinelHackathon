@@ -247,33 +247,42 @@ POST_CLOSE_CANDLES = 10
 async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str) -> list[dict]:
     """Recupera fino a POST_CLOSE_CANDLES candele successive alla chiusura del trade.
 
-    Ritorna lista vuota in caso di errore o se non sono ancora disponibili.
+    Strategia: fetch delle ultime (candles_in_trade + POST_CLOSE + buffer) candele e
+    filtra quelle con timestamp > closed_at. Funziona per trade chiusi di recente
+    (entro ~2 giorni con chart 5m, settimane con 1h/4h).
+    Ritorna lista vuota se non ci sono ancora candele post-close disponibili.
     """
     try:
         from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 
         closed_at_str = chart.get("closed_at")
+        opened_at_str = chart.get("opened_at")
         interval = chart.get("interval", "5m")
-        if not closed_at_str or chart.get("live"):
+        if not closed_at_str or not opened_at_str or chart.get("live"):
             return []
         closed_at = datetime.fromisoformat(closed_at_str)
         if closed_at.tzinfo is None:
             closed_at = closed_at.replace(tzinfo=UTC)
+        opened_at = datetime.fromisoformat(opened_at_str)
+        if opened_at.tzinfo is None:
+            opened_at = opened_at.replace(tzinfo=UTC)
         interval_min = _INTERVAL_MINUTES.get(interval, 5)
         now = datetime.now(UTC)
-        # Attendiamo almeno 1 candele chiusa dopo il trade.
+        # Aspettiamo almeno 1 periodo chiuso dopo la fine del trade.
         if now < closed_at + timedelta(minutes=interval_min):
             return []
-        # Fetch partendo dalla candela di chiusura: ne chiediamo POST_CLOSE+2 per sicurezza.
-        start = closed_at - timedelta(minutes=interval_min)
+        # Calcola quante candele totali servono per coprire dall'apertura del trade
+        # fino a POST_CLOSE_CANDLES dopo la chiusura (Binance restituisce le ultime N).
+        elapsed_since_open_min = max(interval_min, int((now - opened_at).total_seconds() / 60))
+        needed = int(elapsed_since_open_min / interval_min) + POST_CLOSE_CANDLES + 5
+        fetch_limit = min(500, needed)
         candles = await BinanceKlineFeed().fetch(
             symbol=f"{asset}USDT",
             interval=interval,
-            limit=POST_CLOSE_CANDLES + 3,
+            limit=fetch_limit,
             market=feed_market,  # type: ignore[arg-type]
-            start_time=start,
         )
-        # Teniamo solo le candele con timestamp > closed_at (post-chiusura).
+        # Teniamo solo le candele aperte DOPO la chiusura del trade.
         post = [
             {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
             for c in candles
