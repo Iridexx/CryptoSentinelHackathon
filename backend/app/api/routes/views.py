@@ -183,12 +183,18 @@ async def trade_detail(
         decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
         snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
         live = await _live_chart_if_open(snapshot, position, "spot")
-        return _spot_trade_detail(spot, position, decision, snapshot, live)
+        post_close: list[dict] = []
+        if live is None and snapshot is not None:
+            post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), spot.asset, "spot")
+        return _spot_trade_detail(spot, position, decision, snapshot, live, post_close)
     position = await _find_trade_position(session, PerpPosition, perp)
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
     snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
     live = await _live_chart_if_open(snapshot, position, "perp")
-    return _perp_trade_detail(perp, position, decision, snapshot, live)
+    post_close = []
+    if live is None and snapshot is not None:
+        post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), perp.asset, "futures")
+    return _perp_trade_detail(perp, position, decision, snapshot, live, post_close)
 
 
 async def _find_trade_position(session, model, trade):
@@ -229,6 +235,53 @@ async def _live_chart_if_open(snapshot, position, market: str) -> dict | None:
     if position is None or position.status == "closed":
         return None
     return await _build_live_chart(position, market)
+
+
+_INTERVAL_MINUTES: dict[str, int] = {
+    "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
+    "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440,
+}
+POST_CLOSE_CANDLES = 10
+
+
+async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str) -> list[dict]:
+    """Recupera fino a POST_CLOSE_CANDLES candele successive alla chiusura del trade.
+
+    Ritorna lista vuota in caso di errore o se non sono ancora disponibili.
+    """
+    try:
+        from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+
+        closed_at_str = chart.get("closed_at")
+        interval = chart.get("interval", "5m")
+        if not closed_at_str or chart.get("live"):
+            return []
+        closed_at = datetime.fromisoformat(closed_at_str)
+        if closed_at.tzinfo is None:
+            closed_at = closed_at.replace(tzinfo=UTC)
+        interval_min = _INTERVAL_MINUTES.get(interval, 5)
+        now = datetime.now(UTC)
+        # Attendiamo almeno 1 candele chiusa dopo il trade.
+        if now < closed_at + timedelta(minutes=interval_min):
+            return []
+        # Fetch partendo dalla candela di chiusura: ne chiediamo POST_CLOSE+2 per sicurezza.
+        start = closed_at - timedelta(minutes=interval_min)
+        candles = await BinanceKlineFeed().fetch(
+            symbol=f"{asset}USDT",
+            interval=interval,
+            limit=POST_CLOSE_CANDLES + 3,
+            market=feed_market,  # type: ignore[arg-type]
+            start_time=start,
+        )
+        # Teniamo solo le candele con timestamp > closed_at (post-chiusura).
+        post = [
+            {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
+            for c in candles
+            if c.timestamp > closed_at
+        ]
+        return post[:POST_CLOSE_CANDLES]
+    except Exception:
+        return []
 
 
 async def _build_live_chart(position, market: str) -> dict | None:
@@ -502,9 +555,11 @@ def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tupl
     return opened_at, closed_at
 
 
-def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None) -> dict:
+def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None, post_close_candles: list[dict] | None = None) -> dict:
     # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
     chart = live_chart if live_chart is not None else (json.loads(snapshot.payload) if snapshot else None)
+    if chart is not None and post_close_candles:
+        chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
     entry = (
         Decimal(position.entry_price) if position is not None
@@ -565,9 +620,11 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
     }
 
 
-def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None) -> dict:
+def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None, post_close_candles: list[dict] | None = None) -> dict:
     # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
     chart = live_chart if live_chart is not None else (json.loads(snapshot.payload) if snapshot else None)
+    if chart is not None and post_close_candles:
+        chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
     entry = (
         Decimal(position.entry_price) if position is not None

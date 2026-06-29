@@ -49,15 +49,22 @@ class BinanceKlineFeed:
         self.spot_base_url = spot_base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
-    async def _binance_klines(self, symbol: str, interval: str, limit: int, market: BinanceMarket) -> list[Candle]:
+    async def _binance_klines(
+        self,
+        symbol: str,
+        interval: str,
+        limit: int,
+        market: BinanceMarket,
+        start_time: datetime | None = None,
+    ) -> list[Candle]:
         base_url = self.futures_base_url if market == "futures" else self.spot_base_url
         path = "/fapi/v1/klines" if market == "futures" else "/api/v3/klines"
+        params: dict = {"symbol": symbol.upper(), "interval": interval, "limit": limit}
+        if start_time is not None:
+            params["startTime"] = int(start_time.timestamp() * 1000)
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.get(
-                    f"{base_url}{path}",
-                    params={"symbol": symbol.upper(), "interval": interval, "limit": limit},
-                )
+                response = await client.get(f"{base_url}{path}", params=params)
             if response.status_code >= 400:
                 return []
             return [_parse_kline(row) for row in response.json()]
@@ -71,8 +78,9 @@ class BinanceKlineFeed:
         interval: str = "5m",
         limit: int = 288,
         market: BinanceMarket = "futures",
+        start_time: datetime | None = None,
     ) -> list[Candle]:
-        candles = await self._binance_klines(symbol, interval, limit, market)
+        candles = await self._binance_klines(symbol, interval, limit, market, start_time)
         if not candles:
             # Fallback CEX: Bitget -> KuCoin (per token senza mercato Binance).
             from backend.app.agent.signals.perp.cex_fallback import fetch_klines_fallback

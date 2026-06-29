@@ -1327,7 +1327,9 @@ const SetupPane: FC<{
 
 const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ chart }) => {
   const candles = chart.candles ?? [];
-  if (candles.length < 2) {
+  const postClose = chart.post_close_candles ?? [];
+  const allCandles = [...candles, ...postClose];
+  if (allCandles.length < 2) {
     return <p className="text-xs text-gray-500">Grafico non disponibile per questo trade.</p>;
   }
   // Geometria: area di plot + margine destro per i prezzi (Y) e inferiore per gli orari (X).
@@ -1335,8 +1337,8 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const H = 200;
   const padX = 6;
   const padTop = 10;
-  const axisW = 46;   // larghezza colonna etichette prezzo (asse Y, a destra)
-  const axisH = 16;   // altezza riga etichette orario (asse X, in basso)
+  const axisW = 46;
+  const axisH = 16;
   const plotR = W - axisW;
   const plotB = H - axisH;
   const entry = Number(chart.entry_price);
@@ -1346,27 +1348,27 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const tp2 = chart.take_profit_2 != null ? Number(chart.take_profit_2) : null;
 
   const levels = [entry, exit, sl, tp1, tp2].filter((v): v is number => v != null && !Number.isNaN(v));
-  let hi = Math.max(...candles.map((c) => c.h), ...levels);
-  let lo = Math.min(...candles.map((c) => c.l), ...levels);
+  let hi = Math.max(...allCandles.map((c) => c.h), ...levels);
+  let lo = Math.min(...allCandles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
   const range = hi - lo;
   const y = (price: number) => padTop + (1 - (price - lo) / range) * (plotB - padTop);
-  const colW = (plotR - padX) / candles.length;
+  const colW = (plotR - padX) / allCandles.length;
   const cx = (i: number) => padX + colW * (i + 0.5);
 
-  // Marker temporali: candela piu' vicina ad apertura/chiusura.
+  // Marker temporali: candela piu' vicina ad apertura/chiusura (solo su candles pre-close).
   const ts = (s: string) => new Date(s).getTime();
-  const nearest = (target: number) => {
+  const nearest = (target: number, pool: typeof candles) => {
     let best = 0;
     let bestD = Infinity;
-    candles.forEach((c, i) => { const d = Math.abs(ts(c.t) - target); if (d < bestD) { bestD = d; best = i; } });
+    pool.forEach((c, i) => { const d = Math.abs(ts(c.t) - target); if (d < bestD) { bestD = d; best = i; } });
     return best;
   };
-  const entryIdx = nearest(ts(chart.opened_at));
-  const exitIdx = nearest(ts(chart.closed_at));
+  const entryIdx = nearest(ts(chart.opened_at), candles);
+  const exitIdx = nearest(ts(chart.closed_at), candles);
   const exitGood = exit >= entry;
 
-  // Etichette asse Y (prezzo): 5 tacche equidistanti tra lo e hi.
+  // Etichette asse Y (prezzo).
   const fmtAxisPrice = (p: number) => {
     if (p >= 1000) return p.toFixed(0);
     if (p >= 1) return p.toFixed(2);
@@ -1375,15 +1377,15 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   };
   const yTicks = [0, 1, 2, 3, 4].map((k) => lo + (range * k) / 4);
 
-  // Etichette asse X (orario): 4 tacche; formato orario o data se l'arco supera le 24h.
-  const spanMs = ts(candles[candles.length - 1].t) - ts(candles[0].t);
+  // Etichette asse X (orario).
+  const spanMs = ts(allCandles[allCandles.length - 1].t) - ts(allCandles[0].t);
   const fmtAxisTime = (iso: string) => {
     const d = new Date(iso);
     return spanMs > 24 * 3600 * 1000
       ? d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
       : d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   };
-  const last = candles.length - 1;
+  const last = allCandles.length - 1;
   const xTickIdx = [0, Math.round(last / 3), Math.round((2 * last) / 3), last];
 
   const levelLine = (price: number | null, color: string, dash: string) =>
@@ -1391,9 +1393,12 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       <line x1={padX} x2={plotR} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
     );
 
+  // Linea verticale tratteggiata che separa le candele post-close.
+  const closeLineX = postClose.length > 0 ? cx(candles.length - 0.5) : null;
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
-      {/* griglia + etichette asse Y (prezzo) */}
+      {/* griglia + etichette asse Y */}
       {yTicks.map((p, k) => (
         <g key={`yt${k}`}>
           <line x1={padX} x2={plotR} y1={y(p)} y2={y(p)} stroke="#1f2937" strokeWidth="0.5" opacity="0.6" />
@@ -1403,7 +1408,7 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       {/* assi */}
       <line x1={plotR} x2={plotR} y1={padTop} y2={plotB} stroke="#374151" strokeWidth="0.5" />
       <line x1={padX} x2={plotR} y1={plotB} y2={plotB} stroke="#374151" strokeWidth="0.5" />
-      {/* etichette asse X (orario) */}
+      {/* etichette asse X */}
       {xTickIdx.map((i, k) => (
         <text
           key={`xt${k}`}
@@ -1413,22 +1418,33 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
           fill="#6b7280"
           textAnchor={k === 0 ? 'start' : k === xTickIdx.length - 1 ? 'end' : 'middle'}
         >
-          {fmtAxisTime(candles[i].t)}
+          {fmtAxisTime(allCandles[i].t)}
         </text>
       ))}
-      {candles.map((c, i) => {
+      {/* sfondo post-close */}
+      {closeLineX != null && (
+        <rect x={closeLineX} y={padTop} width={plotR - closeLineX} height={plotB - padTop} fill="#111827" opacity="0.4" />
+      )}
+      {/* candele (pre-close a piena opacità, post-close attenuate) */}
+      {allCandles.map((c, i) => {
+        const isPost = i >= candles.length;
         const up = c.c >= c.o;
-        const color = up ? '#22c55e' : '#ef4444';
+        const color = isPost ? (up ? '#166534' : '#7f1d1d') : (up ? '#22c55e' : '#ef4444');
+        const opacity = isPost ? 0.55 : 1;
         const bodyTop = y(Math.max(c.o, c.c));
         const bodyBot = y(Math.min(c.o, c.c));
         const bw = Math.max(1, colW * 0.6);
         return (
-          <g key={i}>
+          <g key={i} opacity={opacity}>
             <line x1={cx(i)} x2={cx(i)} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth="1" />
             <rect x={cx(i) - bw / 2} y={bodyTop} width={bw} height={Math.max(1, bodyBot - bodyTop)} fill={color} />
           </g>
         );
       })}
+      {/* linea verticale tratteggiata di chiusura */}
+      {closeLineX != null && (
+        <line x1={closeLineX} x2={closeLineX} y1={padTop} y2={plotB} stroke="#6b7280" strokeWidth="1" strokeDasharray="3 2" opacity="0.8" />
+      )}
       {levelLine(sl, '#ef4444', '4 3')}
       {levelLine(tp1, '#22c55e', '4 3')}
       {levelLine(tp2, '#16a34a', '2 3')}

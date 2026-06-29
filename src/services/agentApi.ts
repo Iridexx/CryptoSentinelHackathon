@@ -224,6 +224,7 @@ export interface TradeChart {
   closed_at: string;
   live?: boolean;
   candles: TradeChartCandle[];
+  post_close_candles?: TradeChartCandle[];
 }
 
 export interface TradeDetail {
