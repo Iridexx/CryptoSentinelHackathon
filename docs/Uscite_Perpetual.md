@@ -13,10 +13,13 @@ Il perp supporta long e short con leva. Il comportamento corrente combina Volume
 | Stop Loss | `entry - ATR * atr_stop_multiplier` | `entry + ATR * atr_stop_multiplier` | `1.5 ATR` |
 | TP1 | `entry + ATR * tp1_atr_multiplier` | `entry - ATR * tp1_atr_multiplier` | `2.5 ATR` |
 | TP2 | target ATR o POC se piu' ambizioso | target ATR o POC se piu' ambizioso | `4.0 ATR` |
+| Liquidazione stimata | `entry * (1 - 1 / leva)` | `entry * (1 + 1 / leva)` | informativa |
 | Breakeven | `entry + costi + buffer` | `entry - costi - buffer` | trigger `1.0 ATR`, buffer `0.1%` |
 | Trailing | estremo favorevole `- ATR * mult` | estremo favorevole `+ ATR * mult` | dinamico sulla leva |
 
 Se `use_poc_for_tp2` e' attivo, TP2 usa il POC quando e' piu' ambizioso del target ATR: sopra il target ATR per long, sotto il target ATR per short.
+
+La liquidazione stimata viene salvata sulla posizione Perp, esposta nel dettaglio trade e disegnata come livello sul grafico. Non e' un trigger di chiusura gestito dall'agente: serve a capire quanto margine c'e' tra stop loss operativo e rischio di liquidazione.
 
 ## 2. Fee, funding e margine
 
@@ -69,7 +72,7 @@ Per i long il PnL e' `exit - entry`; per gli short e' `entry - exit`. Le fee pur
 
 Lo stop loss chiude la posizione quando il prezzo invalida il trade. Il breakeven puo' trasformare lo stop in uscita neutra/leggermente positiva dopo un movimento iniziale favorevole.
 
-Non e' prevista media in perdita. La leva dinamica e i controlli di rischio restano guardrail separati dall'uscita.
+Non e' prevista media in perdita. La leva dinamica, la liquidazione stimata e i controlli di rischio restano guardrail/informazioni separati dall'uscita.
 
 ## 7. Time stop
 

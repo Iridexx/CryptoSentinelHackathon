@@ -332,6 +332,11 @@ async def _build_live_chart(position, market: str) -> dict | None:
             "stop_loss": str(position.stop_loss) if position.stop_loss else None,
             "take_profit_1": str(position.take_profit_1) if position.take_profit_1 else None,
             "take_profit_2": str(tp2) if tp2 else None,
+            "liquidation_price": (
+                str(position.liquidation_price)
+                if market == "perp" and getattr(position, "liquidation_price", None)
+                else None
+            ),
             "opened_at": opened_at.isoformat(),
             "closed_at": now.isoformat(),
             "live": True,
@@ -675,6 +680,7 @@ def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision
         "stop_loss": _level(position, "stop_loss", chart, "stop_loss"),
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
+        "liquidation_price": _level(position, "liquidation_price", chart, "liquidation_price"),
         "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
         "breakeven_price": _breakeven_price(position, (position.side == "long") if position else True),
         "size": _fmt_price(size),

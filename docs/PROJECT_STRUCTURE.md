@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-06-26
+Ultimo aggiornamento: 2026-06-30
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -50,11 +50,11 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail, operational-stats e archived-runs.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail con liquidazione Perp, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing, snapshot grafici trade e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing, snapshot grafici trade con liquidazione Perp e provider execution astratti.
 |   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
@@ -198,13 +198,24 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- strategy_spot.yaml - default strategia Spot.
 |   |-- strategy_perp.yaml - default strategia Perpetual.
 |   `-- eligible_tokens.yaml - universo 148 token eligible unici dopo rimozione del duplicato SLX.
+|-- deploy/ - artefatti Step 10 per VPS Linux 24/7.
+|   |-- nginx/cryptosentinel.conf - template nginx per dashboard statica e proxy `/api/` verso backend locale.
+|   |-- scripts/ - script installazione, backup SQLite/TWAK encrypted state e healthcheck liveness.
+|   |   |-- install_vps.sh - bootstrap Ubuntu/Debian da eseguire da `/opt/cryptosentinel/app`, senza segreti nel repo.
+|   |   |-- backup_sqlite.sh - backup DB SQLite, config versionate non segrete e stato TWAK cifrato.
+|   |   `-- healthcheck.sh - curl fail-fast su `/health/live`.
+|   `-- systemd/ - unit e timer systemd.
+|       |-- cryptosentinel-backend.service - backend Uvicorn con restart automatico e hardening base.
+|       |-- cryptosentinel-backup.service / cryptosentinel-backup.timer - backup periodico ogni 6 ore.
+|       `-- cryptosentinel-healthcheck.service / cryptosentinel-healthcheck.timer - liveness periodica ogni 60 secondi.
 |-- docs/ - documentazione progetto e review.
 |   |-- CURRENT_STRUCTURE.md - baseline pre-integrazione backend.
 |   |-- PROJECT_STRUCTURE.md - questo documento aggiornato a ogni step.
+|   |-- RUNBOOK_DEPLOY_VPS.md - runbook Step 10 per installazione VPS, segreti fuori repo, nginx/TLS, TWAK headless, backup e ripristino.
 |   |-- Strategia_Spot.md - strategia Spot.
 |   |-- Strategia_Perpetual.md - strategia Perpetual.
 |   |-- Uscite_Spot.md - regole operative aggiornate per chiusure spot ATR, breakeven, trailing, TP e time stop.
-|   |-- Uscite_Perpetual.md - regole operative aggiornate per chiusure perp ATR, breakeven, trailing dinamico, TP e funding.
+|   |-- Uscite_Perpetual.md - regole operative aggiornate per chiusure perp ATR, breakeven, trailing dinamico, TP, funding e liquidazione stimata.
 |   |-- index.html - pagina documentale/statica.
 |   `-- reports/ - report step.
 |       |-- report_step0.md - report Step 0.
@@ -218,6 +229,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_step7.md - report estensione app mobile Step 7.
 |       |-- report_step8.md - report dashboard web unificata Step 8.
 |       |-- report_step9.md - report testing e vincoli qualificazione Step 9.
+|       |-- report_step10.md - report artefatti deploy VPS Step 10.
 |       |-- report_twak_wallet_migration.md - report migrazione nuovo wallet TWAK, fix mainnet/domain e workaround password Windows.
 |       |-- report_dashboard_analytics.md - report archiviazione dry-run, sizing realistico e analytics dashboard/mobile.
 |       |-- report_dashboard_data_coverage_filters.md - report filtri Data Coverage dashboard.
@@ -233,7 +245,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- main.tsx - entrypoint React dashboard.
 |       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Export e dettaglio trade con grafico/fee/margine.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati.
-|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine e trade detail.
+|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp e trade detail.
 |       `-- styles.css - layout desktop-first e stati UI.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -375,6 +387,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 7 - Estensione App Mobile | Parziale | Nuova tab Agente additiva con viste Spot/Perp/Global, setup agente, onboarding validation, kill switch, wallet multi-network e icone AI opzionali sulle coin card; verifiche locali passate, resta test su dispositivo reale/APK. |
 | Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global/Perp, dettaglio trade con grafico e margine, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
 | Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV, migrazione nuovo wallet TWAK, fix leverage perp storico e analytics dry-run consolidati; ultima suite documentata: 127 passed. |
+| Step 10 - Deploy VPS | Parziale | Aggiunti template systemd, nginx, script install/backup/healthcheck e runbook VPS; deploy reale, DNS/TLS, segreti runtime e verifica 24/7 restano da eseguire sul server. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
@@ -426,8 +439,9 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Dry-run sizing realistico | Il capitale dry-run default è 500 USD e il risk engine blocca i trade sotto 7 USD con `below_minimum_trade_size`, senza forzare size fuori dai parametri. |
 | Costi dry-run espliciti | Spot e perp salvano fee/slippage/funding in posizione e trade; la dashboard mostra costi applicati e confronti taker/maker senza confonderli con PnL lordo. |
 | Analytics read-only condivisa | Dashboard e mobile usano endpoint `/views/*` read-only per equity curve, breakdown asset, trade detail, grafici trade e operational stats; i numeri display sono normalizzati a due decimali. |
+| Liquidazione Perp informativa | Le posizioni Perp salvano una stima di liquidazione derivata da entry/leva/side; il dettaglio trade e i grafici la mostrano come livello informativo, senza usarla come trigger di uscita. |
 | Equity adjustment separato dal PnL | Versamenti e prelievi aggiornano capitale iniziale/equity e restano tracciati in tabella dedicata, evitando che un deposito storico appaia come profitto o perdita. |
-| Dettaglio trade riproducibile | Alla chiusura viene salvato uno snapshot JSON di candele e livelli; le posizioni aperte usano un grafico live best-effort dallo stesso feed. |
+| Dettaglio trade riproducibile | Alla chiusura viene salvato uno snapshot JSON di candele e livelli, inclusa la liquidazione Perp quando presente; le posizioni aperte usano un grafico live best-effort dallo stesso feed. |
 | Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati ogni 45 secondi, dentro il vincolo 30-60s e senza refresh aggressivo. |
 | Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
 | Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |
@@ -445,6 +459,10 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Selettore provider persistito in RuntimeState (Step 5) | Un cambio admin sopravvive al riavvio; Settings è il default al boot. Nessun file JSON intermedio. |
 | X402 budget compatibilità backward (Step 5) | `X402Client` accetta `session_factory` opzionale; test legacy usano SimpleNamespace senza DB → budget in-memory → test invariati. |
 | Dashboard web su porta 5176 | `configs/instance.example.yaml` include `dashboard.port: 5176`; Step 8 usa Vite separato con dev server dedicato. |
+| Deploy VPS senza segreti nel repo | Step 10 usa `/etc/cryptosentinel/backend.env` per variabili sensibili, `configs/instance.yaml` per installazione locale non segreta e `/home/cryptosentinel/.twak` per stato TWAK headless cifrato. |
+| Dashboard statica dietro nginx | In produzione la dashboard viene compilata in `dist-dashboard`; nginx serve gli asset statici e proxya solo `/api/` e `/health/live` al backend locale. |
+| Systemd come supervisor | Il backend gira come utente `cryptosentinel`, con restart automatico, hardening base e timer separati per backup e liveness. |
+| Backup VPS conservativo | Il backup versionato copia SQLite, config YAML non segrete e stato TWAK cifrato se presente; non esporta `.env`, `configs/instance.yaml` o service account. |
 | Questioni Telegram non bloccanti | Si procede con default prudenziali del piano e si aggiornano quando arrivano risposte. |
 | Spot e Perp separati | TWAK gestisce spot; BNB Agent SDK/EIP-712 gestisce perp. Non condividono adapter o flusso di firma. |
 | Execution testnet-only | Ogni firma/trade Step 4 è vincolato a BSC testnet; la mainnet è usata soltanto per la registrazione competizione. |
@@ -473,6 +491,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |
 | Execution safety | Mantenere admin come confine netto per endpoint che muovono fondi o modificano configurazione. |
 | Config locale Step 4 | Aggiornare `configs/instance.yaml` con il contratto competizione ufficiale e x402 su BSC; i valori pericolosi sono bloccati. |
-| Step boundary | Step 9 implementato parzialmente e consolidato per revisione; Step 10 non avviato — in attesa di approvazione. |
+| Step boundary | Step 10 preparato a livello di artefatti e runbook; nessuno step successivo avviato. |
+| Step 10 | Artefatti deploy preparati; completamento effettivo richiede accesso al VPS, DNS/TLS, compilazione sul server, segreti fuori repo e verifica runtime. |
 | Ricognizione 2026-06-26 | Git working tree inizialmente pulito; aggiornati solo documenti e report per riflettere codice già presente, senza leggere file sensibili. |
 | Agent onboarding | I futuri agenti devono leggere `AGENTS.md` prima di lavorare sul repository. |

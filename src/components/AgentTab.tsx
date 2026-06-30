@@ -1354,8 +1354,9 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const sl = chart.stop_loss != null ? Number(chart.stop_loss) : null;
   const tp1 = chart.take_profit_1 != null ? Number(chart.take_profit_1) : null;
   const tp2 = chart.take_profit_2 != null ? Number(chart.take_profit_2) : null;
+  const liq = chart.liquidation_price != null ? Number(chart.liquidation_price) : null;
 
-  const levels = [entry, exit, sl, tp1, tp2].filter((v): v is number => v != null && !Number.isNaN(v));
+  const levels = [entry, exit, sl, tp1, tp2, liq].filter((v): v is number => v != null && !Number.isNaN(v));
   let hi = Math.max(...allCandles.map((c) => c.h), ...levels);
   let lo = Math.min(...allCandles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
@@ -1454,6 +1455,7 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
         <line x1={closeLineX} x2={closeLineX} y1={padTop} y2={plotB} stroke="#6b7280" strokeWidth="1" strokeDasharray="3 2" opacity="0.8" />
       )}
       {levelLine(sl, '#ef4444', '4 3')}
+      {levelLine(liq, '#f97316', '2 3')}
       {levelLine(tp1, '#22c55e', '4 3')}
       {levelLine(tp2, '#16a34a', '2 3')}
       {levelLine(entry, '#9ca3af', '1 0')}
@@ -1476,6 +1478,9 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
           <span className="text-xs text-gray-500">{detail.chart.interval}</span>
         </div>
         <TradeCandleChart chart={detail.chart} />
+        {detail.market === 'perp' && (
+          <div className="text-[10px] text-orange-400">- - Liq</div>
+        )}
         <div className="flex flex-wrap gap-3 text-[10px] text-gray-400">
           <span>⚪ Entry</span>
           <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.chart.live ? 'Ora' : 'Exit'}</span>
@@ -1531,6 +1536,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <h3 className="text-sm font-semibold text-white">Risk levels</h3>
       {[
         ['Stop loss', detail.stop_loss],
+        ...(detail.market === 'perp' ? [['Liquidation', detail.liquidation_price] as [string, string | null | undefined]] : []),
         ['Breakeven', detail.breakeven_price],
         ['Take profit 1', detail.take_profit_1],
         ['Take profit 2', detail.take_profit_2],

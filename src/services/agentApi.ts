@@ -220,6 +220,7 @@ export interface TradeChart {
   stop_loss?: string | null;
   take_profit_1?: string | null;
   take_profit_2?: string | null;
+  liquidation_price?: string | null;
   opened_at: string;
   closed_at: string;
   live?: boolean;
@@ -239,6 +240,7 @@ export interface TradeDetail {
   stop_loss?: string | null;
   take_profit_1?: string | null;
   take_profit_2?: string | null;
+  liquidation_price?: string | null;
   trailing_stop?: string | null;
   breakeven_price?: string | null;
   size: string;

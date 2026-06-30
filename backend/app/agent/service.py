@@ -577,6 +577,11 @@ class AgentService:
                 "stop_loss": str(pos.stop_loss) if pos.stop_loss else None,
                 "take_profit_1": str(pos.take_profit_1) if pos.take_profit_1 else None,
                 "take_profit_2": str(tp2) if tp2 else None,
+                "liquidation_price": (
+                    str(pos.liquidation_price)
+                    if market == "perp" and getattr(pos, "liquidation_price", None)
+                    else None
+                ),
                 "opened_at": opened_at.isoformat(),
                 "closed_at": now.isoformat(),
                 "candles": [

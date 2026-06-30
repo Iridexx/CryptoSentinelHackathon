@@ -59,6 +59,10 @@ export type PerpPosition = {
   leverage: number;
   pnl_unrealized: string;
   pnl_pct?: string | null;
+  stop_loss?: string | null;
+  take_profit_1?: string | null;
+  take_profit_2?: string | null;
+  liquidation_price?: string | null;
   status: string;
   opened_at: string;
 };
@@ -181,6 +185,7 @@ export type TradeDetail = {
   stop_loss?: string | null;
   take_profit_1?: string | null;
   take_profit_2?: string | null;
+  liquidation_price?: string | null;
   trailing_stop?: string | null;
   breakeven_price?: string | null;
   size: string;
@@ -220,6 +225,7 @@ export type TradeChart = {
   stop_loss?: string | null;
   take_profit_1?: string | null;
   take_profit_2?: string | null;
+  liquidation_price?: string | null;
   opened_at: string;
   closed_at: string;
   candles: TradeChartCandle[];
