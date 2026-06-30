@@ -161,6 +161,7 @@ class ViewService:
             history=[
                 PerpTradeView(
                     trade_id=t.trade_id,
+                    position_id=_perp_trade_position_id(t, history_positions),
                     asset=t.asset,
                     side=t.side,
                     direction=t.direction,
@@ -350,6 +351,17 @@ def _position_id_from_close_trade(trade_id: str) -> str | None:
     if not trade_id.startswith("cls_"):
         return None
     return trade_id.rsplit("_", 1)[0][len("cls_"):]
+
+
+def _perp_trade_position_id(t, positions: list) -> str | None:
+    close_position_id = _position_id_from_close_trade(t.trade_id)
+    if close_position_id:
+        return close_position_id
+    if t.direction == "open":
+        for position in positions:
+            if position.open_trade_id == t.trade_id:
+                return position.position_id
+    return None
 
 
 def _close_reason(trade) -> str | None:

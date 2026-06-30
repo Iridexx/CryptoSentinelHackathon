@@ -85,6 +85,7 @@ class PerpPositionView(BaseModel):
 
 class PerpTradeView(BaseModel):
     trade_id: str
+    position_id: str | None = None
     asset: str
     side: str
     direction: str

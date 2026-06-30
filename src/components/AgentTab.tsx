@@ -384,6 +384,11 @@ const MOBILE_PAGE = 8;
 type SpotHistoryRow = NonNullable<SpotView['history']>[number];
 type PerpHistoryRow = NonNullable<PerpView['history']>[number];
 
+function shortPositionId(value?: string | null): string {
+  if (!value) return '';
+  return value.replace(/^pos_/, '').slice(0, 8);
+}
+
 const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> = {
   stop_loss: { label: 'Stop Loss', className: 'text-accent-red' },
   breakeven: { label: 'Breakeven', className: 'text-gray-300' },
@@ -470,6 +475,11 @@ const TradeHistoryList: FC<{
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-white">{label}</div>
+                {market === 'perp' && t.position_id && (
+                  <div className="mt-1 text-[11px] font-semibold text-accent-blue">
+                    Pos {shortPositionId(t.position_id)}
+                  </div>
+                )}
                 <div className="mt-2 flex gap-3 text-sm text-gray-400">
                   <span>In {fmtPriceFull(t.entry_price ?? t.price)}</span>
                   <span>Out {fmtPriceFull(t.current_or_exit_price ?? t.price)}</span>

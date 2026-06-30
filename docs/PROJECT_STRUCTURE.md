@@ -126,7 +126,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing e funding.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, esposizione a margine, fee aggregate, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.

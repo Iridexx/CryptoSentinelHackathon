@@ -69,6 +69,7 @@ export type PerpPosition = {
 
 export type PerpTrade = {
   trade_id: string;
+  position_id?: string | null;
   asset: string;
   side: string;
   direction: string;

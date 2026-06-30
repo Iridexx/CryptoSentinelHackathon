@@ -2082,6 +2082,11 @@ const HISTORY_PAGE = 10;
 type SpotHistoryItem = SpotView['history'][number];
 type PerpHistoryItem = PerpView['history'][number];
 
+function shortPositionId(value?: string | null): string {
+  if (!value) return '';
+  return value.replace(/^pos_/, '').slice(0, 8);
+}
+
 const CLOSE_REASON_LABELS: Record<string, string> = {
   stop_loss: 'Stop Loss',
   breakeven: 'Breakeven',
@@ -2179,6 +2184,7 @@ function TradeHistoryTable({
           <thead>
             <tr>
               <th>Asset</th>
+              {market === 'perp' && <th>Pos</th>}
               <th>Side</th>
               {market === 'perp' && <th>Dir</th>}
               {market === 'perp' && <th>Lev</th>}
@@ -2213,6 +2219,7 @@ function TradeHistoryTable({
                   style={{ cursor: 'pointer' }}
                 >
                   <td><strong>{t.asset}</strong></td>
+                  {market === 'perp' && <td>{t.position_id ? `Pos ${shortPositionId(t.position_id)}` : '--'}</td>}
                   <td><span className={t.side === 'buy' || t.side === 'long' ? 'ok-text' : 'error-text'}>{t.side}</span></td>
                   {market === 'perp' && <td><span className={t.direction === 'long' || t.direction === 'open' ? 'ok-text' : 'error-text'}>{t.direction}</span></td>}
                   {market === 'perp' && <td>{t.leverage ? `${t.leverage}x` : '-'}</td>}

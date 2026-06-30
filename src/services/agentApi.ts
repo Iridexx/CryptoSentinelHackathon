@@ -107,6 +107,7 @@ export interface PerpPositionView {
 
 export interface PerpTradeView {
   trade_id: string;
+  position_id?: string | null;
   asset: string;
   side: string;
   direction: string;
