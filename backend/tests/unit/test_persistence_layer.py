@@ -378,6 +378,83 @@ async def test_spot_and_perp_views_return_open_positions(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_perp_history_uses_position_entry_for_partial_closes(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    async with factory() as session:
+        await PerpPositionRepository(session).save(
+            PerpPosition(
+                position_id="pos_eth_tp1",
+                open_trade_id="dry_eth_open",
+                user_id=USER,
+                asset="ETH",
+                side="long",
+                size=Decimal("0.3"),
+                entry_price=Decimal("1557.74"),
+                current_price=Decimal("1572.00"),
+                leverage=25,
+                pnl_unrealized=Decimal("0"),
+                tp1_reached=True,
+                status="closed",
+                opened_at=now,
+                updated_at=now,
+            )
+        )
+        repo = PerpTradeRepository(session)
+        await repo.save(
+            PerpTrade(
+                trade_id="dry_eth_open",
+                user_id=USER,
+                asset="ETH",
+                side="long",
+                direction="open",
+                size=Decimal("1.0"),
+                price=Decimal("1557.74"),
+                leverage=25,
+                status="prepared",
+                timestamp_utc=now,
+            )
+        )
+        await repo.save(
+            PerpTrade(
+                trade_id="cls_pos_eth_tp1_aaaa1111",
+                user_id=USER,
+                asset="ETH",
+                side="long",
+                direction="close",
+                size=Decimal("0.7"),
+                price=Decimal("1572.36"),
+                leverage=25,
+                status="confirmed",
+                timestamp_utc=now,
+                notes="auto_close:take_profit_1_partial",
+                pnl_usd=Decimal("9.50"),
+            )
+        )
+        await repo.save(
+            PerpTrade(
+                trade_id="cls_pos_eth_tp1_bbbb2222",
+                user_id=USER,
+                asset="ETH",
+                side="long",
+                direction="close",
+                size=Decimal("0.3"),
+                price=Decimal("1571.90"),
+                leverage=25,
+                status="confirmed",
+                timestamp_utc=now,
+                notes="auto_close:trailing_stop",
+                pnl_usd=Decimal("3.25"),
+            )
+        )
+    async with factory() as session:
+        view = await ViewService(session).perp_view(USER)
+        eth_history = [trade for trade in view.history if trade.asset == "ETH"]
+        assert len(eth_history) == 2
+        assert {trade.entry_price for trade in eth_history} == {Decimal("1557.74")}
+
+
+@pytest.mark.asyncio
 async def test_archive_dry_run_records_copies_and_clears_live_data(db) -> None:
     factory = get_session_factory()
     now = datetime.now(UTC)

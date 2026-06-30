@@ -122,6 +122,8 @@ class ViewService:
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
         history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
+        history_positions = await pos_repo.history_for_user(user_id, limit=200)
+        entry_by_position_id = {p.position_id: p.entry_price for p in history_positions}
         from datetime import UTC, datetime as _dt
         day_start = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         trade_count_tot = await trade_repo.count_closed(user_id)
@@ -165,8 +167,13 @@ class ViewService:
                     size=t.size,
                     price=t.price,
                     pnl_usd=_fmt_pnl(t.pnl_usd),
-                    pnl_pct=_pnl_pct_str(t.pnl_usd, _perp_trade_entry_price(t), t.size, t.leverage or 1),
-                    entry_price=_perp_trade_entry_price(t),
+                    pnl_pct=_pnl_pct_str(
+                        t.pnl_usd,
+                        _perp_trade_entry_price(t, entry_by_position_id),
+                        t.size,
+                        t.leverage or 1,
+                    ),
+                    entry_price=_perp_trade_entry_price(t, entry_by_position_id),
                     current_or_exit_price=t.price,
                     leverage=t.leverage,
                     status=t.status,
@@ -322,17 +329,27 @@ def _spot_trade_entry_price(t) -> Decimal:
     return t.price
 
 
-def _perp_trade_entry_price(t) -> Decimal:
+def _perp_trade_entry_price(t, entry_by_position_id: dict[str, Decimal] | None = None) -> Decimal:
     """Ricava il prezzo di ingresso per trade di chiusura perp (direction='close').
     Long:  pnl = (exit - entry) * size  →  entry = exit - pnl / size
     Short: pnl = (entry - exit) * size  →  entry = exit + pnl / size
     """
+    if t.direction == "close" and entry_by_position_id:
+        position_id = _position_id_from_close_trade(t.trade_id)
+        if position_id and position_id in entry_by_position_id:
+            return entry_by_position_id[position_id]
     if t.direction == "close" and t.pnl_usd is not None and t.size > Decimal("0"):
         if t.side == "long":
             return t.price - t.pnl_usd / t.size
         else:
             return t.price + t.pnl_usd / t.size
     return t.price
+
+
+def _position_id_from_close_trade(trade_id: str) -> str | None:
+    if not trade_id.startswith("cls_"):
+        return None
+    return trade_id.rsplit("_", 1)[0][len("cls_"):]
 
 
 def _close_reason(trade) -> str | None:
