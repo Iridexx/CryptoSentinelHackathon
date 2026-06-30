@@ -1626,12 +1626,26 @@ const AgentTab: FC<AgentTabProps> = ({
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
 
+  const loadActiveTradeDetail = useCallback(async (tradeId: string) => {
+    const detail = await fetchTradeDetail(tradeId);
+    if (detailTradeIdRef.current === tradeId) {
+      setTradeDetail(detail);
+    }
+  }, []);
+
+  const closeTradeDetail = useCallback(() => {
+    detailTradeIdRef.current = null;
+    setLoadingDetail(false);
+    setTradeDetail(null);
+  }, []);
+
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
     // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
     // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
-    const detailFetch = detailTradeIdRef.current
-      ? fetchTradeDetail(detailTradeIdRef.current).then(setTradeDetail).catch(() => {})
+    const activeTradeId = detailTradeIdRef.current;
+    const detailFetch = activeTradeId
+      ? loadActiveTradeDetail(activeTradeId).catch(() => {})
       : Promise.resolve();
     const results = await Promise.allSettled([
       fetchAgentStatus().then(setStatus),
@@ -1652,7 +1666,7 @@ const AgentTab: FC<AgentTabProps> = ({
       setJustSynced(true);
       window.setTimeout(() => setJustSynced(false), 2500);
     }
-  }, []);
+  }, [loadActiveTradeDetail]);
 
   // Mirror dello stato nella cache di modulo: al prossimo mount (rientro nella tab)
   // i valori vengono ripristinati senza azzeramenti.
@@ -1692,12 +1706,13 @@ const AgentTab: FC<AgentTabProps> = ({
       fetchPerpView().then(setPerp).catch(() => {});
       fetchGlobalView().then(setGlobal).catch(() => {});
       // Se il dettaglio di una posizione live è aperto, ricaricalo silenziosamente.
-      if (detailTradeIdRef.current) {
-        fetchTradeDetail(detailTradeIdRef.current).then(setTradeDetail).catch(() => {});
+      const activeTradeId = detailTradeIdRef.current;
+      if (activeTradeId) {
+        loadActiveTradeDetail(activeTradeId).catch(() => {});
       }
     }, AGENT_FAST_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [loadActiveTradeDetail]);
 
   // Refetch immediato della curva quando l'utente cambia il range (24h/7g/Tutto),
   // senza ricaricare tutte le altre schede.
@@ -1791,11 +1806,15 @@ const AgentTab: FC<AgentTabProps> = ({
     setLoadingDetail(true);
     setActionError('');
     try {
-      setTradeDetail(await fetchTradeDetail(tradeId));
+      await loadActiveTradeDetail(tradeId);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Unable to load trade detail');
+      if (detailTradeIdRef.current === tradeId) {
+        setActionError(err instanceof Error ? err.message : 'Unable to load trade detail');
+      }
     } finally {
-      setLoadingDetail(false);
+      if (detailTradeIdRef.current === tradeId) {
+        setLoadingDetail(false);
+      }
     }
   };
 
@@ -1817,7 +1836,7 @@ const AgentTab: FC<AgentTabProps> = ({
         <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{actionError}</p>
       )}
       {tradeDetail ? (
-        <TradeDetailScreen detail={tradeDetail} onBack={() => { detailTradeIdRef.current = null; setTradeDetail(null); }} />
+        <TradeDetailScreen detail={tradeDetail} onBack={closeTradeDetail} />
       ) : (
         <>
       <div className="rounded-xl bg-dark-800 px-4 py-3">
