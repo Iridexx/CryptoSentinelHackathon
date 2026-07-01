@@ -129,6 +129,11 @@ class MarketDataRegistry:
         )
         return [cache[asset_id] for asset_id in asset_ids if asset_id in cache]
 
+    async def resolve_asset_identities(self, asset_ids: list[str]) -> list[AssetIdentity]:
+        """Resolve asset IDs through the active latest-pricing provider."""
+
+        return await self._active_identities(asset_ids)
+
     async def get_market_list(
         self,
         currency: str,

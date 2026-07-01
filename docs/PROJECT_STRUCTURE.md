@@ -85,6 +85,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- coingecko.py - adapter CoinGecko secondario e catalogo identità degli ID storici con cache giornaliera.
 |   |   |   |   |-- http.py - client condiviso con cache, rate limiting e contatore crediti.
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.
+|   |   |   |-- ohlcv_sources.py - sorgente OHLCV pubblica separata dal provider latest: Binance klines spot con fallback CEX, conversione display USD/EUR/BTC best-effort.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
 |   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state.
 |   |   |-- execution/ - layer esecuzione Step 4 (esteso: spot E perp astratti multi-provider, registry separati).
@@ -426,8 +427,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Single-flight provider | Richieste concorrenti con la stessa chiave condividono una sola chiamata esterna; le altre attendono il risultato in cache senza consumare rate limit o crediti. |
 | Cache identita' provider | Le identita' app/provider gia' risolte restano in memoria nel `MarketDataRegistry`; le liste ranked popolano la stessa cache, cosi' refresh prezzo e preferiti ripetuti non rieseguono la mappa CMC completa. |
 | MCP CMC separato da REST | Lo stato espone endpoint/header ufficiali senza chiavi; REST serve i flussi applicativi, MCP resta disponibile per futuri client agente. |
-| OHLCV CMC segmentato | Startup include un mese di storico. Le richieste OHLCV usano `time_start`/`time_end`, finestre massime di 30 giorni e deduplicazione dei punti di confine; dati più vecchi della profondità del piano possono comunque essere rifiutati. |
-| OHLCV non sintetizzato | I 5 minuti CMC sono quote storiche, non OHLCV completo; il backend non inventa volume o candele. |
+| OHLCV pubblico separato da CMC | `/api/v1/market-data/ohlcv` usa `ExternalOHLCVService` con Binance klines spot e fallback CEX, così CMC può restare sul piano Basic per latest pricing/catalogo senza endpoint OHLCV paid. |
+| OHLCV CMC legacy | L'adapter CMC conserva `get_ohlcv` per compatibilità interna/test, ma la route pubblica dei grafici non lo invoca più. |
 | CoinGecko valido per monitoring | CoinGecko resta pienamente utilizzabile per prezzi, liste, ricerca, alert e grafici; il volume delle sue candele OHLC non è fornito e il Volume Profile 5m richiede una fonte adeguata. |
 | Feed Volume Profile Step 6 | Binance klines spot/futures sarà un feed specializzato del signal engine e non passerà dal `MarketDataProvider` generico. |
 | Brain con poteri limitati | Claude può solo approve/reduce/block/skip; non aumenta leva, non inverte direzione e non cambia parametri. Senza Claude, dry-run usa fallback deterministico; live blocca fail-closed. |

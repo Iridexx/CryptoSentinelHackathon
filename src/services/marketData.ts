@@ -36,7 +36,7 @@ export interface OHLCVItem {
 }
 
 interface OHLCVResponse {
-  provider: ProviderName;
+  provider: string;
   asset_id: string;
   currency: string;
   interval: string | null;

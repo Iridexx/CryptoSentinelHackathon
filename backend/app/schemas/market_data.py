@@ -24,7 +24,7 @@ class PriceListResponse(BaseModel):
 
 
 class OHLCVResponse(BaseModel):
-    provider: ProviderName
+    provider: str
     asset_id: str
     currency: str
     interval: str | None = None

@@ -157,13 +157,13 @@ Application code must read configuration only through `backend.app.core.config.S
 | GET | `/api/v1/market-data/markets` | Read/Admin token | Normalized market-cap list from the selected provider. |
 | GET | `/api/v1/market-data/prices` | Read/Admin token | Normalized current prices for assets and currencies. |
 | GET | `/api/v1/market-data/search` | Read/Admin token | Search through the selected provider. |
-| GET | `/api/v1/market-data/ohlcv` | Read/Admin token | Normalized OHLCV history where supported. |
+| GET | `/api/v1/market-data/ohlcv` | Read/Admin token | Normalized OHLCV history from the dedicated exchange candle source. |
 | GET | `/api/v1/execution/status` | Read/Admin token | Non-sensitive execution readiness and guardrails. |
 | GET | `/api/v1/execution/competition/status` | Admin token | Verify the wallet against the official competition contract. |
 
 The default provider is configured under `market_data.provider`. Developer settings may change it at runtime with an admin token held only in component state. No automatic fallback is implemented.
 
-CMC Startup includes one month of historical data. OHLCV requests always send explicit `time_start` and `time_end` values and are split into windows of at most 30 days; boundary points are deduplicated after normalization. Requests older than the plan's one-month historical depth may still be rejected by CMC even when correctly segmented. The documented 5-minute historical capability is quotes-only, so unsupported 5-minute OHLCV is rejected instead of being synthesized.
+CMC remains the default provider for latest pricing, listings, search, and identity resolution. Public OHLCV chart requests are intentionally served by the dedicated exchange candle source (`ExternalOHLCVService`, Binance klines first with CEX fallback) so the app does not depend on paid CMC OHLCV endpoints. The legacy CMC OHLCV adapter remains available for compatibility tests but is not used by `/api/v1/market-data/ohlcv`.
 
 ## Step 4 Execution Setup
 

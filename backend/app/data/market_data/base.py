@@ -81,7 +81,7 @@ class OHLCVBar(BaseModel):
     volume: float | None = None
     market_cap: float | None = None
     currency: str = "usd"
-    provider: ProviderName
+    provider: ProviderName | str
 
 
 class ProviderRuntimeStatus(BaseModel):

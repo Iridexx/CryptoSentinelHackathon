@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep
 from backend.app.data.market_data.base import ProviderCapabilityError, ProviderError
 from backend.app.data.market_data.registry import MarketDataRegistry, get_market_data_registry
+from backend.app.data.ohlcv_sources import ExternalOHLCVService, OhlcvRequest, get_ohlcv_service
 from backend.app.data.mcp.cmc import cmc_mcp_connection
 from backend.app.schemas.market_data import (
     MarketListResponse,
@@ -18,6 +19,7 @@ from backend.app.schemas.market_data import (
 
 router = APIRouter(prefix="/api/v1/market-data", tags=["market-data"])
 RegistryDep = Annotated[MarketDataRegistry, Depends(get_market_data_registry)]
+OhlcvServiceDep = Annotated[ExternalOHLCVService, Depends(get_ohlcv_service)]
 
 
 def _raise_provider_error(exc: ProviderError) -> None:
@@ -110,20 +112,29 @@ async def search(
 @router.get("/ohlcv", response_model=OHLCVResponse)
 async def ohlcv(
     registry: RegistryDep,
+    ohlcv_service: OhlcvServiceDep,
     _: ReadAccessDep,
     asset_id: str = Query(min_length=1),
     currency: str = Query(default="usd", min_length=3, max_length=5),
     days: int = Query(default=7, ge=1, le=3650),
     interval: str | None = None,
 ) -> OHLCVResponse:
-    """Return normalized OHLCV history from the selected provider."""
+    """Return normalized OHLCV history from exchange candle sources.
+
+    Latest pricing/search/listing still follows the selected CMC/CoinGecko
+    provider. Historical candles are deliberately routed through this separate
+    source so CMC does not need paid OHLCV endpoints.
+    """
 
     try:
-        items = await registry.get_ohlcv(asset_id, currency, days, interval)
+        items = await ohlcv_service.get_ohlcv(
+            registry,
+            OhlcvRequest(asset_id=asset_id, currency=currency, days=days, interval=interval),
+        )
     except ProviderError as exc:
         _raise_provider_error(exc)
     return OHLCVResponse(
-        provider=registry.active_name,
+        provider=ohlcv_service.source_name,
         asset_id=asset_id,
         currency=currency.lower(),
         interval=interval,
