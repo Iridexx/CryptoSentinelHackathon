@@ -89,7 +89,7 @@ def settings(**overrides):
         perp_leverage_atr_period=72,
         perp_leverage_atr_baseline_hours=120,
         perp_value_area_pct=68.0,
-        perp_atr_stop_multiplier=1.5,
+        perp_atr_stop_multiplier=0.8,
         perp_trailing_mode="largo",
         perp_breakeven_trigger_atr=1.0,
         perp_breakeven_offset_costs=True,

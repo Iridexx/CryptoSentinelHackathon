@@ -114,7 +114,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_min_leverage: 4,
   perp_max_leverage: 40,
   perp_value_area_pct: 68,
-  perp_atr_stop_multiplier: 0.5,
+  perp_atr_stop_multiplier: 0.8,
   perp_trailing_mode: 'largo' as const,
   perp_trailing_pnl_pct: 0,
   perp_tp1_close_pct: 70,

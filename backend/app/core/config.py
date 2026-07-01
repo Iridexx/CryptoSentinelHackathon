@@ -557,7 +557,7 @@ class Settings(BaseSettings):
     perp_direction_mode: str = Field(default="long_short", alias="PERP_DIRECTION_MODE")
     perp_value_area_pct: float = Field(default=68.0, alias="PERP_VALUE_AREA_PCT")
     # SL/TP ancorati all'entry via ATR (R:R controllato a prescindere dalla leva).
-    perp_atr_stop_multiplier: float = Field(default=1.5, alias="PERP_ATR_STOP_MULTIPLIER")
+    perp_atr_stop_multiplier: float = Field(default=0.8, alias="PERP_ATR_STOP_MULTIPLIER")
     perp_tp1_atr_multiplier: float = Field(default=2.5, alias="PERP_TP1_ATR_MULTIPLIER")
     perp_tp2_atr_multiplier: float = Field(default=4.0, alias="PERP_TP2_ATR_MULTIPLIER")
     # Se True, TP2 usa il POC (livello strutturale di volume) quando è più ambizioso

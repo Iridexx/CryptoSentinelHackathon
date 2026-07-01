@@ -272,7 +272,7 @@ Per la mean reversion:
 V1 (strutturale, anticipato da V2):
 ├── stop long  = minimo candela pre-segnale − (ATR(14) × coefficiente)
 ├── stop short = massimo candela pre-segnale + (ATR(14) × coefficiente)
-├── coefficiente ATR: configurabile (default 0.5 — buffer oltre la struttura)
+├── coefficiente ATR: configurabile (default 0.8 — buffer oltre la struttura)
 │
 ├── GUARDRAIL RISCHIO PER TRADE (nuovo in v3):
 │   La distanza entry→stop non deve implicare una perdita > MAX_RISK_PER_TRADE_PCT
@@ -290,7 +290,7 @@ V1 (strutturale, anticipato da V2):
 
 | Parametro | Default | Configurabile |
 |---|---|---|
-| `PERP_ATR_STOP_MULTIPLIER` | 0.5 | Sì |
+| `PERP_ATR_STOP_MULTIPLIER` | 0.8 | Sì |
 | `RISK_MAX_RISK_PER_TRADE_PCT` | 1.5% | Sì |
 
 ### Take Profit — schema a tre livelli (nuovo in v3)

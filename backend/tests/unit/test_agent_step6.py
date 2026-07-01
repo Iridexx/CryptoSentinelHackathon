@@ -116,7 +116,7 @@ def settings(**overrides):
         spot_sentiment_weight_pct=10.0,
         perp_direction_mode="long_short",
         perp_value_area_pct=68.0,
-        perp_atr_stop_multiplier=1.5,
+        perp_atr_stop_multiplier=0.8,
         perp_tp1_atr_multiplier=2.5,
         perp_tp2_atr_multiplier=4.0,
         perp_use_poc_for_tp2=True,

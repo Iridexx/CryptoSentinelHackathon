@@ -54,7 +54,7 @@ class AgentMobileSettings(BaseModel):
     perp_min_leverage: int = Field(default=4, ge=1, le=50)
     perp_max_leverage: int = Field(default=40, ge=1, le=50)
     perp_value_area_pct: float = Field(default=68.0, ge=50.0, le=90.0)
-    perp_atr_stop_multiplier: float = Field(default=0.5, gt=0.0, le=20.0)
+    perp_atr_stop_multiplier: float = Field(default=0.8, gt=0.0, le=20.0)
     # Ampiezza del trailing perp: "largo" lascia correre (restituisce di più),
     # "stretto" blocca prima. Il moltiplicatore effettivo scala con la leva del trade.
     perp_trailing_mode: str = Field(default="largo", pattern="^(largo|stretto)$")

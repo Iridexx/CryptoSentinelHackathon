@@ -56,8 +56,8 @@ async def upgrade_schema(session: AsyncSession) -> None:
     await session.execute(text("""
         UPDATE perp_positions
         SET initial_stop_loss = CASE
-            WHEN side = 'long' THEN entry_price - entry_atr * 0.5
-            ELSE entry_price + entry_atr * 0.5
+            WHEN side = 'long' THEN entry_price - entry_atr * 0.8
+            ELSE entry_price + entry_atr * 0.8
         END
         WHERE status = 'open'
           AND initial_stop_loss IS NULL
