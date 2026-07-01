@@ -439,7 +439,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Dry-run sizing realistico | Il capitale dry-run default è 500 USD e il risk engine blocca i trade sotto 7 USD con `below_minimum_trade_size`, senza forzare size fuori dai parametri. |
 | Costi dry-run espliciti | Spot e perp salvano fee/slippage/funding in posizione e trade; la dashboard mostra costi applicati e confronti taker/maker senza confonderli con PnL lordo. |
 | Analytics read-only condivisa | Dashboard e mobile usano endpoint `/views/*` read-only per equity curve, breakdown asset, trade detail, grafici trade e operational stats; i numeri display sono normalizzati a due decimali. |
-| Liquidazione Perp informativa | Le posizioni Perp salvano una stima di liquidazione derivata da entry/leva/side; il dettaglio trade e i grafici la mostrano come livello informativo, senza usarla come trigger di uscita. |
+| Liquidazione Perp informativa | Le posizioni Perp salvano una stima di liquidazione derivata da entry/leva/side; il dettaglio trade la mostra come livello informativo, senza usarla nei grafici o come trigger di uscita. |
 | Equity adjustment separato dal PnL | Versamenti e prelievi aggiornano capitale iniziale/equity e restano tracciati in tabella dedicata, evitando che un deposito storico appaia come profitto o perdita. |
 | Dettaglio trade riproducibile | Alla chiusura viene salvato uno snapshot JSON di candele e livelli, inclusa la liquidazione Perp quando presente; le posizioni aperte usano un grafico live best-effort dallo stesso feed. |
 | Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati ogni 45 secondi, dentro il vincolo 30-60s e senza refresh aggressivo. |

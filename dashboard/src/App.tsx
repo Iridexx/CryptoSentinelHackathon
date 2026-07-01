@@ -1067,9 +1067,8 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   const sl = chart.stop_loss != null ? Number(chart.stop_loss) : null;
   const tp1 = chart.take_profit_1 != null ? Number(chart.take_profit_1) : null;
   const tp2 = chart.take_profit_2 != null ? Number(chart.take_profit_2) : null;
-  const liq = chart.liquidation_price != null ? Number(chart.liquidation_price) : null;
 
-  const levels = [entry, exit, sl, tp1, tp2, liq].filter((v): v is number => v != null && !Number.isNaN(v));
+  const levels = [entry, exit, sl, tp1, tp2].filter((v): v is number => v != null && !Number.isNaN(v));
   let hi = Math.max(...allCandles.map((c) => c.h), ...levels);
   let lo = Math.min(...allCandles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
@@ -1144,7 +1143,6 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
         <line x1={closeLineX} x2={closeLineX} y1={padT} y2={padT + plotH} stroke="#6b7280" strokeWidth="1" strokeDasharray="3 2" opacity="0.8" />
       )}
       {levelLine(sl, '#ef4444', '5 4')}
-      {levelLine(liq, '#f97316', '2 3')}
       {levelLine(tp1, '#22c55e', '5 4')}
       {levelLine(tp2, '#16a34a', '2 4')}
       {levelLine(entry, '#9ca3af', '1 0')}
@@ -1209,11 +1207,6 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
             <div className="trade-chart">
               <div className="section-head">Grafico del trade <span className="muted">{detail.chart.interval}</span></div>
               <TradeCandleChart chart={detail.chart} />
-              {detail.market === 'perp' && (
-                <div className="chart-legend muted">
-                  <span style={{ color: '#f97316' }}>- - Liq</span>
-                </div>
-              )}
               <div className="chart-legend muted">
                 ⚪ Entry &nbsp; ● Exit &nbsp; <span style={{ color: '#ef4444' }}>- - SL</span> &nbsp; <span style={{ color: '#22c55e' }}>- - TP</span>
               </div>
