@@ -1015,7 +1015,7 @@ class AgentService:
             # C (v3): breakeven a +1*ATR — alza lo stop a entry (+costi), non torna più sotto.
             if atr_v and atr_v > 0:
                 be_trigger = pos.entry_price + atr_v * Decimal(str(self.settings.spot_breakeven_trigger_atr))
-                if price >= be_trigger:
+                if self.settings.spot_breakeven_enabled and price >= be_trigger:
                     be_stop = pos.entry_price
                     if self.settings.spot_breakeven_offset_costs and pos.size > 0:
                         # Costi andata+ritorno (×2): coprono anche la fee di chiusura,
@@ -1121,7 +1121,7 @@ class AgentService:
             if atr_v and atr_v > 0:
                 # Breakeven: a +N×ATR lo SL si sposta a entry (+costi), solo verso il sicuro.
                 be_trigger = (pos.entry_price + atr_v * be_mult) if is_long else (pos.entry_price - atr_v * be_mult)
-                if (is_long and price >= be_trigger) or (not is_long and price <= be_trigger):
+                if self.settings.perp_breakeven_enabled and ((is_long and price >= be_trigger) or (not is_long and price <= be_trigger)):
                     be_stop = pos.entry_price
                     if self.settings.perp_breakeven_offset_costs and pos.size > 0:
                         # Fee andata+ritorno (×2): copre anche la chiusura.

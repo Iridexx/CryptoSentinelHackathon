@@ -32,6 +32,8 @@ _MOBILE_TO_SETTINGS: dict[str, str] = {
     "drawdown_cap_pct": "risk_max_drawdown_pct",
     "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
     "market_reversal_filter_enabled": "market_reversal_filter_enabled",
+    "spot_breakeven_enabled": "spot_breakeven_enabled",
+    "perp_breakeven_enabled": "perp_breakeven_enabled",
     "spot_confidence_threshold": "spot_confidence_threshold",
     "spot_atr_stop_multiplier": "spot_atr_stop_multiplier",
     "spot_time_stop_hours": "spot_time_stop_hours_fallback",
@@ -89,6 +91,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         min_pool_liquidity_usd=settings.risk_min_pool_liquidity_usd,
         market_reversal_filter_enabled=settings.market_reversal_filter_enabled,
+        spot_breakeven_enabled=settings.spot_breakeven_enabled,
+        perp_breakeven_enabled=settings.perp_breakeven_enabled,
         # Parametri spot (default = valore condiviso dal YAML)
         spot_capital_per_trade_pct=cap,
         spot_per_trade_pct=per_trade,

@@ -279,6 +279,8 @@ export interface AgentMobileSettings {
   drawdown_cap_pct: number;
   min_pool_liquidity_usd: number;
   market_reversal_filter_enabled: boolean;
+  spot_breakeven_enabled: boolean;
+  perp_breakeven_enabled: boolean;
   // Spot
   spot_capital_per_trade_pct: number;
   spot_per_trade_pct: number;

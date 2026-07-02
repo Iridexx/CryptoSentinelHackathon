@@ -60,6 +60,7 @@ def settings(**overrides):
         spot_confidence_threshold=0.7,
         spot_volatility_trigger_pct=3.0,
         spot_relative_volume_threshold=1.8,
+        spot_breakeven_enabled=True,
         spot_atr_stop_multiplier=1.5,
         spot_tp1_atr_multiplier=2.0,
         spot_tp2_atr_multiplier=3.5,
@@ -95,6 +96,7 @@ def settings(**overrides):
         perp_leverage_atr_baseline_hours=120,
         perp_value_area_pct=68.0,
         perp_atr_stop_multiplier=0.8,
+        perp_breakeven_enabled=True,
         perp_trailing_mode="largo",
         perp_breakeven_trigger_atr=1.0,
         perp_breakeven_offset_costs=True,
@@ -132,12 +134,16 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert initial.source == "config"
     assert initial.persisted is False
     assert initial.settings.market_reversal_filter_enabled is True
+    assert initial.settings.spot_breakeven_enabled is True
+    assert initial.settings.perp_breakeven_enabled is True
 
     payload = AgentMobileSettings(
         mode="semi_autonomous",
         markets_enabled="spot",
         test_scaling_pct=25,
         market_reversal_filter_enabled=False,
+        spot_breakeven_enabled=False,
+        perp_breakeven_enabled=True,
     )
     updated = await update_mobile_agent_settings(payload, settings(), AuthScope.ADMIN)
     assert updated.persisted is True
@@ -148,6 +154,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert loaded.settings.markets_enabled == "spot"
     assert loaded.settings.test_scaling_pct == 25
     assert loaded.settings.market_reversal_filter_enabled is False
+    assert loaded.settings.spot_breakeven_enabled is False
+    assert loaded.settings.perp_breakeven_enabled is True
 
 
 @pytest.mark.asyncio

@@ -85,6 +85,8 @@ const defaultSettings: AgentMobileSettings = {
   drawdown_cap_pct: -15,
   min_pool_liquidity_usd: 50000,
   market_reversal_filter_enabled: true,
+  spot_breakeven_enabled: true,
+  perp_breakeven_enabled: true,
   spot_capital_per_trade_pct: 6,
   spot_per_trade_pct: 1.5,
   spot_max_open_positions: 3,
@@ -1300,6 +1302,16 @@ const SetupPane: FC<{
           label="Filtro inversione mercato"
           checked={settings.market_reversal_filter_enabled}
           onChange={(market_reversal_filter_enabled) => patch({ market_reversal_filter_enabled })}
+        />
+        <ToggleInput
+          label="Breakeven Spot"
+          checked={settings.spot_breakeven_enabled}
+          onChange={(spot_breakeven_enabled) => patch({ spot_breakeven_enabled })}
+        />
+        <ToggleInput
+          label="Breakeven Perp"
+          checked={settings.perp_breakeven_enabled}
+          onChange={(perp_breakeven_enabled) => patch({ perp_breakeven_enabled })}
         />
       </section>
 

@@ -184,6 +184,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "atr_stop_multiplier": "spot_atr_stop_multiplier",
         "tp1_atr_multiplier": "spot_tp1_atr_multiplier",
         "tp2_atr_multiplier": "spot_tp2_atr_multiplier",
+        "breakeven_enabled": "spot_breakeven_enabled",
         "breakeven_trigger_atr": "spot_breakeven_trigger_atr",
         "breakeven_offset_costs": "spot_breakeven_offset_costs",
         "breakeven_buffer_pct": "spot_breakeven_buffer_pct",
@@ -231,6 +232,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "tp1_atr_multiplier": "perp_tp1_atr_multiplier",
         "tp2_atr_multiplier": "perp_tp2_atr_multiplier",
         "use_poc_for_tp2": "perp_use_poc_for_tp2",
+        "breakeven_enabled": "perp_breakeven_enabled",
         "breakeven_trigger_atr": "perp_breakeven_trigger_atr",
         "breakeven_offset_costs": "perp_breakeven_offset_costs",
         "breakeven_buffer_pct": "perp_breakeven_buffer_pct",
@@ -518,6 +520,7 @@ class Settings(BaseSettings):
     spot_atr_stop_multiplier: float = Field(default=2.2, alias="SPOT_ATR_STOP_MULTIPLIER")
     spot_tp1_atr_multiplier: float = Field(default=2.0, alias="SPOT_TP1_ATR_MULTIPLIER")
     spot_tp2_atr_multiplier: float = Field(default=3.5, alias="SPOT_TP2_ATR_MULTIPLIER")
+    spot_breakeven_enabled: bool = Field(default=True, alias="SPOT_BREAKEVEN_ENABLED")
     spot_breakeven_trigger_atr: float = Field(default=0.6, alias="SPOT_BREAKEVEN_TRIGGER_ATR")
     spot_breakeven_offset_costs: bool = Field(default=True, alias="SPOT_BREAKEVEN_OFFSET_COSTS")
     # Cuscinetto extra del breakeven, in % sul prezzo di entry: lo stop si alza a
@@ -578,6 +581,7 @@ class Settings(BaseSettings):
     perp_use_poc_for_tp2: bool = Field(default=True, alias="PERP_USE_POC_FOR_TP2")
     # ── Protezione posizione perp (breakeven + trailing dinamico sulla leva) ──────
     # Breakeven: a +N×ATR dall'entry lo SL sale a entry (+costi), niente più perdita.
+    perp_breakeven_enabled: bool = Field(default=True, alias="PERP_BREAKEVEN_ENABLED")
     perp_breakeven_trigger_atr: float = Field(default=1.0, alias="PERP_BREAKEVEN_TRIGGER_ATR")
     perp_breakeven_offset_costs: bool = Field(default=True, alias="PERP_BREAKEVEN_OFFSET_COSTS")
     # Cuscinetto extra del breakeven, in % sul prezzo di entry (vedi spot). Su perp

@@ -80,6 +80,7 @@ def settings(**overrides):
         spot_atr_stop_multiplier=1.5,
         spot_tp1_atr_multiplier=2.0,
         spot_tp2_atr_multiplier=3.5,
+        spot_breakeven_enabled=True,
         spot_breakeven_trigger_atr=1.0,
         spot_breakeven_offset_costs=True,
         spot_breakeven_buffer_pct=0.0,
@@ -125,6 +126,7 @@ def settings(**overrides):
         perp_tp1_atr_multiplier=2.5,
         perp_tp2_atr_multiplier=4.0,
         perp_use_poc_for_tp2=True,
+        perp_breakeven_enabled=True,
         perp_breakeven_trigger_atr=1.0,
         perp_breakeven_offset_costs=True,
         perp_breakeven_buffer_pct=0.0,
@@ -1043,6 +1045,40 @@ async def test_spot_breakeven_prevents_loss_after_one_atr(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_spot_breakeven_toggle_disables_stop_lift(db) -> None:
+    """If Spot breakeven is disabled, the loop must not move the stop to entry."""
+    service = AgentService(
+        settings(spot_breakeven_enabled=False, spot_scale_in_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="p-be-off",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("111"),
+        stop_loss=Decimal("78"),
+        take_profit_1=Decimal("130"),
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("10"),
+        max_price=Decimal("100"),
+        swap_fee_usd=Decimal("0"),
+        slippage_usd=Decimal("0"),
+        scale_in_count=0,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.status == "open"
+        assert pos.stop_loss == Decimal("78")
+
+
+@pytest.mark.asyncio
 async def test_spot_small_pump_below_one_atr_locks_breakeven_not_loss(db) -> None:
     """Scenario DEXE: un pump sotto +1*ATR (qui +0.7) deve comunque armare il
     breakeven con soglia 0.6, così il rientro chiude a pari, non in perdita."""
@@ -1218,6 +1254,23 @@ async def test_perp_breakeven_moves_stop_to_entry(db) -> None:
         assert pos.status == "open"
         assert pos.stop_loss == Decimal("100")        # salito a entry (no costi)
         assert pos.trailing_stop is None              # ancora "non attivo"
+
+
+@pytest.mark.asyncio
+async def test_perp_breakeven_toggle_disables_stop_lift(db) -> None:
+    """If Perp breakeven is disabled, the loop must not move the stop to entry."""
+    service = AgentService(
+        settings(perp_breakeven_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    service.price_feed = _OfflineFeed()
+    now = datetime.now(UTC)
+    pos = _perp_pos("perp-be-off", Decimal("102.5"), stop=Decimal("97"))
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [], [pos], now)
+        assert pos.status == "open"
+        assert pos.stop_loss == Decimal("97")
 
 
 @pytest.mark.asyncio
