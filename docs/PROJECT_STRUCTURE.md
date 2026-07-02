@@ -258,7 +258,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache completa dei grafici e Back protetto dai refresh concorrenti, preload leggero dei dettagli, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
+|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache completa dei grafici, deduplica delle richieste dettaglio in corso, refresh single-flight, preload leggero dei dettagli, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet caricati solo nella vista dedicata ed empty state dedicati.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.
@@ -443,7 +443,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Liquidazione Perp informativa | Le posizioni Perp salvano una stima di liquidazione derivata da entry/leva/side; il dettaglio trade la mostra come livello informativo, senza usarla nei grafici o come trigger di uscita. |
 | Equity adjustment separato dal PnL | Versamenti e prelievi aggiornano capitale iniziale/equity e restano tracciati in tabella dedicata, evitando che un deposito storico appaia come profitto o perdita. |
 | Dettaglio trade riproducibile | Alla chiusura viene salvato uno snapshot JSON di candele e livelli, inclusa la liquidazione Perp quando presente; le posizioni aperte usano un grafico live best-effort dallo stesso feed. |
-| Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati ogni 45 secondi, dentro il vincolo 30-60s e senza refresh aggressivo. |
+| Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati completi ogni 45 secondi; la tab mobile usa anche un refresh leggero single-flight ogni 15 secondi per Spot/Perp/Global, senza ricaricare wallet o dettagli trade quando un ciclo precedente è ancora in corso. |
 | Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
 | Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |
 | Mobile settings runtime | Le impostazioni agente salvate dalla mobile app sono persistite in `RuntimeState` e confermate dal backend; l'applicazione live completa ai loop va validata end-to-end prima della gara. |

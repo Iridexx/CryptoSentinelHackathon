@@ -129,8 +129,8 @@ const defaultSettings: AgentMobileSettings = {
 };
 
 const AGENT_REFRESH_MS = 45_000;
-// Refresh leggero (solo posizioni/PnL) per un aggiornamento quasi-realtime.
-const AGENT_FAST_REFRESH_MS = 5_000;
+// Refresh leggero (solo posizioni/PnL). 15s evita accavallamenti quando provider esterni rallentano.
+const AGENT_FAST_REFRESH_MS = 15_000;
 const TRADE_DETAIL_CACHE_TTL_MS = 10 * 60_000;
 const TRADE_DETAIL_BASE_TIMEOUT_MS = 8_000;
 const TRADE_DETAIL_ENRICH_TIMEOUT_MS = 12_000;
@@ -138,6 +138,7 @@ const TRADE_DETAIL_CACHE_MAX = 40;
 const TRADE_DETAIL_PREFETCH_LIMIT = 4;
 
 const tradeDetailCache = new Map<string, { detail: TradeDetail; updatedAt: number }>();
+const tradeDetailInflight = new Map<string, Promise<TradeDetail>>();
 
 const hasCompleteTradeChart = (detail: TradeDetail): boolean =>
   (detail.chart?.candles?.length ?? 0) > 1;
@@ -170,6 +171,25 @@ const cacheTradeDetail = (tradeId: string, detail: TradeDetail) => {
     if (!oldest) break;
     tradeDetailCache.delete(oldest);
   }
+};
+
+const fetchTradeDetailDeduped = (
+  tradeId: string,
+  options: { enrichChart?: boolean; timeoutMs?: number } = {},
+): Promise<TradeDetail> => {
+  const key = `${tradeId}:${options.enrichChart ? 'chart' : 'base'}`;
+  const existing = tradeDetailInflight.get(key);
+  if (existing) return existing;
+  const request = fetchTradeDetail(tradeId, options)
+    .then((detail) => {
+      cacheTradeDetail(tradeId, detail);
+      return detail;
+    })
+    .finally(() => {
+      tradeDetailInflight.delete(key);
+    });
+  tradeDetailInflight.set(key, request);
+  return request;
 };
 
 const EmptyState: FC<{ title: string; detail: string }> = ({ title, detail }) => (
@@ -1714,18 +1734,19 @@ const AgentTab: FC<AgentTabProps> = ({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
+  const refreshInFlightRef = useRef(false);
+  const fastRefreshInFlightRef = useRef(false);
 
   const loadActiveTradeDetail = useCallback(async (tradeId: string, enrichChart = false) => {
     const cached = getCachedTradeDetail(tradeId);
-    if (enrichChart && cached && hasCompleteTradeChart(cached)) {
+    if (cached && (!enrichChart || hasCompleteTradeChart(cached))) {
       if (detailTradeIdRef.current === tradeId) setTradeDetail(cached);
       return cached;
     }
-    const detail = await fetchTradeDetail(tradeId, {
+    const detail = await fetchTradeDetailDeduped(tradeId, {
       enrichChart,
       timeoutMs: enrichChart ? TRADE_DETAIL_ENRICH_TIMEOUT_MS : TRADE_DETAIL_BASE_TIMEOUT_MS,
     });
-    cacheTradeDetail(tradeId, detail);
     if (detailTradeIdRef.current === tradeId) {
       setTradeDetail(detail);
     }
@@ -1738,8 +1759,7 @@ const AgentTab: FC<AgentTabProps> = ({
       .filter((id) => id !== activeTradeId && !getCachedTradeDetail(id))
       .slice(0, TRADE_DETAIL_PREFETCH_LIMIT);
     ids.forEach((tradeId) => {
-      fetchTradeDetail(tradeId, { timeoutMs: TRADE_DETAIL_BASE_TIMEOUT_MS })
-        .then((detail) => cacheTradeDetail(tradeId, detail))
+      fetchTradeDetailDeduped(tradeId, { timeoutMs: TRADE_DETAIL_BASE_TIMEOUT_MS })
         .catch(() => {});
     });
   }, []);
@@ -1751,31 +1771,37 @@ const AgentTab: FC<AgentTabProps> = ({
   }, []);
 
   const refresh = useCallback(async (silent = false) => {
+    if (refreshInFlightRef.current) return;
+    if (fastRefreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     if (!silent) setRefreshing(true);
-    // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
-    // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
-    const activeTradeId = detailTradeIdRef.current;
-    const detailFetch = activeTradeId && !hasCompleteCachedTradeDetail(activeTradeId)
-      ? loadActiveTradeDetail(activeTradeId).catch(() => {})
-      : Promise.resolve();
-    const results = await Promise.allSettled([
-      fetchAgentStatus().then(setStatus),
-      fetchSpotView().then(setSpot),
-      fetchPerpView().then(setPerp),
-      fetchGlobalView().then(setGlobal),
-      fetchAgentSettings().then((r) => setSettings(r.settings)),
-      fetchExecutionWallets().then(setExecWallets),
-      fetchEquityCurve(equityRangeRef.current).then(setEquity),
-      fetchAgentDecisions().then(setDecisions),
-      fetchAssetBreakdown().then(setAssetBreakdown),
-      detailFetch,
-    ]);
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    setError(failed > 0 ? `${failed} endpoint non raggiungibili` : '');
-    setRefreshing(false);
-    if (!silent) {
-      setJustSynced(true);
-      window.setTimeout(() => setJustSynced(false), 2500);
+    try {
+      // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
+      // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
+      const activeTradeId = detailTradeIdRef.current;
+      const detailFetch = activeTradeId && !hasCompleteCachedTradeDetail(activeTradeId)
+        ? loadActiveTradeDetail(activeTradeId).catch(() => {})
+        : Promise.resolve();
+      const results = await Promise.allSettled([
+        fetchAgentStatus().then(setStatus),
+        fetchSpotView().then(setSpot),
+        fetchPerpView().then(setPerp),
+        fetchGlobalView().then(setGlobal),
+        fetchAgentSettings().then((r) => setSettings(r.settings)),
+        fetchEquityCurve(equityRangeRef.current).then(setEquity),
+        fetchAgentDecisions().then(setDecisions),
+        fetchAssetBreakdown().then(setAssetBreakdown),
+        detailFetch,
+      ]);
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      setError(failed > 0 ? `${failed} endpoint non raggiungibili` : '');
+      if (!silent) {
+        setJustSynced(true);
+        window.setTimeout(() => setJustSynced(false), 2500);
+      }
+    } finally {
+      setRefreshing(false);
+      refreshInFlightRef.current = false;
     }
   }, [loadActiveTradeDetail]);
 
@@ -1810,20 +1836,38 @@ const AgentTab: FC<AgentTabProps> = ({
     return () => window.clearInterval(timer);
   }, [refresh]);
 
-  // Refresh leggero ogni 5s: viste posizioni aperte + dettaglio live se aperto.
+  // Refresh leggero: aggiorna solo le viste principali e salta se un ciclo e' gia' in corso.
   useEffect(() => {
     const timer = window.setInterval(() => {
-      fetchSpotView().then(setSpot).catch(() => {});
-      fetchPerpView().then(setPerp).catch(() => {});
-      fetchGlobalView().then(setGlobal).catch(() => {});
-      // Se il dettaglio di una posizione live è aperto, ricaricalo silenziosamente.
-      const activeTradeId = detailTradeIdRef.current;
-      if (activeTradeId && !hasCompleteCachedTradeDetail(activeTradeId)) {
-        loadActiveTradeDetail(activeTradeId).catch(() => {});
-      }
+      if (refreshInFlightRef.current) return;
+      if (fastRefreshInFlightRef.current) return;
+      fastRefreshInFlightRef.current = true;
+      Promise.allSettled([
+        fetchSpotView().then(setSpot),
+        fetchPerpView().then(setPerp),
+        fetchGlobalView().then(setGlobal),
+      ]).finally(() => {
+        fastRefreshInFlightRef.current = false;
+      });
     }, AGENT_FAST_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [loadActiveTradeDetail]);
+  }, []);
+
+  useEffect(() => {
+    if (pane !== 'wallet') return;
+    let active = true;
+    const loadWallets = () => {
+      fetchExecutionWallets()
+        .then((value) => { if (active) setExecWallets(value); })
+        .catch(() => {});
+    };
+    loadWallets();
+    const timer = window.setInterval(loadWallets, 300_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [pane]);
 
   useEffect(() => {
     if (pane === 'spot' && spot) {
