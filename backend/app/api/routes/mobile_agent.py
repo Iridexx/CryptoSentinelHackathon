@@ -28,6 +28,7 @@ SETTINGS_KEY = "mobile_agent_settings"
 # Mapping mobile_field → Settings attribute name (solo parametri globali e di strategia;
 # i parametri risk market-specific vengono letti direttamente dall'_ms nel risk manager).
 _MOBILE_TO_SETTINGS: dict[str, str] = {
+    "drawdown_alert_enabled": "risk_drawdown_alert_enabled",
     "daily_loss_limit_pct": "risk_daily_loss_limit_pct",
     "drawdown_cap_pct": "risk_max_drawdown_pct",
     "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
@@ -87,6 +88,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         network=settings.bsc_network,
         test_scaling_pct=settings.test_scaling_pct,
         operating_hours_utc=settings.operating_hours_utc,
+        drawdown_alert_enabled=settings.risk_drawdown_alert_enabled,
         daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         min_pool_liquidity_usd=settings.risk_min_pool_liquidity_usd,

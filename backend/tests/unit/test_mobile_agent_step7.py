@@ -49,6 +49,7 @@ def settings(**overrides):
         risk_max_total_exposure_pct=30.0,
         risk_daily_loss_limit_pct=-8.0,
         risk_max_drawdown_pct=-15.0,
+        risk_drawdown_alert_enabled=True,
         risk_min_pool_liquidity_usd=50000.0,
         market_reversal_filter_enabled=True,
         market_reversal_symbol="BTCUSDT",
@@ -133,6 +134,7 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     initial = await mobile_agent_settings(settings(), AuthScope.READ)
     assert initial.source == "config"
     assert initial.persisted is False
+    assert initial.settings.drawdown_alert_enabled is True
     assert initial.settings.market_reversal_filter_enabled is True
     assert initial.settings.spot_breakeven_enabled is True
     assert initial.settings.perp_breakeven_enabled is True
@@ -141,6 +143,7 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
         mode="semi_autonomous",
         markets_enabled="spot",
         test_scaling_pct=25,
+        drawdown_alert_enabled=False,
         market_reversal_filter_enabled=False,
         spot_breakeven_enabled=False,
         perp_breakeven_enabled=True,
@@ -153,6 +156,7 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert loaded.settings.mode == "semi_autonomous"
     assert loaded.settings.markets_enabled == "spot"
     assert loaded.settings.test_scaling_pct == 25
+    assert loaded.settings.drawdown_alert_enabled is False
     assert loaded.settings.market_reversal_filter_enabled is False
     assert loaded.settings.spot_breakeven_enabled is False
     assert loaded.settings.perp_breakeven_enabled is True

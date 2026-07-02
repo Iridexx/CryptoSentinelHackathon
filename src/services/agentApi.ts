@@ -275,6 +275,7 @@ export interface AgentMobileSettings {
   test_scaling_pct: number;
   operating_hours_utc: string;
   // Globali
+  drawdown_alert_enabled: boolean;
   daily_loss_limit_pct: number;
   drawdown_cap_pct: number;
   min_pool_liquidity_usd: number;

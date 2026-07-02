@@ -1926,7 +1926,7 @@ class AgentService:
 
             # Drawdown
             drawdown = float(getattr(portfolio, "drawdown_pct", 0) or 0)
-            if drawdown >= self.settings.risk_notify_drawdown_pct:
+            if self.settings.risk_drawdown_alert_enabled and drawdown >= self.settings.risk_notify_drawdown_pct:
                 await notifier.notify_risk_alert(
                     user_id, "drawdown",
                     f"Drawdown {drawdown:.1f}% supera soglia {self.settings.risk_notify_drawdown_pct:.0f}%"

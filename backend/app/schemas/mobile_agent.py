@@ -13,6 +13,7 @@ class AgentMobileSettings(BaseModel):
     test_scaling_pct: float = Field(default=10.0, ge=1.0, le=100.0)
     operating_hours_utc: str = "00:00-23:59"
     # --- Parametri globali (si applicano a entrambi i mercati) ---
+    drawdown_alert_enabled: bool = True
     daily_loss_limit_pct: float = Field(default=-8.0, ge=-50.0, lt=0.0)
     drawdown_cap_pct: float = Field(default=-15.0, ge=-50.0, lt=0.0)
     min_pool_liquidity_usd: float = Field(default=50000.0, ge=0.0)

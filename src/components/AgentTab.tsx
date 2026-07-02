@@ -81,6 +81,7 @@ const defaultSettings: AgentMobileSettings = {
   network: 'testnet',
   test_scaling_pct: 10,
   operating_hours_utc: '00:00-23:59',
+  drawdown_alert_enabled: true,
   daily_loss_limit_pct: -8,
   drawdown_cap_pct: -15,
   min_pool_liquidity_usd: 50000,
@@ -1317,6 +1318,11 @@ const SetupPane: FC<{
 
       <section className="space-y-3">
         <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Risk globale</h3>
+        <ToggleInput
+          label="Allarme drawdown"
+          checked={settings.drawdown_alert_enabled}
+          onChange={(drawdown_alert_enabled) => patch({ drawdown_alert_enabled })}
+        />
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Daily loss %" value={settings.daily_loss_limit_pct} onChange={(daily_loss_limit_pct) => patch({ daily_loss_limit_pct })} />
           <NumberInput label="Drawdown cap %" value={settings.drawdown_cap_pct} onChange={(drawdown_cap_pct) => patch({ drawdown_cap_pct })} />

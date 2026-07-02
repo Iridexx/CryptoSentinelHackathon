@@ -68,6 +68,8 @@ def settings(**overrides):
         risk_max_total_exposure_pct=30.0,
         risk_daily_loss_limit_pct=-8.0,
         risk_max_drawdown_pct=-15.0,
+        risk_drawdown_alert_enabled=True,
+        risk_notify_drawdown_pct=10.0,
         risk_cooldown_minutes=0,
         risk_min_pool_liquidity_usd=50000.0,
         dry_run_capital_usd=200.0,
@@ -1271,6 +1273,32 @@ async def test_perp_breakeven_toggle_disables_stop_lift(db) -> None:
         await service._check_sl_tp(session, [], [pos], now)
         assert pos.status == "open"
         assert pos.stop_loss == Decimal("97")
+
+
+@pytest.mark.asyncio
+async def test_drawdown_alert_toggle_disables_notification(db, monkeypatch) -> None:
+    """Disabling the drawdown alert toggle suppresses drawdown risk notifications."""
+    service = AgentService(
+        settings(risk_drawdown_alert_enabled=False, risk_notify_drawdown_pct=10.0),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    calls: list[tuple[str, str]] = []
+
+    class FakeNotifier:
+        async def notify_risk_alert(self, user_id: str, alert_type: str, detail: str) -> bool:
+            del user_id
+            calls.append((alert_type, detail))
+            return True
+
+    monkeypatch.setattr("backend.app.agent.service.get_agent_notifier", lambda: FakeNotifier())
+
+    async with get_session_factory()() as session:
+        session.add(_portfolio(drawdown_pct=Decimal("12")))
+        await session.commit()
+        await service._check_risk_notifications(session, [], [])
+
+    assert calls == []
 
 
 @pytest.mark.asyncio

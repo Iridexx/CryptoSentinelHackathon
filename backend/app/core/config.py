@@ -157,6 +157,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "summary_topic": "fcm_summary_topic",
         "summary_hour_utc": "agent_summary_hour_utc",
         "summary_minute_utc": "agent_summary_minute_utc",
+        "risk_drawdown_alert_enabled": "risk_drawdown_alert_enabled",
         "risk_notify_drawdown_pct": "risk_notify_drawdown_pct",
     },
     "risk": {
@@ -488,6 +489,7 @@ class Settings(BaseSettings):
     fcm_summary_topic: str = Field(default="cryptosentinel-summary", alias="FCM_SUMMARY_TOPIC")
     agent_summary_hour_utc: int = Field(default=23, alias="AGENT_SUMMARY_HOUR_UTC")
     agent_summary_minute_utc: int = Field(default=55, alias="AGENT_SUMMARY_MINUTE_UTC")
+    risk_drawdown_alert_enabled: bool = Field(default=True, alias="RISK_DRAWDOWN_ALERT_ENABLED")
     risk_notify_drawdown_pct: float = Field(default=10.0, alias="RISK_NOTIFY_DRAWDOWN_PCT")
 
     agent_mode: str = Field(default="conservative", alias="AGENT_MODE")
