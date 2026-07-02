@@ -12,6 +12,7 @@
 
 - Aggiunti campi Settings/YAML e contratto mobile: `market_reversal_filter_enabled` e parametri BTC/EMA/confirmations.
 - Aggiunto toggle nel setup mobile con label `Filtro inversione mercato`.
+- Reso il controllo visibile come toggle dedicato nella sezione `Filtri mercato` del setup, invece di un selettore dentro `Risk globale`.
 - Implementato `_market_reversal_filter()` in `AgentService`, riusando il feed Binance klines già presente e persistendo lo stato direzionale `bullish`/`bearish`/`neutral`.
 - Aggiunti test unitari per Spot risk-off non sbloccato, Spot in attesa conferma, blocco short Perp, blocco long Perp e passaggio bullish→bearish solo dopo due rosse sotto EMA10.
 
@@ -20,6 +21,7 @@
 - `backend\.venv\Scripts\python.exe -m py_compile backend/app/core/config.py backend/app/schemas/mobile_agent.py backend/app/api/routes/mobile_agent.py backend/app/agent/service.py` completato con successo.
 - `backend\.venv\Scripts\python.exe -m pytest backend/tests/unit/test_agent_step6.py backend/tests/unit/test_mobile_agent_step7.py -q` completato con successo: 61 passed.
 - `npm exec tsc -- -b --pretty false` completato con successo.
+- Dopo la revisione UI del toggle, `backend\.venv\Scripts\python.exe -m pytest backend/tests/unit/test_mobile_agent_step7.py::test_mobile_agent_settings_are_persisted -q` completato con successo: 1 passed.
 
 ## SCOSTAMENTI DAL PIANO
 

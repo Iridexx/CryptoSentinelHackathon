@@ -380,6 +380,22 @@ const SelectInput: FC<{
   </label>
 );
 
+const ToggleInput: FC<{
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}> = ({ label, checked, onChange }) => (
+  <label className="flex items-center justify-between gap-3 rounded-lg border border-dark-700 bg-dark-800 px-3 py-2">
+    <span className="min-w-0 text-sm font-semibold text-white">{label}</span>
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+      className="h-5 w-5 accent-accent-blue"
+    />
+  </label>
+);
+
 const MOBILE_PAGE = 8;
 
 type SpotHistoryRow = NonNullable<SpotView['history']>[number];
@@ -1254,14 +1270,19 @@ const SetupPane: FC<{
       </section>
 
       <section className="space-y-3">
+        <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Filtri mercato</h3>
+        <ToggleInput
+          label="Filtro inversione mercato"
+          checked={settings.market_reversal_filter_enabled}
+          onChange={(market_reversal_filter_enabled) => patch({ market_reversal_filter_enabled })}
+        />
+      </section>
+
+      <section className="space-y-3">
         <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Risk globale</h3>
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Daily loss %" value={settings.daily_loss_limit_pct} onChange={(daily_loss_limit_pct) => patch({ daily_loss_limit_pct })} />
           <NumberInput label="Drawdown cap %" value={settings.drawdown_cap_pct} onChange={(drawdown_cap_pct) => patch({ drawdown_cap_pct })} />
-          <SelectInput label="Filtro inversione mercato" value={settings.market_reversal_filter_enabled ? 'on' : 'off'} onChange={(v) => patch({ market_reversal_filter_enabled: v === 'on' })} options={[
-            { value: 'on', label: 'Attivo' },
-            { value: 'off', label: 'Spento' },
-          ]} />
         </div>
       </section>
 
