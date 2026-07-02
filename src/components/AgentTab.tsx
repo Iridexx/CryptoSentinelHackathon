@@ -134,11 +134,15 @@ const AGENT_FAST_REFRESH_MS = 15_000;
 const TRADE_DETAIL_CACHE_TTL_MS = 10 * 60_000;
 const TRADE_DETAIL_BASE_TIMEOUT_MS = 8_000;
 const TRADE_DETAIL_ENRICH_TIMEOUT_MS = 12_000;
-const TRADE_DETAIL_CACHE_MAX = 40;
-const TRADE_DETAIL_PREFETCH_LIMIT = 4;
+const TRADE_DETAIL_CACHE_MAX = 80;
+// Matches the mobile history page size: open positions are always added on top.
+const TRADE_DETAIL_PREFETCH_LIMIT = 8;
+const TRADE_DETAIL_PREFETCH_CONCURRENCY = 2;
+const TRADE_DETAIL_PREFETCH_RETRY_MS = 60_000;
 
 const tradeDetailCache = new Map<string, { detail: TradeDetail; updatedAt: number }>();
 const tradeDetailInflight = new Map<string, Promise<TradeDetail>>();
+const tradeDetailPrefetchRetryAt = new Map<string, number>();
 
 const hasBaseTradeChart = (detail: TradeDetail): boolean =>
   (detail.chart?.candles?.length ?? 0) > 1;
@@ -168,6 +172,14 @@ const hasCompleteCachedTradeDetail = (tradeId: string): boolean => {
   return cached != null && hasCompleteTradeChart(cached);
 };
 
+const isTradeDetailInflight = (tradeId: string): boolean =>
+  tradeDetailInflight.has(`${tradeId}:base`) || tradeDetailInflight.has(`${tradeId}:chart`);
+
+const shouldPrefetchTradeDetail = (tradeId: string): boolean => {
+  if (hasCompleteCachedTradeDetail(tradeId) || isTradeDetailInflight(tradeId)) return false;
+  return Date.now() >= (tradeDetailPrefetchRetryAt.get(tradeId) ?? 0);
+};
+
 const cacheTradeDetail = (tradeId: string, detail: TradeDetail) => {
   const existing = tradeDetailCache.get(tradeId)?.detail;
   if (existing && hasCompleteTradeChart(existing) && !hasCompleteTradeChart(detail)) {
@@ -178,6 +190,9 @@ const cacheTradeDetail = (tradeId: string, detail: TradeDetail) => {
   }
   if (tradeDetailCache.has(tradeId)) tradeDetailCache.delete(tradeId);
   tradeDetailCache.set(tradeId, { detail, updatedAt: Date.now() });
+  if (hasCompleteTradeChart(detail)) {
+    tradeDetailPrefetchRetryAt.delete(tradeId);
+  }
   while (tradeDetailCache.size > TRADE_DETAIL_CACHE_MAX) {
     const oldest = tradeDetailCache.keys().next().value;
     if (!oldest) break;
@@ -1768,12 +1783,38 @@ const AgentTab: FC<AgentTabProps> = ({
   const prefetchTradeDetails = useCallback((tradeIds: Array<string | null | undefined>) => {
     const activeTradeId = detailTradeIdRef.current;
     const ids = Array.from(new Set(tradeIds.filter((id): id is string => Boolean(id))))
-      .filter((id) => id !== activeTradeId && !getCachedTradeDetail(id))
-      .slice(0, TRADE_DETAIL_PREFETCH_LIMIT);
-    ids.forEach((tradeId) => {
-      fetchTradeDetailDeduped(tradeId, { timeoutMs: TRADE_DETAIL_BASE_TIMEOUT_MS })
-        .catch(() => {});
-    });
+      .filter((id) => id !== activeTradeId && shouldPrefetchTradeDetail(id));
+    if (ids.length === 0) return;
+
+    const queue = [...ids];
+    const nextRetryAt = Date.now() + TRADE_DETAIL_PREFETCH_RETRY_MS;
+    ids.forEach((tradeId) => tradeDetailPrefetchRetryAt.set(tradeId, nextRetryAt));
+
+    const workers = Array.from(
+      { length: Math.min(TRADE_DETAIL_PREFETCH_CONCURRENCY, queue.length) },
+      async () => {
+        while (queue.length > 0) {
+          const tradeId = queue.shift();
+          if (!tradeId) return;
+          try {
+            let detail = getCachedTradeDetail(tradeId);
+            if (!detail) {
+              detail = await fetchTradeDetailDeduped(tradeId, { timeoutMs: TRADE_DETAIL_BASE_TIMEOUT_MS });
+            }
+            if (!hasCompleteTradeChart(detail)) {
+              await fetchTradeDetailDeduped(tradeId, {
+                enrichChart: true,
+                timeoutMs: TRADE_DETAIL_ENRICH_TIMEOUT_MS,
+              });
+            }
+          } catch {
+            // Background warm-up: the tap handler still owns visible error handling.
+          }
+        }
+      },
+    );
+
+    Promise.allSettled(workers).catch(() => {});
   }, []);
 
   const closeTradeDetail = useCallback(() => {
@@ -1882,19 +1923,19 @@ const AgentTab: FC<AgentTabProps> = ({
   }, [pane]);
 
   useEffect(() => {
-    if (pane === 'spot' && spot) {
+    if (spot) {
       prefetchTradeDetails([
         ...spot.open_positions.map((position) => position.open_trade_id),
-        ...spot.history.slice(0, 2).map((trade) => trade.trade_id),
+        ...spot.history.slice(0, TRADE_DETAIL_PREFETCH_LIMIT).map((trade) => trade.trade_id),
       ]);
     }
-    if (pane === 'perp' && perp) {
+    if (perp) {
       prefetchTradeDetails([
         ...perp.open_positions.map((position) => position.open_trade_id),
-        ...perp.history.slice(0, 2).map((trade) => trade.trade_id),
+        ...perp.history.slice(0, TRADE_DETAIL_PREFETCH_LIMIT).map((trade) => trade.trade_id),
       ]);
     }
-  }, [pane, spot, perp, prefetchTradeDetails]);
+  }, [spot, perp, prefetchTradeDetails]);
 
   // Refetch immediato della curva quando l'utente cambia il range (24h/7g/Tutto),
   // senza ricaricare tutte le altre schede.
