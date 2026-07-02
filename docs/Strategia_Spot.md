@@ -233,6 +233,10 @@ LIQUIDITY FILTER (esclude pool troppo sottili)
 EVENTO: volume spike / volatility expansion
         ↓
 REGIME: trend positivo? accumulazione?   (VWAP primario + EMA 20/50 di supporto)
+        + filtro inversione mercato opzionale: BTC 15m sopra EMA10 con 2 candele verdi
+          consecutive confermate. Resta bullish finché BTC non fa 2 candele rosse
+          consecutive sotto EMA10. È solo conferma di nuova entrata: non sblocca
+          guardrail o stati risk-off già attivi.
         ↓
 ENTRY QUALITY: distanza da VWAP · supporto/resistenza · breakout/retest · estensione ATR
         ↓
@@ -285,6 +289,11 @@ ENTRATA → gestione (ATR stop · TP parziale + trailing · loop veloce) → usc
 
 3. REGIME (VWAP primario + EMA 20/50 di supporto)
    La coin è in trend positivo / accumulazione? (evita downtrend e pump esteso)
+   Se il filtro inversione mercato è attivo, una nuova entrata aspetta anche BTC
+   15m con due candele verdi consecutive sopra EMA10 e EMA10 in salita. Una volta
+   attivo resta bullish finché BTC non fa due candele rosse consecutive sotto
+   EMA10. Questo filtro non sblocca mai lo Spot se altri blocchi/risk-off sono
+   già attivi.
 
 4. ENTRY QUALITY
    Distanza da VWAP (no long se troppo esteso) ·

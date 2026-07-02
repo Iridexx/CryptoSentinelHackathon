@@ -16,6 +16,7 @@ class AgentMobileSettings(BaseModel):
     daily_loss_limit_pct: float = Field(default=-8.0, ge=-50.0, lt=0.0)
     drawdown_cap_pct: float = Field(default=-15.0, ge=-50.0, lt=0.0)
     min_pool_liquidity_usd: float = Field(default=50000.0, ge=0.0)
+    market_reversal_filter_enabled: bool = True
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

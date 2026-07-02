@@ -54,7 +54,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing, snapshot grafici trade senza linea liquidazione Perp e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing, snapshot grafici trade senza linea liquidazione Perp e provider execution astratti.
 |   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
@@ -161,7 +161,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
-|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings, credential checks e wallet summary con balance asset non-zero.
+|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, credential checks e wallet summary con balance asset non-zero.
 |   |   |   |-- observability.py - schemi Step 8 per log viewer dashboard.
 |   |   |   `-- views.py - SpotView, PerpView, GlobalView, ClaudeUsageView, PnlPoint e campi analytics PnL/Sharpe/fee/margine per dashboard/app.
 |   |   |-- services/ - namespace application services.
@@ -258,7 +258,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade con Back protetto dai refresh concorrenti, setup con ATR stop Perp configurabile, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
+|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade con Back protetto dai refresh concorrenti, setup con ATR stop Perp e filtro inversione mercato configurabili, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.

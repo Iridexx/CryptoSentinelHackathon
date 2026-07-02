@@ -209,6 +209,11 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "market_regime_interval": "spot_market_regime_interval",
         "market_regime_ema_period": "spot_market_regime_ema_period",
         "market_regime_low_lookback": "spot_market_regime_low_lookback",
+        "market_reversal_filter_enabled": "market_reversal_filter_enabled",
+        "market_reversal_symbol": "market_reversal_symbol",
+        "market_reversal_interval": "market_reversal_interval",
+        "market_reversal_ema_period": "market_reversal_ema_period",
+        "market_reversal_confirmation_candles": "market_reversal_confirmation_candles",
         "trailing_distance_pct": "spot_trailing_distance_pct",
         "partial_take_profit_pct": "spot_partial_take_profit_pct",
         "time_stop_hours": "spot_time_stop_hours",
@@ -544,6 +549,14 @@ class Settings(BaseSettings):
     spot_market_regime_interval: str = Field(default="15m", alias="SPOT_MARKET_REGIME_INTERVAL")
     spot_market_regime_ema_period: int = Field(default=50, alias="SPOT_MARKET_REGIME_EMA_PERIOD")
     spot_market_regime_low_lookback: int = Field(default=12, alias="SPOT_MARKET_REGIME_LOW_LOOKBACK")
+    # Filtro inversione mercato: conferma risk-on BTC prima di nuove entrate e blocca
+    # short perp contro una risalita confermata. Non sblocca mai lo spot se altri
+    # guardrail/regimi lo stanno gia' bloccando.
+    market_reversal_filter_enabled: bool = Field(default=True, alias="MARKET_REVERSAL_FILTER_ENABLED")
+    market_reversal_symbol: str = Field(default="BTCUSDT", alias="MARKET_REVERSAL_SYMBOL")
+    market_reversal_interval: str = Field(default="15m", alias="MARKET_REVERSAL_INTERVAL")
+    market_reversal_ema_period: int = Field(default=10, alias="MARKET_REVERSAL_EMA_PERIOD")
+    market_reversal_confirmation_candles: int = Field(default=2, alias="MARKET_REVERSAL_CONFIRMATION_CANDLES")
     spot_trailing_distance_pct: float = Field(default=2.0, alias="SPOT_TRAILING_DISTANCE_PCT")
     spot_partial_take_profit_pct: float = Field(default=3.0, alias="SPOT_PARTIAL_TAKE_PROFIT_PCT")
     spot_time_stop_hours: int = Field(default=6, alias="SPOT_TIME_STOP_HOURS")

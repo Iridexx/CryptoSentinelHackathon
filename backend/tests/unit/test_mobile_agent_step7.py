@@ -50,6 +50,11 @@ def settings(**overrides):
         risk_daily_loss_limit_pct=-8.0,
         risk_max_drawdown_pct=-15.0,
         risk_min_pool_liquidity_usd=50000.0,
+        market_reversal_filter_enabled=True,
+        market_reversal_symbol="BTCUSDT",
+        market_reversal_interval="15m",
+        market_reversal_ema_period=10,
+        market_reversal_confirmation_candles=2,
         risk_max_slippage_pct=1.0,
         risk_cooldown_minutes=30,
         spot_confidence_threshold=0.7,
@@ -126,8 +131,14 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     initial = await mobile_agent_settings(settings(), AuthScope.READ)
     assert initial.source == "config"
     assert initial.persisted is False
+    assert initial.settings.market_reversal_filter_enabled is True
 
-    payload = AgentMobileSettings(mode="semi_autonomous", markets_enabled="spot", test_scaling_pct=25)
+    payload = AgentMobileSettings(
+        mode="semi_autonomous",
+        markets_enabled="spot",
+        test_scaling_pct=25,
+        market_reversal_filter_enabled=False,
+    )
     updated = await update_mobile_agent_settings(payload, settings(), AuthScope.ADMIN)
     assert updated.persisted is True
 
@@ -136,6 +147,7 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert loaded.settings.mode == "semi_autonomous"
     assert loaded.settings.markets_enabled == "spot"
     assert loaded.settings.test_scaling_pct == 25
+    assert loaded.settings.market_reversal_filter_enabled is False
 
 
 @pytest.mark.asyncio

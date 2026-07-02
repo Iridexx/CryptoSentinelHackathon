@@ -108,6 +108,11 @@ def settings(**overrides):
         spot_market_regime_interval="15m",
         spot_market_regime_ema_period=50,
         spot_market_regime_low_lookback=12,
+        market_reversal_filter_enabled=False,
+        market_reversal_symbol="BTCUSDT",
+        market_reversal_interval="15m",
+        market_reversal_ema_period=10,
+        market_reversal_confirmation_candles=2,
         spot_vwap_atr_extension_limit=10.0,
         spot_rsi_weight_pct=15.0,
         spot_trend_structure_weight_pct=30.0,
@@ -1255,6 +1260,30 @@ def _btc_candles(closes: list[float]) -> list[Candle]:
     ]
 
 
+def _btc_green_candles(closes: list[float]) -> list[Candle]:
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    return [
+        Candle(timestamp=base + timedelta(minutes=15 * i), open=c - 0.5, high=c + 0.2, low=c - 0.8, close=c, volume=100.0)
+        for i, c in enumerate(closes)
+    ]
+
+
+def _btc_candles_with_red_tail(closes: list[float], red_tail: int) -> list[Candle]:
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    split = len(closes) - red_tail
+    return [
+        Candle(
+            timestamp=base + timedelta(minutes=15 * i),
+            open=c + 0.5 if i >= split else c - 0.5,
+            high=c + 0.8,
+            low=c - 0.8,
+            close=c,
+            volume=100.0,
+        )
+        for i, c in enumerate(closes)
+    ]
+
+
 @pytest.mark.asyncio
 async def test_spot_market_regime_blocks_and_reactivates_only_above_ema(db) -> None:
     """Blocca in downtrend forte (sotto EMA + nuovo minimo), resta bloccato per
@@ -1301,6 +1330,203 @@ async def test_spot_market_regime_disabled_never_blocks(db) -> None:
     regime = await service._spot_market_regime()
     assert regime["risk_off"] is False
     assert regime["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_market_reversal_filter_does_not_unblock_spot_risk_off(db) -> None:
+    class FakeSignal:
+        async def evaluate(self, payload):
+            return {
+                "signal_id": "spot-risk-off",
+                "market": "spot",
+                "asset": "BTC",
+                "action": "enter_long",
+                "quality": 0.9,
+                "confidence": 0.9,
+                "price": 100.0,
+                "stop_loss": 95.0,
+                "quote_equity": 1000.0,
+            }
+
+    class FakeFeed:
+        async def fetch(self, **kwargs):
+            return _btc_candles([100 - i for i in range(20)])
+
+    cfg = settings(
+        spot_market_regime_filter_enabled=True,
+        spot_market_regime_ema_period=10,
+        spot_market_regime_low_lookback=5,
+        market_reversal_filter_enabled=True,
+    )
+    service = AgentService(
+        cfg,
+        spot_signal=FakeSignal(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    service.price_feed = FakeFeed()
+
+    async with get_session_factory()() as session:
+        result = await service.evaluate_spot({}, session)
+
+    assert result["signal"]["action"] == "skip"
+    assert result["signal"]["reason"] == "market_risk_off"
+    assert "market_reversal" not in result["signal"].get("components", {})
+
+
+@pytest.mark.asyncio
+async def test_market_reversal_filter_waits_for_two_green_btc_candles_on_spot(db) -> None:
+    class FakeSignal:
+        async def evaluate(self, payload):
+            return {
+                "signal_id": "spot-reversal-wait",
+                "market": "spot",
+                "asset": "BTC",
+                "action": "enter_long",
+                "quality": 0.9,
+                "confidence": 0.9,
+                "price": 100.0,
+                "stop_loss": 95.0,
+                "quote_equity": 1000.0,
+            }
+
+    class FakeFeed:
+        async def fetch(self, **kwargs):
+            return _btc_candles([100, 100.2, 100.1, 100.3, 100.2, 100.4, 100.3, 100.5, 100.4, 100.6, 100.5, 100.4, 100.3])
+
+    cfg = settings(spot_market_regime_filter_enabled=False, market_reversal_filter_enabled=True)
+    service = AgentService(
+        cfg,
+        spot_signal=FakeSignal(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    service.price_feed = FakeFeed()
+
+    async with get_session_factory()() as session:
+        result = await service.evaluate_spot({}, session)
+
+    assert result["signal"]["action"] == "skip"
+    assert result["signal"]["reason"] == "market_reversal_waiting"
+    assert result["signal"]["components"]["market_reversal"]["risk_on"] is False
+
+
+@pytest.mark.asyncio
+async def test_market_reversal_filter_blocks_perp_short_on_btc_recovery(db) -> None:
+    class FakeSignal:
+        async def evaluate(self, payload):
+            return {
+                "signal_id": "perp-short-reversal",
+                "market": "perp",
+                "asset": "BTC",
+                "action": "enter_short",
+                "side": "short",
+                "quality": 0.9,
+                "confidence": 0.9,
+                "price": 100.0,
+                "stop_loss": 105.0,
+                "quote_equity": 1000.0,
+                "leverage": 2,
+                "components": {},
+            }
+
+    class FakeFeed:
+        async def fetch(self, **kwargs):
+            return _btc_green_candles([100 + i for i in range(20)])
+
+    cfg = settings(market_reversal_filter_enabled=True)
+    service = AgentService(
+        cfg,
+        perp_signal=FakeSignal(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    service.price_feed = FakeFeed()
+
+    async with get_session_factory()() as session:
+        result = await service.evaluate_perp({}, session)
+
+    assert result["signal"]["action"] == "skip"
+    assert result["signal"]["reason"] == "market_reversal_short_blocked"
+    assert result["signal"]["components"]["market_reversal"]["risk_on"] is True
+
+
+@pytest.mark.asyncio
+async def test_market_reversal_filter_stays_on_until_two_red_below_ema(db) -> None:
+    class FakeFeed:
+        def __init__(self) -> None:
+            self.candles: list[Candle] = []
+
+        async def fetch(self, **kwargs):
+            return self.candles
+
+    cfg = settings(market_reversal_filter_enabled=True)
+    service = AgentService(
+        cfg,
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    feed = FakeFeed()
+    service.price_feed = feed
+
+    feed.candles = _btc_green_candles([100 + i for i in range(20)])
+    service._market_reversal_cache = None
+    first = await service._market_reversal_filter()
+    assert first["risk_on"] is True
+    assert first["reason"] == "btc_reversal_confirmed"
+
+    feed.candles = _btc_candles_with_red_tail([100 + i for i in range(18)] + [105], red_tail=1)
+    service._market_reversal_cache = None
+    still_on = await service._market_reversal_filter()
+    assert still_on["risk_on"] is True
+    assert still_on["reason"] == "btc_reversal_active"
+
+    feed.candles = _btc_candles_with_red_tail([100 + i for i in range(18)] + [105, 104], red_tail=2)
+    service._market_reversal_cache = None
+    off = await service._market_reversal_filter()
+    assert off["risk_on"] is False
+    assert off["risk_off"] is True
+    assert off["reason"] == "btc_reversal_bearish_confirmed"
+
+
+@pytest.mark.asyncio
+async def test_market_reversal_filter_blocks_perp_long_on_btc_selloff(db) -> None:
+    class FakeSignal:
+        async def evaluate(self, payload):
+            return {
+                "signal_id": "perp-long-selloff",
+                "market": "perp",
+                "asset": "BTC",
+                "action": "enter_long",
+                "side": "long",
+                "quality": 0.9,
+                "confidence": 0.9,
+                "price": 100.0,
+                "stop_loss": 95.0,
+                "quote_equity": 1000.0,
+                "leverage": 2,
+                "components": {},
+            }
+
+    class FakeFeed:
+        async def fetch(self, **kwargs):
+            return _btc_candles_with_red_tail([100 + i for i in range(18)] + [105, 104], red_tail=2)
+
+    cfg = settings(market_reversal_filter_enabled=True)
+    service = AgentService(
+        cfg,
+        perp_signal=FakeSignal(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    service.price_feed = FakeFeed()
+
+    async with get_session_factory()() as session:
+        result = await service.evaluate_perp({}, session)
+
+    assert result["signal"]["action"] == "skip"
+    assert result["signal"]["reason"] == "market_reversal_long_blocked"
+    assert result["signal"]["components"]["market_reversal"]["risk_off"] is True
 
 
 # ── Breakeven: copertura fee + cuscinetto % ──────────────────────────────────

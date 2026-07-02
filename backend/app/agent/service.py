@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
+from backend.app.agent.signals.common.indicators import ema
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _atr_range_leverage as _perp_atr_range_leverage
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
@@ -305,6 +306,12 @@ class AgentService:
                 signal["action"] = "skip"
                 signal["reason"] = "market_risk_off"
                 signal.setdefault("components", {})["market_regime"] = regime
+            elif self.settings.market_reversal_filter_enabled:
+                reversal = await self._market_reversal_filter()
+                signal.setdefault("components", {})["market_reversal"] = reversal
+                if not reversal.get("risk_on"):
+                    signal["action"] = "skip"
+                    signal["reason"] = "market_reversal_waiting"
         return await self._handle_signal(signal, session)
 
     async def _spot_market_regime(self) -> dict:
@@ -382,8 +389,151 @@ class AgentService:
             json.dumps({"risk_off": risk_off, "updated_at": datetime.now(UTC).isoformat()}),
         )
 
+    async def _market_reversal_filter(self) -> dict:
+        """BTC 15m reversal confirmation used only as an entry filter.
+
+        It never clears other blockers: Spot uses it only after a long signal is
+        already present and market_risk_off is false; Perp uses it only to block
+        shorts against confirmed BTC recovery.
+        """
+        if not self.settings.market_reversal_filter_enabled:
+            return {"enabled": False, "risk_on": False}
+
+        now = datetime.now(UTC)
+        cached = getattr(self, "_market_reversal_cache", None)
+        if cached and (now - cached["at"]).total_seconds() < SPOT_REGIME_CACHE_TTL_SECONDS:
+            return cached["value"]
+
+        period = max(1, int(self.settings.market_reversal_ema_period))
+        confirmations = max(1, int(self.settings.market_reversal_confirmation_candles))
+        limit = max(period + confirmations + 3, period + 5)
+        try:
+            candles = await self.price_feed.fetch(
+                symbol=self.settings.market_reversal_symbol,
+                interval=self.settings.market_reversal_interval,
+                limit=limit,
+                market="spot",
+            )
+        except Exception:
+            candles = []
+
+        if len(candles) < period + confirmations + 1:
+            value = {"enabled": True, "risk_on": False, "reason": "insufficient_btc_reversal_klines"}
+            self._market_reversal_cache = {"at": now, "value": value}
+            return value
+
+        closes = [c.close for c in candles]
+        ema_now = ema(closes, period)
+        ema_prev = ema(closes[:-1], period)
+        latest_close = closes[-1]
+        green_confirmed = all(c.close > c.open for c in candles[-confirmations:])
+        red_confirmed = all(c.close < c.open for c in candles[-confirmations:])
+        above_ema = ema_now is not None and latest_close > ema_now
+        below_ema = ema_now is not None and latest_close < ema_now
+        ema_rising = ema_now is not None and ema_prev is not None and ema_now > ema_prev
+        bullish_entry = bool(green_confirmed and above_ema and ema_rising)
+        bearish_entry = bool(red_confirmed and below_ema)
+        previous_state = self._market_reversal_state_persisted()
+        if previous_state == "bullish":
+            state = "bearish" if bearish_entry else "bullish"
+        elif previous_state == "bearish":
+            state = "bullish" if bullish_entry else "bearish"
+        elif bullish_entry:
+            state = "bullish"
+        elif bearish_entry:
+            state = "bearish"
+        else:
+            state = "neutral"
+        if state != previous_state:
+            self._set_market_reversal_persisted(state)
+        risk_on = state == "bullish"
+        risk_off = state == "bearish"
+        value = {
+            "enabled": True,
+            "risk_on": risk_on,
+            "risk_off": risk_off,
+            "state": state,
+            "previous_state": previous_state,
+            "symbol": self.settings.market_reversal_symbol,
+            "interval": self.settings.market_reversal_interval,
+            "confirmation_candles": confirmations,
+            "btc_price": float(latest_close),
+            "ema": float(ema_now) if ema_now is not None else None,
+            "ema_rising": ema_rising,
+            "green_confirmed": green_confirmed,
+            "red_confirmed": red_confirmed,
+            "above_ema": above_ema,
+            "below_ema": below_ema,
+            "bullish_entry": bullish_entry,
+            "bearish_entry": bearish_entry,
+            "reason": (
+                "btc_reversal_confirmed"
+                if state == "bullish" and previous_state != "bullish"
+                else "btc_reversal_active"
+                if state == "bullish"
+                else "btc_reversal_bearish_confirmed"
+                if state == "bearish" and previous_state != "bearish"
+                else "btc_reversal_bearish_active"
+                if state == "bearish"
+                else "btc_reversal_waiting"
+            ),
+        }
+        self._market_reversal_cache = {"at": now, "value": value}
+        return value
+
+    def _market_reversal_state_persisted(self) -> str:
+        raw = get_runtime_value(str(self.settings.default_user_id), "market_reversal_filter")
+        if not raw:
+            return "neutral"
+        try:
+            payload = json.loads(raw)
+            state = str(payload.get("state") or "").strip().lower()
+            if state in {"bullish", "bearish", "neutral"}:
+                return state
+            if payload.get("risk_on") is True:
+                return "bullish"
+            if payload.get("risk_off") is True:
+                return "bearish"
+            return "neutral"
+        except (ValueError, AttributeError):
+            return "neutral"
+
+    def _set_market_reversal_persisted(self, state: str) -> None:
+        set_runtime_value(
+            str(self.settings.default_user_id),
+            "market_reversal_filter",
+            json.dumps(
+                {
+                    "state": state,
+                    "risk_on": state == "bullish",
+                    "risk_off": state == "bearish",
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            ),
+        )
+
     async def evaluate_perp(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.perp_signal.evaluate(payload)
+        if (
+            signal.get("action") != "skip"
+            and signal.get("side") == "short"
+            and self.settings.market_reversal_filter_enabled
+        ):
+            reversal = await self._market_reversal_filter()
+            signal.setdefault("components", {})["market_reversal"] = reversal
+            if reversal.get("risk_on"):
+                signal["action"] = "skip"
+                signal["reason"] = "market_reversal_short_blocked"
+        if (
+            signal.get("action") != "skip"
+            and signal.get("side") == "long"
+            and self.settings.market_reversal_filter_enabled
+        ):
+            reversal = await self._market_reversal_filter()
+            signal.setdefault("components", {})["market_reversal"] = reversal
+            if reversal.get("risk_off"):
+                signal["action"] = "skip"
+                signal["reason"] = "market_reversal_long_blocked"
         # Il segnale embeds la leva calcolata con il config YAML statico.
         # La sovrascriviamo con i mobile settings (RuntimeState) per rispettare
         # la leva impostata dall'utente nell'app.

@@ -84,6 +84,7 @@ const defaultSettings: AgentMobileSettings = {
   daily_loss_limit_pct: -8,
   drawdown_cap_pct: -15,
   min_pool_liquidity_usd: 50000,
+  market_reversal_filter_enabled: true,
   spot_capital_per_trade_pct: 6,
   spot_per_trade_pct: 1.5,
   spot_max_open_positions: 3,
@@ -1257,6 +1258,10 @@ const SetupPane: FC<{
         <div className="grid grid-cols-2 gap-3">
           <NumberInput label="Daily loss %" value={settings.daily_loss_limit_pct} onChange={(daily_loss_limit_pct) => patch({ daily_loss_limit_pct })} />
           <NumberInput label="Drawdown cap %" value={settings.drawdown_cap_pct} onChange={(drawdown_cap_pct) => patch({ drawdown_cap_pct })} />
+          <SelectInput label="Filtro inversione mercato" value={settings.market_reversal_filter_enabled ? 'on' : 'off'} onChange={(v) => patch({ market_reversal_filter_enabled: v === 'on' })} options={[
+            { value: 'on', label: 'Attivo' },
+            { value: 'off', label: 'Spento' },
+          ]} />
         </div>
       </section>
 

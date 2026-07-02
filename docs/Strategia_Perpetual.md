@@ -446,7 +446,11 @@ La mean reversion su livelli precisi (VAH/VAL/POC) con stop strutturali, cap di 
 
 4. FILTRI
    Trend via VWAP (non contro impulso forte) · Funding/OI (contesto) ·
-   liquidità · slippage · correlazione · esposizione · drawdown
+   liquidità · slippage · correlazione · esposizione · drawdown · filtro
+   inversione mercato opzionale: se BTC 15m conferma bullish con due candele
+   verdi sopra EMA10, gli short contro la risalita vengono bloccati; se BTC
+   conferma bearish con due candele rosse sotto EMA10, i long contro il selloff
+   vengono bloccati.
 
 5. META-CONTROLLER (LLM)
    Valuta coerenza, rileva anomalie, decide size nel rispetto del cap
