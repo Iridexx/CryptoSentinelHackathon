@@ -258,7 +258,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache completa dei grafici, deduplica delle richieste dettaglio in corso, refresh single-flight, preload leggero dei dettagli, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload leggero dei dettagli, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet caricati solo nella vista dedicata ed empty state dedicati.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.

@@ -140,8 +140,17 @@ const TRADE_DETAIL_PREFETCH_LIMIT = 4;
 const tradeDetailCache = new Map<string, { detail: TradeDetail; updatedAt: number }>();
 const tradeDetailInflight = new Map<string, Promise<TradeDetail>>();
 
-const hasCompleteTradeChart = (detail: TradeDetail): boolean =>
+const hasBaseTradeChart = (detail: TradeDetail): boolean =>
   (detail.chart?.candles?.length ?? 0) > 1;
+
+const needsPostCloseCandles = (detail: TradeDetail): boolean =>
+  Boolean(detail.chart && !detail.chart.live && detail.chart.closed_at);
+
+const hasCompleteTradeChart = (detail: TradeDetail): boolean => {
+  if (!hasBaseTradeChart(detail)) return false;
+  if (!needsPostCloseCandles(detail)) return true;
+  return (detail.chart?.post_close_candles?.length ?? 0) > 0;
+};
 
 const getCachedTradeDetail = (tradeId: string): TradeDetail | null => {
   const cached = tradeDetailCache.get(tradeId);
@@ -162,6 +171,9 @@ const hasCompleteCachedTradeDetail = (tradeId: string): boolean => {
 const cacheTradeDetail = (tradeId: string, detail: TradeDetail) => {
   const existing = tradeDetailCache.get(tradeId)?.detail;
   if (existing && hasCompleteTradeChart(existing) && !hasCompleteTradeChart(detail)) {
+    return;
+  }
+  if (existing && hasBaseTradeChart(existing) && !hasBaseTradeChart(detail)) {
     return;
   }
   if (tradeDetailCache.has(tradeId)) tradeDetailCache.delete(tradeId);
