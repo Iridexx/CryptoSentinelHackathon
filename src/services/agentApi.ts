@@ -402,10 +402,11 @@ function authHeaders(token = READ_TOKEN): Record<string, string> {
 
 async function request<T>(
   path: string,
-  options: { method?: 'GET' | 'PUT' | 'POST'; body?: unknown; token?: string } = {},
+  options: { method?: 'GET' | 'PUT' | 'POST'; body?: unknown; token?: string; timeoutMs?: number } = {},
 ): Promise<T> {
   const method = options.method ?? 'GET';
   const url = `${requireBackend()}${path}`;
+  const timeoutMs = options.timeoutMs ?? 30_000;
   const headers = {
     ...authHeaders(options.token),
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -417,8 +418,8 @@ async function request<T>(
       url,
       headers,
       data: options.body,
-      connectTimeout: 12_000,
-      readTimeout: 30_000,
+      connectTimeout: Math.min(12_000, timeoutMs),
+      readTimeout: timeoutMs,
     });
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`Agent API: ${response.status}`);
@@ -426,13 +427,25 @@ async function request<T>(
     return response.data as T;
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  if (!response.ok) throw new Error(`Agent API: ${response.status}`);
-  return await response.json() as T;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Agent API: ${response.status}`);
+    return await response.json() as T;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('Agent API: timeout');
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export function fetchAgentStatus(): Promise<AgentStatus> {
@@ -503,8 +516,15 @@ export function fetchAssetBreakdown(): Promise<AssetBreakdownResponse> {
   return request<AssetBreakdownResponse>('/api/v1/views/asset-breakdown?market=spot');
 }
 
-export function fetchTradeDetail(tradeId: string): Promise<TradeDetail> {
-  return request<TradeDetail>(`/api/v1/views/trade-detail/${encodeURIComponent(tradeId)}`);
+export function fetchTradeDetail(
+  tradeId: string,
+  options: { enrichChart?: boolean; timeoutMs?: number } = {},
+): Promise<TradeDetail> {
+  const params = options.enrichChart ? '?enrich_chart=true' : '';
+  return request<TradeDetail>(
+    `/api/v1/views/trade-detail/${encodeURIComponent(tradeId)}${params}`,
+    { timeoutMs: options.timeoutMs },
+  );
 }
 
 export function fetchAgentSettings(): Promise<AgentSettingsResponse> {

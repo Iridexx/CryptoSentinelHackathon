@@ -50,7 +50,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail con liquidazione Perp e grafico best-effort bounded, operational-stats e archived-runs.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
@@ -258,7 +258,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade con Back protetto dai refresh concorrenti, cache/preload leggero dei dettagli, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
+|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache completa dei grafici e Back protetto dai refresh concorrenti, preload leggero dei dettagli, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet copiabile con balance ed empty state dedicati.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.

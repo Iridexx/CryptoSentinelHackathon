@@ -170,6 +170,7 @@ async def trade_detail(
     session: SessionDep,
     settings: SettingsDep,
     _: ReadAccessDep,
+    enrich_chart: bool = Query(False),
 ) -> dict:
     """Return full detail for one spot/perp trade or its open position."""
 
@@ -187,17 +188,17 @@ async def trade_detail(
         position = await _find_trade_position(session, SpotPosition, spot)
         decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
         snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
-        live = await _live_chart_if_open(snapshot, position, "spot")
+        live = await _live_chart_if_open(snapshot, position, "spot") if enrich_chart else None
         post_close: list[dict] = []
-        if live is None and snapshot is not None:
+        if enrich_chart and live is None and snapshot is not None:
             post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), spot.asset, "spot", post_close_count)
         return _spot_trade_detail(spot, position, decision, snapshot, live, post_close)
     position = await _find_trade_position(session, PerpPosition, perp)
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
     snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
-    live = await _live_chart_if_open(snapshot, position, "perp")
+    live = await _live_chart_if_open(snapshot, position, "perp") if enrich_chart else None
     post_close = []
-    if live is None and snapshot is not None:
+    if enrich_chart and live is None and snapshot is not None:
         post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), perp.asset, "futures", post_close_count)
     return _perp_trade_detail(perp, position, decision, snapshot, live, post_close)
 

@@ -131,15 +131,21 @@ const defaultSettings: AgentMobileSettings = {
 const AGENT_REFRESH_MS = 45_000;
 // Refresh leggero (solo posizioni/PnL) per un aggiornamento quasi-realtime.
 const AGENT_FAST_REFRESH_MS = 5_000;
-const TRADE_DETAIL_CACHE_TTL_MS = 60_000;
+const TRADE_DETAIL_CACHE_TTL_MS = 10 * 60_000;
+const TRADE_DETAIL_BASE_TIMEOUT_MS = 8_000;
+const TRADE_DETAIL_ENRICH_TIMEOUT_MS = 12_000;
 const TRADE_DETAIL_CACHE_MAX = 40;
 const TRADE_DETAIL_PREFETCH_LIMIT = 4;
 
 const tradeDetailCache = new Map<string, { detail: TradeDetail; updatedAt: number }>();
 
+const hasCompleteTradeChart = (detail: TradeDetail): boolean =>
+  (detail.chart?.candles?.length ?? 0) > 1;
+
 const getCachedTradeDetail = (tradeId: string): TradeDetail | null => {
   const cached = tradeDetailCache.get(tradeId);
   if (!cached) return null;
+  if (hasCompleteTradeChart(cached.detail)) return cached.detail;
   if (Date.now() - cached.updatedAt > TRADE_DETAIL_CACHE_TTL_MS) {
     tradeDetailCache.delete(tradeId);
     return null;
@@ -147,7 +153,16 @@ const getCachedTradeDetail = (tradeId: string): TradeDetail | null => {
   return cached.detail;
 };
 
+const hasCompleteCachedTradeDetail = (tradeId: string): boolean => {
+  const cached = getCachedTradeDetail(tradeId);
+  return cached != null && hasCompleteTradeChart(cached);
+};
+
 const cacheTradeDetail = (tradeId: string, detail: TradeDetail) => {
+  const existing = tradeDetailCache.get(tradeId)?.detail;
+  if (existing && hasCompleteTradeChart(existing) && !hasCompleteTradeChart(detail)) {
+    return;
+  }
   if (tradeDetailCache.has(tradeId)) tradeDetailCache.delete(tradeId);
   tradeDetailCache.set(tradeId, { detail, updatedAt: Date.now() });
   while (tradeDetailCache.size > TRADE_DETAIL_CACHE_MAX) {
@@ -1700,12 +1715,21 @@ const AgentTab: FC<AgentTabProps> = ({
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
 
-  const loadActiveTradeDetail = useCallback(async (tradeId: string) => {
-    const detail = await fetchTradeDetail(tradeId);
+  const loadActiveTradeDetail = useCallback(async (tradeId: string, enrichChart = false) => {
+    const cached = getCachedTradeDetail(tradeId);
+    if (enrichChart && cached && hasCompleteTradeChart(cached)) {
+      if (detailTradeIdRef.current === tradeId) setTradeDetail(cached);
+      return cached;
+    }
+    const detail = await fetchTradeDetail(tradeId, {
+      enrichChart,
+      timeoutMs: enrichChart ? TRADE_DETAIL_ENRICH_TIMEOUT_MS : TRADE_DETAIL_BASE_TIMEOUT_MS,
+    });
     cacheTradeDetail(tradeId, detail);
     if (detailTradeIdRef.current === tradeId) {
       setTradeDetail(detail);
     }
+    return detail;
   }, []);
 
   const prefetchTradeDetails = useCallback((tradeIds: Array<string | null | undefined>) => {
@@ -1714,7 +1738,7 @@ const AgentTab: FC<AgentTabProps> = ({
       .filter((id) => id !== activeTradeId && !getCachedTradeDetail(id))
       .slice(0, TRADE_DETAIL_PREFETCH_LIMIT);
     ids.forEach((tradeId) => {
-      fetchTradeDetail(tradeId)
+      fetchTradeDetail(tradeId, { timeoutMs: TRADE_DETAIL_BASE_TIMEOUT_MS })
         .then((detail) => cacheTradeDetail(tradeId, detail))
         .catch(() => {});
     });
@@ -1731,7 +1755,7 @@ const AgentTab: FC<AgentTabProps> = ({
     // Caricamento progressivo: ogni scheda si popola appena la sua chiamata risponde,
     // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
     const activeTradeId = detailTradeIdRef.current;
-    const detailFetch = activeTradeId
+    const detailFetch = activeTradeId && !hasCompleteCachedTradeDetail(activeTradeId)
       ? loadActiveTradeDetail(activeTradeId).catch(() => {})
       : Promise.resolve();
     const results = await Promise.allSettled([
@@ -1794,7 +1818,7 @@ const AgentTab: FC<AgentTabProps> = ({
       fetchGlobalView().then(setGlobal).catch(() => {});
       // Se il dettaglio di una posizione live è aperto, ricaricalo silenziosamente.
       const activeTradeId = detailTradeIdRef.current;
-      if (activeTradeId) {
+      if (activeTradeId && !hasCompleteCachedTradeDetail(activeTradeId)) {
         loadActiveTradeDetail(activeTradeId).catch(() => {});
       }
     }, AGENT_FAST_REFRESH_MS);
@@ -1910,12 +1934,14 @@ const AgentTab: FC<AgentTabProps> = ({
     if (cached) {
       setTradeDetail(cached);
       setLoadingDetail(false);
-      loadActiveTradeDetail(tradeId).catch(() => {});
+      if (!hasCompleteTradeChart(cached)) {
+        loadActiveTradeDetail(tradeId, true).catch(() => {});
+      }
       return;
     }
     setLoadingDetail(true);
     try {
-      await loadActiveTradeDetail(tradeId);
+      await loadActiveTradeDetail(tradeId, false);
     } catch (err) {
       if (detailTradeIdRef.current === tradeId) {
         setActionError(err instanceof Error ? err.message : 'Unable to load trade detail');
@@ -1924,6 +1950,9 @@ const AgentTab: FC<AgentTabProps> = ({
       if (detailTradeIdRef.current === tradeId) {
         setLoadingDetail(false);
       }
+    }
+    if (detailTradeIdRef.current === tradeId && !hasCompleteCachedTradeDetail(tradeId)) {
+      loadActiveTradeDetail(tradeId, true).catch(() => {});
     }
   };
 
