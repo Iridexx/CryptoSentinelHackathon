@@ -1,5 +1,6 @@
 """Dashboard data views: Spot / Perp / Global."""
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -238,7 +239,13 @@ async def _live_chart_if_open(snapshot, position, market: str) -> dict | None:
     """
     if position is None or position.status == "closed":
         return None
-    return await _build_live_chart(position, market)
+    try:
+        return await asyncio.wait_for(
+            _build_live_chart(position, market, timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS),
+            timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        return None
 
 
 _INTERVAL_MINUTES: dict[str, int] = {
@@ -246,6 +253,8 @@ _INTERVAL_MINUTES: dict[str, int] = {
     "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440,
 }
 POST_CLOSE_CANDLES = 10
+TRADE_DETAIL_CHART_TIMEOUT_SECONDS = 4.0
+TRADE_DETAIL_FEED_TIMEOUT_SECONDS = 1.5
 
 
 async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, count: int = POST_CLOSE_CANDLES) -> list[dict]:
@@ -282,11 +291,14 @@ async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, c
         elapsed_since_open_min = max(interval_min, int((now - opened_at).total_seconds() / 60))
         needed = int(elapsed_since_open_min / interval_min) + count + 5
         fetch_limit = min(500, needed)
-        candles = await BinanceKlineFeed().fetch(
-            symbol=f"{asset}USDT",
-            interval=interval,
-            limit=fetch_limit,
-            market=feed_market,  # type: ignore[arg-type]
+        candles = await asyncio.wait_for(
+            BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
+                symbol=f"{asset}USDT",
+                interval=interval,
+                limit=fetch_limit,
+                market=feed_market,  # type: ignore[arg-type]
+            ),
+            timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
         )
         # Teniamo solo le candele aperte DOPO la chiusura del trade.
         post = [
@@ -299,7 +311,7 @@ async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, c
         return []
 
 
-async def _build_live_chart(position, market: str) -> dict | None:
+async def _build_live_chart(position, market: str, *, timeout_seconds: float = TRADE_DETAIL_FEED_TIMEOUT_SECONDS) -> dict | None:
     """Candele OHLC dall'apertura della posizione fino ad ora, con stesso payload
     degli snapshot congelati ma marcato live (closed_at non e' una chiusura reale).
 
@@ -317,7 +329,7 @@ async def _build_live_chart(position, market: str) -> dict | None:
         interval, per_min = _auto_chart_interval(duration_min)
         limit = int(min(120, max(20, (duration_min / per_min) * 1.6)))
         feed_market = "futures" if market == "perp" else "spot"
-        candles = await BinanceKlineFeed().fetch(
+        candles = await BinanceKlineFeed(timeout_seconds=timeout_seconds).fetch(
             symbol=f"{position.asset}USDT", interval=interval, limit=limit, market=feed_market
         )
         if not candles:

@@ -128,6 +128,31 @@ const defaultSettings: AgentMobileSettings = {
 const AGENT_REFRESH_MS = 45_000;
 // Refresh leggero (solo posizioni/PnL) per un aggiornamento quasi-realtime.
 const AGENT_FAST_REFRESH_MS = 5_000;
+const TRADE_DETAIL_CACHE_TTL_MS = 60_000;
+const TRADE_DETAIL_CACHE_MAX = 40;
+const TRADE_DETAIL_PREFETCH_LIMIT = 4;
+
+const tradeDetailCache = new Map<string, { detail: TradeDetail; updatedAt: number }>();
+
+const getCachedTradeDetail = (tradeId: string): TradeDetail | null => {
+  const cached = tradeDetailCache.get(tradeId);
+  if (!cached) return null;
+  if (Date.now() - cached.updatedAt > TRADE_DETAIL_CACHE_TTL_MS) {
+    tradeDetailCache.delete(tradeId);
+    return null;
+  }
+  return cached.detail;
+};
+
+const cacheTradeDetail = (tradeId: string, detail: TradeDetail) => {
+  if (tradeDetailCache.has(tradeId)) tradeDetailCache.delete(tradeId);
+  tradeDetailCache.set(tradeId, { detail, updatedAt: Date.now() });
+  while (tradeDetailCache.size > TRADE_DETAIL_CACHE_MAX) {
+    const oldest = tradeDetailCache.keys().next().value;
+    if (!oldest) break;
+    tradeDetailCache.delete(oldest);
+  }
+};
 
 const EmptyState: FC<{ title: string; detail: string }> = ({ title, detail }) => (
   <div className="rounded-xl border border-dashed border-dark-600 bg-dark-800/60 px-4 py-8 text-center">
@@ -1659,9 +1684,22 @@ const AgentTab: FC<AgentTabProps> = ({
 
   const loadActiveTradeDetail = useCallback(async (tradeId: string) => {
     const detail = await fetchTradeDetail(tradeId);
+    cacheTradeDetail(tradeId, detail);
     if (detailTradeIdRef.current === tradeId) {
       setTradeDetail(detail);
     }
+  }, []);
+
+  const prefetchTradeDetails = useCallback((tradeIds: Array<string | null | undefined>) => {
+    const activeTradeId = detailTradeIdRef.current;
+    const ids = Array.from(new Set(tradeIds.filter((id): id is string => Boolean(id))))
+      .filter((id) => id !== activeTradeId && !getCachedTradeDetail(id))
+      .slice(0, TRADE_DETAIL_PREFETCH_LIMIT);
+    ids.forEach((tradeId) => {
+      fetchTradeDetail(tradeId)
+        .then((detail) => cacheTradeDetail(tradeId, detail))
+        .catch(() => {});
+    });
   }, []);
 
   const closeTradeDetail = useCallback(() => {
@@ -1744,6 +1782,21 @@ const AgentTab: FC<AgentTabProps> = ({
     }, AGENT_FAST_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [loadActiveTradeDetail]);
+
+  useEffect(() => {
+    if (pane === 'spot' && spot) {
+      prefetchTradeDetails([
+        ...spot.open_positions.map((position) => position.open_trade_id),
+        ...spot.history.slice(0, 2).map((trade) => trade.trade_id),
+      ]);
+    }
+    if (pane === 'perp' && perp) {
+      prefetchTradeDetails([
+        ...perp.open_positions.map((position) => position.open_trade_id),
+        ...perp.history.slice(0, 2).map((trade) => trade.trade_id),
+      ]);
+    }
+  }, [pane, spot, perp, prefetchTradeDetails]);
 
   // Refetch immediato della curva quando l'utente cambia il range (24h/7g/Tutto),
   // senza ricaricare tutte le altre schede.
@@ -1834,8 +1887,15 @@ const AgentTab: FC<AgentTabProps> = ({
 
   const handleTradeDetail = async (tradeId: string) => {
     detailTradeIdRef.current = tradeId;
-    setLoadingDetail(true);
     setActionError('');
+    const cached = getCachedTradeDetail(tradeId);
+    if (cached) {
+      setTradeDetail(cached);
+      setLoadingDetail(false);
+      loadActiveTradeDetail(tradeId).catch(() => {});
+      return;
+    }
+    setLoadingDetail(true);
     try {
       await loadActiveTradeDetail(tradeId);
     } catch (err) {
@@ -1861,6 +1921,13 @@ const AgentTab: FC<AgentTabProps> = ({
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-dark-700 border-t-accent-yellow" />
           <p className="mt-3 text-sm text-gray-400">Caricamento dettaglio...</p>
+          <button
+            type="button"
+            onClick={closeTradeDetail}
+            className="mt-4 rounded-lg bg-dark-800 px-4 py-2 text-sm font-semibold text-gray-300"
+          >
+            Annulla
+          </button>
         </div>
       )}
       {actionError && !tradeDetail && (
