@@ -132,8 +132,8 @@ const AGENT_REFRESH_MS = 45_000;
 // Refresh leggero (solo posizioni/PnL). 15s evita accavallamenti quando provider esterni rallentano.
 const AGENT_FAST_REFRESH_MS = 15_000;
 const TRADE_DETAIL_CACHE_TTL_MS = 10 * 60_000;
-const TRADE_DETAIL_BASE_TIMEOUT_MS = 8_000;
-const TRADE_DETAIL_ENRICH_TIMEOUT_MS = 12_000;
+const TRADE_DETAIL_BASE_TIMEOUT_MS = 20_000;
+const TRADE_DETAIL_ENRICH_TIMEOUT_MS = 25_000;
 const TRADE_DETAIL_CACHE_MAX = 80;
 // Matches the mobile history page size: open positions are always added on top.
 const TRADE_DETAIL_PREFETCH_LIMIT = 8;
@@ -1800,12 +1800,6 @@ const AgentTab: FC<AgentTabProps> = ({
             let detail = getCachedTradeDetail(tradeId);
             if (!detail) {
               detail = await fetchTradeDetailDeduped(tradeId, { timeoutMs: TRADE_DETAIL_BASE_TIMEOUT_MS });
-            }
-            if (!hasCompleteTradeChart(detail)) {
-              await fetchTradeDetailDeduped(tradeId, {
-                enrichChart: true,
-                timeoutMs: TRADE_DETAIL_ENRICH_TIMEOUT_MS,
-              });
             }
           } catch {
             // Background warm-up: the tap handler still owns visible error handling.

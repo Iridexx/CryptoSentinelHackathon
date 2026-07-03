@@ -256,6 +256,7 @@ _INTERVAL_MINUTES: dict[str, int] = {
 POST_CLOSE_CANDLES = 10
 TRADE_DETAIL_CHART_TIMEOUT_SECONDS = 4.0
 TRADE_DETAIL_FEED_TIMEOUT_SECONDS = 1.5
+TRADE_DETAIL_KLINE_CACHE_MAX_AGE_SECONDS = 180
 
 
 async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, count: int = POST_CLOSE_CANDLES) -> list[dict]:
@@ -292,15 +293,18 @@ async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, c
         elapsed_since_open_min = max(interval_min, int((now - opened_at).total_seconds() / 60))
         needed = int(elapsed_since_open_min / interval_min) + count + 5
         fetch_limit = min(500, needed)
-        candles = await asyncio.wait_for(
-            BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
-                symbol=f"{asset}USDT",
-                interval=interval,
-                limit=fetch_limit,
-                market=feed_market,  # type: ignore[arg-type]
-            ),
-            timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
-        )
+        symbol = f"{asset}USDT"
+        candles = _cached_klines(feed_market, symbol, interval, min_limit=min(fetch_limit, 288))
+        if candles is None:
+            candles = await asyncio.wait_for(
+                BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
+                    symbol=symbol,
+                    interval=interval,
+                    limit=fetch_limit,
+                    market=feed_market,  # type: ignore[arg-type]
+                ),
+                timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
+            )
         # Teniamo solo le candele aperte DOPO la chiusura del trade.
         post = [
             {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
@@ -330,9 +334,12 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
         interval, per_min = _auto_chart_interval(duration_min)
         limit = int(min(120, max(20, (duration_min / per_min) * 1.6)))
         feed_market = "futures" if market == "perp" else "spot"
-        candles = await BinanceKlineFeed(timeout_seconds=timeout_seconds).fetch(
-            symbol=f"{position.asset}USDT", interval=interval, limit=limit, market=feed_market
-        )
+        symbol = f"{position.asset}USDT"
+        candles = _cached_klines(feed_market, symbol, interval, min_limit=limit)
+        if candles is None:
+            candles = await BinanceKlineFeed(timeout_seconds=timeout_seconds).fetch(
+                symbol=symbol, interval=interval, limit=limit, market=feed_market
+            )
         if not candles:
             return None
         tp2 = getattr(position, "take_profit_2", None)
@@ -358,6 +365,25 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
                 for c in candles
             ],
         }
+    except Exception:
+        return None
+
+
+def _cached_klines(market: str, symbol: str, interval: str, *, min_limit: int) -> list | None:
+    """Use recent signal-engine kline cache for trade charts before hitting CEX APIs."""
+
+    try:
+        from backend.app.agent.signals.perp.binance_klines import get_kline_cache_entry
+
+        entry = get_kline_cache_entry(market=market, symbol=symbol, interval=interval)  # type: ignore[arg-type]
+        if entry is None:
+            return None
+        age = (datetime.now(UTC) - entry.updated_at).total_seconds()
+        if age > TRADE_DETAIL_KLINE_CACHE_MAX_AGE_SECONDS:
+            return None
+        if len(entry.candles) < min_limit:
+            return None
+        return entry.candles[-min_limit:]
     except Exception:
         return None
 
