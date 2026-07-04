@@ -111,6 +111,8 @@ const settingFields = [
   'post_close_candles',
   'spot_trailing_enabled',
   'perp_trailing_enabled',
+  'spot_breakeven_mode',
+  'perp_breakeven_mode',
 ];
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';

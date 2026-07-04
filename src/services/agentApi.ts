@@ -284,6 +284,8 @@ export interface AgentMobileSettings {
   perp_breakeven_enabled: boolean;
   spot_trailing_enabled: boolean;
   perp_trailing_enabled: boolean;
+  spot_breakeven_mode: string;
+  perp_breakeven_mode: string;
   // Spot
   spot_capital_per_trade_pct: number;
   spot_per_trade_pct: number;

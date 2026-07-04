@@ -97,6 +97,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_breakeven_enabled=settings.perp_breakeven_enabled,
         spot_trailing_enabled=True,
         perp_trailing_enabled=True,
+        spot_breakeven_mode="atr",
+        perp_breakeven_mode="atr",
         # Parametri spot (default = valore condiviso dal YAML)
         spot_capital_per_trade_pct=cap,
         spot_per_trade_pct=per_trade,

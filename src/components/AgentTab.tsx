@@ -90,6 +90,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_breakeven_enabled: true,
   spot_trailing_enabled: true,
   perp_trailing_enabled: true,
+  spot_breakeven_mode: 'atr' as const,
+  perp_breakeven_mode: 'atr' as const,
   spot_capital_per_trade_pct: 6,
   spot_per_trade_pct: 1.5,
   spot_max_open_positions: 3,
@@ -1373,10 +1375,28 @@ const SetupPane: FC<{
           checked={settings.spot_breakeven_enabled}
           onChange={(spot_breakeven_enabled) => patch({ spot_breakeven_enabled })}
         />
+        <SelectInput
+          label="Modalità breakeven Spot"
+          value={settings.spot_breakeven_mode}
+          onChange={(v) => patch({ spot_breakeven_mode: v })}
+          options={[
+            { value: 'atr', label: 'ATR (attuale)' },
+            { value: 'tp1', label: 'Solo dopo TP1' },
+          ]}
+        />
         <ToggleInput
           label="Breakeven Perp"
           checked={settings.perp_breakeven_enabled}
           onChange={(perp_breakeven_enabled) => patch({ perp_breakeven_enabled })}
+        />
+        <SelectInput
+          label="Modalità breakeven Perp"
+          value={settings.perp_breakeven_mode}
+          onChange={(v) => patch({ perp_breakeven_mode: v })}
+          options={[
+            { value: 'atr', label: 'ATR (attuale)' },
+            { value: 'tp1', label: 'Solo dopo TP1' },
+          ]}
         />
         <ToggleInput
           label="Trailing Stop Spot"
