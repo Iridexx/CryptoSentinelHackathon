@@ -113,6 +113,8 @@ const settingFields = [
   'perp_trailing_enabled',
   'spot_breakeven_mode',
   'perp_breakeven_mode',
+  'spot_sl_mode',
+  'perp_sl_mode',
 ];
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';

@@ -24,6 +24,8 @@ class AgentMobileSettings(BaseModel):
     perp_trailing_enabled: bool = True
     spot_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
     perp_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
+    spot_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")
+    perp_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

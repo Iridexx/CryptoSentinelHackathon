@@ -92,6 +92,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_trailing_enabled: true,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
+  spot_sl_mode: 'atr' as const,
+  perp_sl_mode: 'atr' as const,
   spot_capital_per_trade_pct: 6,
   spot_per_trade_pct: 1.5,
   spot_max_open_positions: 3,
@@ -1396,6 +1398,24 @@ const SetupPane: FC<{
           options={[
             { value: 'atr', label: 'ATR (attuale)' },
             { value: 'tp1', label: 'Solo dopo TP1' },
+          ]}
+        />
+        <SelectInput
+          label="Stop Loss Spot"
+          value={settings.spot_sl_mode}
+          onChange={(v) => patch({ spot_sl_mode: v })}
+          options={[
+            { value: 'atr', label: 'ATR (attuale)' },
+            { value: 'lowest', label: 'Minimo 14 candele' },
+          ]}
+        />
+        <SelectInput
+          label="Stop Loss Perp"
+          value={settings.perp_sl_mode}
+          onChange={(v) => patch({ perp_sl_mode: v })}
+          options={[
+            { value: 'atr', label: 'ATR (attuale)' },
+            { value: 'lowest', label: 'Min/Max 14 candele' },
           ]}
         />
         <ToggleInput

@@ -129,9 +129,12 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 action = "skip"
                 spike_rejected = True
 
-        # A (v3): stop SOLO ATR-based, nessun floor in %. Lo stop deve stare FUORI
-        # dalla banda di rumore; è la size ad adattarsi (RiskManager), non lo stop.
-        stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
+        # A (v3): stop calcolato in base alla modalità configurata.
+        # "atr": entry − ATR×mult (default). "lowest": minimo delle ultime 14 candele.
+        if self.settings.spot_sl_mode == "lowest":
+            stop_loss = min(c.low for c in candles[-14:])
+        else:
+            stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
         # B (v3): TP ATR-based, nessuna % fissa. TP1 vicino (parziale), TP2 target finale.
         take_profit_1 = current + (current_atr or 0.0) * self.settings.spot_tp1_atr_multiplier
         take_profit_2 = current + (current_atr or 0.0) * self.settings.spot_tp2_atr_multiplier
