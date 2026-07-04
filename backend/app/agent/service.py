@@ -771,7 +771,10 @@ class AgentService:
             pnl = raw_pnl - swap_fee * fraction
             pos.size = pos.size - close_size
             pos.tp1_reached = True
-            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size - swap_fee * (Decimal("1") - fraction)
+            remaining = Decimal("1") - fraction
+            pos.pnl_unrealized = (exit_price - pos.entry_price) * pos.size - swap_fee * remaining
+            # Scala la fee residua: il close finale userà solo la quota rimasta
+            pos.swap_fee_usd = swap_fee * remaining
         else:
             close_size = pos.size
             raw_pnl = (exit_price - pos.entry_price) * close_size
@@ -953,6 +956,10 @@ class AgentService:
             pos.tp1_reached = True
             remaining = Decimal("1") - f
             pos.pnl_unrealized = pnl_per_unit * pos.size - fee_only * remaining + pos.funding_accrued_usd * remaining
+            # Scala la fee residua sulla posizione: il close finale userà solo la quota rimasta
+            pos.opening_fee_usd = (pos.opening_fee_usd or Decimal("0")) * remaining
+            pos.slippage_usd = (pos.slippage_usd or Decimal("0")) * remaining
+            pos.funding_accrued_usd = pos.funding_accrued_usd * remaining
         else:
             close_size = pos.size
             raw_pnl = pnl_per_unit * close_size
