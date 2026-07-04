@@ -95,6 +95,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         market_reversal_filter_enabled=settings.market_reversal_filter_enabled,
         spot_breakeven_enabled=settings.spot_breakeven_enabled,
         perp_breakeven_enabled=settings.perp_breakeven_enabled,
+        spot_trailing_enabled=True,
+        perp_trailing_enabled=True,
         # Parametri spot (default = valore condiviso dal YAML)
         spot_capital_per_trade_pct=cap,
         spot_per_trade_pct=per_trade,

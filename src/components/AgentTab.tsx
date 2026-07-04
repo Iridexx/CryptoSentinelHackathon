@@ -88,6 +88,8 @@ const defaultSettings: AgentMobileSettings = {
   market_reversal_filter_enabled: true,
   spot_breakeven_enabled: true,
   perp_breakeven_enabled: true,
+  spot_trailing_enabled: true,
+  perp_trailing_enabled: true,
   spot_capital_per_trade_pct: 6,
   spot_per_trade_pct: 1.5,
   spot_max_open_positions: 3,
@@ -1375,6 +1377,16 @@ const SetupPane: FC<{
           label="Breakeven Perp"
           checked={settings.perp_breakeven_enabled}
           onChange={(perp_breakeven_enabled) => patch({ perp_breakeven_enabled })}
+        />
+        <ToggleInput
+          label="Trailing Stop Spot"
+          checked={settings.spot_trailing_enabled}
+          onChange={(spot_trailing_enabled) => patch({ spot_trailing_enabled })}
+        />
+        <ToggleInput
+          label="Trailing Stop Perp"
+          checked={settings.perp_trailing_enabled}
+          onChange={(perp_trailing_enabled) => patch({ perp_trailing_enabled })}
         />
       </section>
 

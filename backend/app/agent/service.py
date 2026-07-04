@@ -1045,7 +1045,7 @@ class AgentService:
                 # Il moltiplicatore è cappato al TP1: così l'attivazione del trailing
                 # (≈ entry + mult*ATR) non supera mai il TP1, altrimenti il trailing si
                 # accenderebbe oltre il primo take-profit (inutile).
-                if self.settings.spot_trailing_active_from_start:
+                if self._ms.spot_trailing_enabled and self.settings.spot_trailing_active_from_start:
                     trail_mult = min(
                         Decimal(str(self.settings.spot_trailing_atr_multiplier)),
                         Decimal(str(self.settings.spot_tp1_atr_multiplier)),
@@ -1062,7 +1062,7 @@ class AgentService:
             await self._maybe_scale_in_spot(session, pos, price, prev_max, now)
 
             # Uscite — priorità massima: SL / trailing (il maggiore dei due).
-            if pos.trailing_stop is not None and (pos.stop_loss is None or pos.trailing_stop > pos.stop_loss):
+            if self._ms.spot_trailing_enabled and pos.trailing_stop is not None and (pos.stop_loss is None or pos.trailing_stop > pos.stop_loss):
                 if price <= pos.trailing_stop:
                     reason = "trailing_stop"
             if reason is None and pos.stop_loss is not None and price <= pos.stop_loss:
@@ -1176,7 +1176,7 @@ class AgentService:
                     # Il trailing si attiva SOLO quando supera l'entry: non deve mai
                     # sostituire lo stop originale con uno stop più stretto ma ancora
                     # in perdita (causa chiusure precoci senza dare spazio alla posizione).
-                    if trail >= pos.entry_price and (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
+                    if ms.perp_trailing_enabled and trail >= pos.entry_price and (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
                 else:
                     trail_atr = extreme + atr_v * mult
@@ -1186,11 +1186,11 @@ class AgentService:
                     else:
                         trail = trail_atr
                     # Stesso guard per gli short: trail deve essere <= entry (in profitto).
-                    if trail <= pos.entry_price and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
+                    if ms.perp_trailing_enabled and trail <= pos.entry_price and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
 
             # ── Uscite — trailing (se più protettivo) → stop → TP2 → TP1 → time ──
-            if pos.trailing_stop is not None and (
+            if ms.perp_trailing_enabled and pos.trailing_stop is not None and (
                 pos.stop_loss is None
                 or (is_long and pos.trailing_stop > pos.stop_loss)
                 or (not is_long and pos.trailing_stop < pos.stop_loss)

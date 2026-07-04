@@ -20,6 +20,8 @@ class AgentMobileSettings(BaseModel):
     market_reversal_filter_enabled: bool = True
     spot_breakeven_enabled: bool = True
     perp_breakeven_enabled: bool = True
+    spot_trailing_enabled: bool = True
+    perp_trailing_enabled: bool = True
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)
