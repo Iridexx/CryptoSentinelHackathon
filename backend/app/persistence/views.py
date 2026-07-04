@@ -56,6 +56,7 @@ class ViewService:
         trade_repo = SpotTradeRepository(self._session)
         positions = await pos_repo.open_for_user(user_id)
         trades = await trade_repo.list_for_user(user_id, limit=100)
+        history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
@@ -104,7 +105,7 @@ class ViewService:
                     block_timestamp_utc=t.block_timestamp_utc.isoformat() if t.block_timestamp_utc else None,
                     is_simulated=_is_spot_dry_run(t),
                 )
-                for t in trades
+                for t in history_trades
             ],
             realized_pnl_usd=realized,
             unrealized_pnl_usd=unrealized,
