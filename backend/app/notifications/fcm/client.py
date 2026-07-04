@@ -95,6 +95,19 @@ class FcmClient:
         trade_topics = {self.settings.fcm_spot_topic, self.settings.fcm_perp_topic}
         channel_id = "trade_alerts" if topic in trade_topics else "price_alerts"
 
+        # Tag deterministico: Android sostituisce la notifica precedente con lo stesso tag
+        # invece di accumularle. Evita di superare il limite di 50 notifiche per app.
+        asset = data.get("asset", "")
+        market = data.get("market", "")
+        if "pnl_usd" in data:
+            notif_tag = f"close_{topic}_{asset}_{market}"
+        elif "alert_type" in data:
+            notif_tag = f"risk_{data.get('alert_type', topic)}"
+        elif asset:
+            notif_tag = f"open_{topic}_{asset}_{market}"
+        else:
+            notif_tag = topic or "cs"
+
         for token in tokens:
             message = messaging.Message(
                 token=token,
@@ -107,6 +120,7 @@ class FcmClient:
                         sound="default",
                         priority="max" if severity == "critical" else "default",
                         visibility="public",
+                        tag=notif_tag,
                     ),
                 ),
             )

@@ -24,6 +24,20 @@ const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
 const PENDING_FAV_ALERTS_KEY = 'cs_pending_fcm_fav_alerts';
 
 let pushRegistrationStarted = false;
+
+// Genera un ID numerico stabile dalla chiave della notifica.
+// Stesso asset+mercato+tipo → stesso ID → la notifica precedente viene sostituita
+// invece di accumularsi. Risolve il limite Android di 50 notifiche per app.
+function stableNotifId(data: Record<string, string>): number {
+  const asset = data?.asset ?? '';
+  const market = data?.market ?? '';
+  const topic = data?.topic ?? '';
+  const kind = 'pnl_usd' in data ? 'close' : 'alert_type' in data ? 'risk' : 'open';
+  const key = `${kind}_${topic}_${asset}_${market}`;
+  let h = 5381;
+  for (let i = 0; i < key.length; i++) h = ((h << 5) + h) ^ key.charCodeAt(i);
+  return (Math.abs(h) % 1_800_000) + 1;
+}
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let dailyTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -234,11 +248,12 @@ async function registerRemotePushToken(): Promise<void> {
 
     await PushNotifications.addListener('pushNotificationReceived', async (notification) => {
       emitFavPush(notification.data, false);
-      const topic = typeof notification.data?.topic === 'string' ? notification.data.topic : '';
+      const d = notification.data ?? {};
+      const topic = typeof d.topic === 'string' ? d.topic : '';
       const isTrade = topic === 'cryptosentinel-spot' || topic === 'cryptosentinel-perp';
       await LocalNotifications.schedule({
         notifications: [{
-          id: Math.floor(Math.random() * 1_900_000) + 1,
+          id: stableNotifId(d),
           channelId: isTrade ? 'trade_alerts' : 'price_alerts',
           title: notification.title ?? 'CryptoSentinel',
           body: notification.body ?? '',
