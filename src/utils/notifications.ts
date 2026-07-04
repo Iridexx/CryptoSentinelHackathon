@@ -26,14 +26,26 @@ const PENDING_FAV_ALERTS_KEY = 'cs_pending_fcm_fav_alerts';
 let pushRegistrationStarted = false;
 
 // Genera un ID numerico stabile dalla chiave della notifica.
-// Stesso asset+mercato+tipo → stesso ID → la notifica precedente viene sostituita
+// Stesso tipo+coin/asset → stesso ID → la notifica precedente viene sostituita
 // invece di accumularsi. Risolve il limite Android di 50 notifiche per app.
 function stableNotifId(data: Record<string, string>): number {
-  const asset = data?.asset ?? '';
-  const market = data?.market ?? '';
-  const topic = data?.topic ?? '';
-  const kind = 'pnl_usd' in data ? 'close' : 'alert_type' in data ? 'risk' : 'open';
-  const key = `${kind}_${topic}_${asset}_${market}`;
+  let key: string;
+  const t = data?.type ?? '';
+  if (t === 'price_alert') {
+    // coin_id + direction (above/below) → una slot per ogni soglia per coin
+    key = `price_${data.coin_id ?? ''}_${data.cross_direction || ''}`;
+  } else if (t === 'range_alert') {
+    key = `range_${data.coin_id ?? ''}`;
+  } else if (t === 'fav_alert') {
+    key = `fav_${data.coin_id ?? ''}_${data.direction ?? ''}`;
+  } else {
+    // Trade / risk / altri: usa asset+market+tipo chiusura/apertura
+    const asset = data?.asset ?? '';
+    const market = data?.market ?? '';
+    const topic = data?.topic ?? '';
+    const kind = 'pnl_usd' in data ? 'close' : 'alert_type' in data ? 'risk' : 'open';
+    key = `${kind}_${topic}_${asset}_${market}`;
+  }
   let h = 5381;
   for (let i = 0; i < key.length; i++) h = ((h << 5) + h) ^ key.charCodeAt(i);
   return (Math.abs(h) % 1_800_000) + 1;

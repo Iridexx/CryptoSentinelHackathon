@@ -97,9 +97,16 @@ class FcmClient:
 
         # Tag deterministico: Android sostituisce la notifica precedente con lo stesso tag
         # invece di accumularle. Evita di superare il limite di 50 notifiche per app.
+        notif_type = data.get("type", "")
         asset = data.get("asset", "")
         market = data.get("market", "")
-        if "pnl_usd" in data:
+        if notif_type == "price_alert":
+            notif_tag = f"price_{data.get('coin_id', '')}_{data.get('cross_direction', '')}"
+        elif notif_type == "range_alert":
+            notif_tag = f"range_{data.get('coin_id', '')}"
+        elif notif_type == "fav_alert":
+            notif_tag = f"fav_{data.get('coin_id', '')}_{data.get('direction', '')}"
+        elif "pnl_usd" in data:
             notif_tag = f"close_{topic}_{asset}_{market}"
         elif "alert_type" in data:
             notif_tag = f"risk_{data.get('alert_type', topic)}"
