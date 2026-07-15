@@ -189,8 +189,11 @@ export function fetchLogs(session: DashboardSession, params: { level?: string; s
   return requestJson<LogResponse>(session, `/api/v1/observability/logs?${search.toString()}`, 'admin');
 }
 
-export function fetchSupportTickets(session: DashboardSession) {
-  return requestJson<SupportTicketListResponse>(session, '/api/v1/support/admin/tickets', 'admin');
+export function fetchSupportTickets(session: DashboardSession, params: { archived?: boolean } = {}) {
+  const search = new URLSearchParams();
+  if (params.archived) search.set('ticket_status', 'archived');
+  const suffix = search.toString() ? `?${search.toString()}` : '';
+  return requestJson<SupportTicketListResponse>(session, `/api/v1/support/admin/tickets${suffix}`, 'admin');
 }
 
 export function fetchSupportTicket(session: DashboardSession, ticketId: string) {

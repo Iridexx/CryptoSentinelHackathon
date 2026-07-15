@@ -87,6 +87,21 @@ def test_support_ticket_thread_and_admin_status_flow(support_app: FastAPI) -> No
     assert admin_reply.json()["status"] == "in_progress"
     assert len(admin_reply.json()["messages"]) == 3
 
+    still_visible_to_user = client.get("/api/v1/support/tickets", params={"device_id": "device-b"})
+    assert still_visible_to_user.status_code == 200
+    assert still_visible_to_user.json()["total"] == 1
+
+    visible_detail = client.get(f"/api/v1/support/tickets/{ticket_id}", params={"device_id": "device-b"})
+    assert visible_detail.status_code == 200
+    assert len(visible_detail.json()["messages"]) == 3
+
+    user_reply_from_current_device = client.post(
+        f"/api/v1/support/tickets/{ticket_id}/messages",
+        json={"device_id": "device-b", "message": "Ora lo vedo di nuovo."},
+    )
+    assert user_reply_from_current_device.status_code == 200
+    assert len(user_reply_from_current_device.json()["messages"]) == 4
+
     resolved = client.patch(
         f"/api/v1/support/admin/tickets/{ticket_id}/status",
         json={"status": "resolved"},
@@ -96,7 +111,7 @@ def test_support_ticket_thread_and_admin_status_flow(support_app: FastAPI) -> No
 
     closed = client.post(
         f"/api/v1/support/tickets/{ticket_id}/close",
-        json={"device_id": "device-a", "message": "Chiuso"},
+        json={"device_id": "device-b", "message": "Chiuso"},
     )
     assert closed.status_code == 200
     assert closed.json()["status"] == "closed"
@@ -104,6 +119,25 @@ def test_support_ticket_thread_and_admin_status_flow(support_app: FastAPI) -> No
 
     blocked = client.post(
         f"/api/v1/support/tickets/{ticket_id}/messages",
-        json={"device_id": "device-a", "message": "Non dovrebbe passare."},
+        json={"device_id": "device-b", "message": "Non dovrebbe passare."},
     )
     assert blocked.status_code == 409
+
+    archived = client.patch(
+        f"/api/v1/support/admin/tickets/{ticket_id}/status",
+        json={"status": "archived"},
+    )
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "archived"
+
+    hidden_from_user = client.get("/api/v1/support/tickets", params={"device_id": "device-b"})
+    assert hidden_from_user.status_code == 200
+    assert hidden_from_user.json()["total"] == 0
+
+    hidden_from_default_admin = client.get("/api/v1/support/admin/tickets")
+    assert hidden_from_default_admin.status_code == 200
+    assert hidden_from_default_admin.json()["total"] == 0
+
+    visible_in_archive = client.get("/api/v1/support/admin/tickets", params={"ticket_status": "archived"})
+    assert visible_in_archive.status_code == 200
+    assert visible_in_archive.json()["total"] == 1

@@ -1,4 +1,4 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useRef, type FC } from 'react';
 import QRCode from 'qrcode';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { openNotificationSettings, getRegistrationLogs } from '../utils/notifications';
@@ -189,6 +189,7 @@ const SUPPORT_STATUSES: Array<{ value: TicketStatus; label: string }> = [
   { value: 'waiting_user', label: 'Attesa utente' },
   { value: 'resolved', label: 'Risolto' },
   { value: 'closed', label: 'Chiuso' },
+  { value: 'archived', label: 'Archiviato' },
 ];
 
 const DEV_PIN = '6878';
@@ -275,6 +276,8 @@ const SettingsTab: FC<Props> = ({
   const [supportMessage, setSupportMessage] = useState('');
   const [supportReply, setSupportReply] = useState('');
   const [supportDiagnostics, setSupportDiagnostics] = useState(true);
+  const supportLongPressTimer = useRef<number | null>(null);
+  const supportLongPressHandled = useRef(false);
 
   type DiagState = 'idle' | 'checking' | 'done';
   interface DiagResult {
@@ -549,6 +552,39 @@ const SettingsTab: FC<Props> = ({
     }
   };
 
+  const archiveTicket = async (ticket: SupportTicketSummary | SupportTicketDetail) => {
+    if (supportMode !== 'admin' || !adminToken || ticket.status === 'archived') return;
+    const confirmed = window.confirm(`Archivia il ticket "${ticket.subject}"?`);
+    if (!confirmed) return;
+    setSupportState('saving');
+    setSupportError('');
+    try {
+      await adminUpdateSupportStatus(ticket.ticket_id, 'archived', adminToken);
+      setSupportTickets((items) => items.filter((item) => item.ticket_id !== ticket.ticket_id));
+      if (supportDetail?.ticket_id === ticket.ticket_id) setSupportDetail(null);
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Ticket non archiviato');
+    }
+  };
+
+  const startSupportLongPress = (ticket: SupportTicketSummary) => {
+    if (supportMode !== 'admin') return;
+    if (supportLongPressTimer.current !== null) window.clearTimeout(supportLongPressTimer.current);
+    supportLongPressTimer.current = window.setTimeout(() => {
+      supportLongPressTimer.current = null;
+      supportLongPressHandled.current = true;
+      void archiveTicket(ticket);
+    }, 650);
+  };
+
+  const cancelSupportLongPress = () => {
+    if (supportLongPressTimer.current === null) return;
+    window.clearTimeout(supportLongPressTimer.current);
+    supportLongPressTimer.current = null;
+  };
+
   const closeCurrentTicket = async () => {
     if (!supportDetail) return;
     setSupportState('saving');
@@ -587,6 +623,12 @@ const SettingsTab: FC<Props> = ({
   useEffect(() => {
     void loadSupportTickets('user');
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => {
+    if (supportLongPressTimer.current !== null) {
+      window.clearTimeout(supportLongPressTimer.current);
+    }
   }, []);
 
   const handleDownload = async (url: string) => {
@@ -1010,7 +1052,22 @@ const SettingsTab: FC<Props> = ({
               supportTickets.slice(0, 8).map((ticket) => (
                 <button
                   key={ticket.ticket_id}
-                  onClick={() => void openTicket(ticket)}
+                  onClick={() => {
+                    if (supportLongPressHandled.current) {
+                      supportLongPressHandled.current = false;
+                      return;
+                    }
+                    void openTicket(ticket);
+                  }}
+                  onContextMenu={(event) => {
+                    if (supportMode !== 'admin') return;
+                    event.preventDefault();
+                    void archiveTicket(ticket);
+                  }}
+                  onTouchStart={() => startSupportLongPress(ticket)}
+                  onTouchEnd={cancelSupportLongPress}
+                  onTouchMove={cancelSupportLongPress}
+                  onTouchCancel={cancelSupportLongPress}
                   className={`w-full text-left px-3 py-2 rounded-lg bg-dark-700 border ${supportDetail?.ticket_id === ticket.ticket_id ? 'border-accent-blue' : 'border-transparent'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -1034,7 +1091,7 @@ const SettingsTab: FC<Props> = ({
                     {supportDetail.display_name} · {statusLabel(supportDetail.status)}
                   </p>
                 </div>
-                {supportDetail.status !== 'closed' && (
+                {!['closed', 'archived'].includes(supportDetail.status) && (
                   <button onClick={closeCurrentTicket} className="text-xs px-3 py-1.5 bg-accent-red/15 text-accent-red rounded-lg">
                     Chiudi
                   </button>
@@ -1058,7 +1115,7 @@ const SettingsTab: FC<Props> = ({
 
               {supportMode === 'admin' && adminToken && (
                 <div className="grid grid-cols-2 gap-2">
-                  {SUPPORT_STATUSES.map((item) => (
+                  {SUPPORT_STATUSES.filter((item) => item.value !== 'archived').map((item) => (
                     <button
                       key={item.value}
                       onClick={() => void updateTicketStatus(item.value)}
@@ -1070,7 +1127,7 @@ const SettingsTab: FC<Props> = ({
                 </div>
               )}
 
-              {supportDetail.status !== 'closed' && (
+              {!['closed', 'archived'].includes(supportDetail.status) && (
                 <div className="space-y-2">
                   <textarea
                     value={supportReply}

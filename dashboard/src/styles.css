@@ -704,6 +704,23 @@ button.danger {
   gap: 10px;
 }
 
+.support-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.support-tabs button {
+  border: 1px solid #30362f;
+  background: #141814;
+  color: #a7b0a4;
+}
+
+.support-tabs button.active {
+  border-color: #9cd67e;
+  color: #f4f7f2;
+}
+
 .support-ticket {
   text-align: left;
   border: 1px solid #30362f;

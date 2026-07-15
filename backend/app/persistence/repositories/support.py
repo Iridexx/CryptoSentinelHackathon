@@ -69,6 +69,7 @@ class SupportRepository:
         device_id: str | None = None,
         admin: bool = False,
         status: str | None = None,
+        include_archived: bool = False,
     ) -> list[SupportTicket]:
         stmt = (
             select(SupportTicket)
@@ -77,10 +78,11 @@ class SupportRepository:
         )
         if not admin:
             stmt = stmt.where(SupportTicket.user_id == user_id)
-            if device_id is not None:
-                stmt = stmt.where(SupportTicket.device_id == device_id)
+            stmt = stmt.where(SupportTicket.status != "archived")
         elif status:
             stmt = stmt.where(SupportTicket.status == status)
+        elif not include_archived:
+            stmt = stmt.where(SupportTicket.status != "archived")
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -99,8 +101,7 @@ class SupportRepository:
         )
         if not admin:
             stmt = stmt.where(SupportTicket.user_id == user_id)
-            if device_id is not None:
-                stmt = stmt.where(SupportTicket.device_id == device_id)
+            stmt = stmt.where(SupportTicket.status != "archived")
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -154,7 +155,7 @@ class SupportRepository:
             ticket.resolved_at = now
             ticket.closed_at = None
             ticket.closed_by = None
-        elif status == "closed":
+        elif status in {"closed", "archived"}:
             ticket.closed_at = now
             ticket.closed_by = actor
         elif status in {"open", "in_progress", "waiting_user"}:

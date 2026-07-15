@@ -1,5 +1,5 @@
 export type KillSwitchState = 'running' | 'soft_stop' | 'hard_stop' | 'degraded';
-export type SupportTicketStatus = 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed';
+export type SupportTicketStatus = 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed' | 'archived';
 
 export type SupportMessage = {
   message_id: string;

@@ -36,7 +36,7 @@ ALLOWED_DIAGNOSTIC_KEYS = {
     "last_error",
     "timestamp",
 }
-CLOSED_STATUSES = {"closed"}
+CLOSED_STATUSES = {"closed", "archived"}
 
 
 def _sanitize_diagnostics(payload: dict | None) -> dict | None:
@@ -249,11 +249,13 @@ async def list_admin_tickets(
     session: SessionDep,
     _: AdminAccessDep,
     ticket_status: TicketStatus | None = None,
+    include_archived: bool = False,
 ) -> SupportTicketListResponse:
     items = await SupportRepository(session).list_tickets(
         user_id=str(DEFAULT_SINGLE_USER_ID),
         admin=True,
         status=ticket_status,
+        include_archived=include_archived,
     )
     summaries = [_ticket_summary(item) for item in items]
     return SupportTicketListResponse(items=summaries, total=len(summaries))

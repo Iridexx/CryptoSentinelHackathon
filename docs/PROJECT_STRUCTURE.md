@@ -45,7 +45,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
-|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi, elenco utente e gestione admin con risposta/risoluzione/chiusura.
+|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi visibili per user_id anche se cambia device_id, gestione admin con risposta/risoluzione/chiusura/archiviazione.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
@@ -133,7 +133,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
 |   |   |   |   |-- device_profiles.py - DeviceProfile per associare device_id a display name utente senza usare il device token come identita'.
-|   |   |   |   |-- support.py - SupportTicket e SupportMessage per ticket utente/admin con stato open/in_progress/waiting_user/resolved/closed.
+|   |   |   |   |-- support.py - SupportTicket e SupportMessage per ticket utente/admin con stato open/in_progress/waiting_user/resolved/closed/archived.
 |   |   |   |   |-- alerts.py - AlertConfig (legacy, una riga per utente, config_json + state_json).
 |   |   |   |   |-- device_alert_configs.py - DeviceAlertConfig (una riga per (user_id, device_id): alert separati per device).
 |   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc/block_timestamp_utc separati, PnL, fee, slippage e funding snapshot.
@@ -151,7 +151,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- __init__.py - esporta tutti i repository.
 |   |   |       |-- device_tokens.py - DeviceTokenRepository (upsert, remove, tokens_for_user, count).
 |   |   |       |-- device_profiles.py - repository profili device/display name per supporto e registrazione FCM.
-|   |   |       |-- support.py - repository ticket supporto con creazione, lista, thread messaggi e cambio stato.
+|   |   |       |-- support.py - repository ticket supporto con creazione, lista per user_id, thread messaggi, cambio stato e filtro archivio.
 |   |   |       |-- alerts.py - AlertConfigRepository (save, load → tuple[config|None, state]).
 |   |   |       |-- trades.py - SpotTradeRepository e PerpTradeRepository (save, get, list, win_rate).
 |   |   |       |-- positions.py - SpotPositionRepository e PerpPositionRepository (save, open_for_user, history).
@@ -252,7 +252,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
-|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support, Export e dettaglio trade con grafico/fee/margine.
+|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export e dettaglio trade con grafico/fee/margine.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati, inclusa gestione ticket supporto admin.
 |       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp, trade detail e support ticket.
 |       `-- styles.css - layout desktop-first e stati UI.

@@ -178,6 +178,7 @@ export default function App() {
   const [supportTickets, setSupportTickets] = useState<LoadState<SupportTicketListResponse>>(emptyState({ items: [], total: 0 }));
   const [supportDetail, setSupportDetail] = useState<LoadState<SupportTicketDetail>>(emptyState());
   const [supportReply, setSupportReply] = useState('');
+  const [supportArchived, setSupportArchived] = useState(false);
   const [settings, setSettings] = useState<LoadState<SettingsResponse>>(emptyState());
   const [settingsDraft, setSettingsDraft] = useState<AgentSettings>({});
   const [equityInput, setEquityInput] = useState('');
@@ -282,7 +283,14 @@ export default function App() {
       setSupportTickets({ data: { items: [], total: 0 }, loading: false, error: 'Admin token required' });
       return;
     }
-    await load(setSupportTickets, () => fetchSupportTickets(session));
+    await load(setSupportTickets, () => fetchSupportTickets(session, { archived: supportArchived }));
+  }
+
+  async function setSupportArchiveView(archived: boolean) {
+    setSupportArchived(archived);
+    setSupportDetail(emptyState());
+    if (!canAdmin) return;
+    await load(setSupportTickets, () => fetchSupportTickets(session, { archived }));
   }
 
   async function openSupportTicket(ticketId: string) {
@@ -302,7 +310,10 @@ export default function App() {
   async function updateSupportStatus(status: SupportTicketStatus) {
     if (!canAdmin || !supportDetail.data) return;
     const detail = await load(setSupportDetail, () => updateSupportTicketStatus(session, supportDetail.data!.ticket_id, status));
-    if (detail) await refreshSupport();
+    if (detail) {
+      if (status === 'archived' && !supportArchived) setSupportDetail(emptyState());
+      await refreshSupport();
+    }
   }
 
   async function refreshSettings() {
@@ -639,6 +650,8 @@ export default function App() {
             reply={supportReply}
             onReply={setSupportReply}
             canAdmin={canAdmin}
+            archived={supportArchived}
+            onArchiveView={(archived) => void setSupportArchiveView(archived)}
             onRefresh={() => void refreshSupport()}
             onOpen={(ticketId) => void openSupportTicket(ticketId)}
             onSend={() => void submitSupportReply()}
@@ -1940,6 +1953,8 @@ function SupportPanel({
   reply,
   onReply,
   canAdmin,
+  archived,
+  onArchiveView,
   onRefresh,
   onOpen,
   onSend,
@@ -1950,6 +1965,8 @@ function SupportPanel({
   reply: string;
   onReply: (value: string) => void;
   canAdmin: boolean;
+  archived: boolean;
+  onArchiveView: (archived: boolean) => void;
   onRefresh: () => void;
   onOpen: (ticketId: string) => void;
   onSend: () => void;
@@ -1963,6 +1980,10 @@ function SupportPanel({
       {canAdmin && tickets.data && (
         <div className="support-layout">
           <div className="support-list">
+            <div className="support-tabs">
+              <button className={!archived ? 'active' : ''} onClick={() => onArchiveView(false)}>Active</button>
+              <button className={archived ? 'active' : ''} onClick={() => onArchiveView(true)}>Archive</button>
+            </div>
             {tickets.data.items.map((ticket) => (
               <button key={ticket.ticket_id} onClick={() => onOpen(ticket.ticket_id)} className="support-ticket">
                 <span>{ticket.display_name}</span>
@@ -1980,9 +2001,12 @@ function SupportPanel({
                     <h3>{detail.data.subject}</h3>
                     <p>{detail.data.display_name} · {detail.data.device_id ?? 'no device'} · {detail.data.status}</p>
                   </div>
-                  <button onClick={() => onStatus('closed')} disabled={detail.data.status === 'closed'}>Close</button>
+                  <div className="button-row">
+                    <button onClick={() => onStatus('archived')} disabled={detail.data.status === 'archived'}>Archive</button>
+                    <button onClick={() => onStatus('closed')} disabled={detail.data.status === 'closed' || detail.data.status === 'archived'}>Close</button>
+                  </div>
                 </div>
-                <div className="status-row">
+                {!archived && <div className="status-row">
                   {statuses.map((status) => (
                     <button
                       key={status}
@@ -1992,7 +2016,7 @@ function SupportPanel({
                       {status.replace('_', ' ')}
                     </button>
                   ))}
-                </div>
+                </div>}
                 <div className="support-thread">
                   {detail.data.messages.map((message) => (
                     <div key={message.message_id} className={`support-message ${message.sender_type}`}>
@@ -2004,7 +2028,7 @@ function SupportPanel({
                     </div>
                   ))}
                 </div>
-                {detail.data.status !== 'closed' && (
+                {!['closed', 'archived'].includes(detail.data.status) && (
                   <div className="support-reply">
                     <textarea value={reply} onChange={(event) => onReply(event.target.value)} placeholder="Admin reply" />
                     <button className="primary" onClick={onSend} disabled={!reply.trim()}>Send reply</button>

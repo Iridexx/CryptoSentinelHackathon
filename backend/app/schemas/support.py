@@ -9,7 +9,7 @@ from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
 
 TicketCategory = Literal["bug", "alert", "market", "agent", "wallet", "other"]
 TicketPriority = Literal["low", "medium", "high", "critical"]
-TicketStatus = Literal["open", "in_progress", "waiting_user", "resolved", "closed"]
+TicketStatus = Literal["open", "in_progress", "waiting_user", "resolved", "closed", "archived"]
 SenderType = Literal["user", "admin"]
 
 

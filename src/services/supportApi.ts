@@ -3,7 +3,7 @@ import { getDeviceId } from '../utils/deviceId';
 
 export type TicketCategory = 'bug' | 'alert' | 'market' | 'agent' | 'wallet' | 'other';
 export type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
-export type TicketStatus = 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed';
+export type TicketStatus = 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed' | 'archived';
 
 export interface SupportMessage {
   message_id: string;
