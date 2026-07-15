@@ -37,8 +37,8 @@ require it before any network call is attempted.
 - Structured JSON/console logging via `structlog`.
 - CORS and reverse-proxy header support for future HTTPS deployment.
 - Provider-neutral market list, price, search, and OHLCV endpoints.
-- CMC primary adapter and CoinGecko secondary adapter with no automatic fallback.
-- Admin-only global provider selection, reset to the configured default on restart.
+- CoinGecko default adapter for UI/market data, with CMC still available for agent/resolver paths.
+- Admin-only global provider selection persisted in runtime state; background alerts use their configured alert provider.
 - Conservative security headers, with HSTS enabled when `API_BASE_URL` uses `https://`.
 - In-memory heartbeat loop used by health checks.
 - Server-side notification service with `critical`, `warning`, and `info` severities.
@@ -153,7 +153,7 @@ Application code must read configuration only through `backend.app.core.config.S
 | GET | `/api/v1/alerts/pending-favorites` | Alerts/Admin token | Return favorite-move badges awaiting user acknowledgement. |
 | DELETE | `/api/v1/alerts/pending-favorites/{coin_id}` | Alerts/Admin token | Acknowledge and remove one favorite-move badge. |
 | GET | `/api/v1/market-data/provider` | Read/Admin token | Active provider, rate/cache/credit diagnostics, and CMC MCP status. |
-| PUT | `/api/v1/market-data/provider` | Admin token | Select CMC or CoinGecko globally until backend restart. |
+| PUT | `/api/v1/market-data/provider` | Admin token | Select CMC or CoinGecko for UI/market data and persist the choice in RuntimeState. |
 | GET | `/api/v1/market-data/markets` | Read/Admin token | Normalized market-cap list from the selected provider. |
 | GET | `/api/v1/market-data/prices` | Read/Admin token | Normalized current prices for assets and currencies. |
 | GET | `/api/v1/market-data/search` | Read/Admin token | Search through the selected provider. |
@@ -161,9 +161,9 @@ Application code must read configuration only through `backend.app.core.config.S
 | GET | `/api/v1/execution/status` | Read/Admin token | Non-sensitive execution readiness and guardrails. |
 | GET | `/api/v1/execution/competition/status` | Admin token | Verify the wallet against the official competition contract. |
 
-The default provider is configured under `market_data.provider`. Developer settings may change it at runtime with an admin token held only in component state. No automatic fallback is implemented.
+The default UI/market provider is configured under `market_data.provider`. Developer settings may change it at runtime with an admin token held only in component state. Background alerts use `market_data.alert_provider` and ignore the runtime UI selector so they do not accidentally consume CMC credits. No automatic fallback is implemented.
 
-CMC remains the default provider for latest pricing, listings, search, and identity resolution. Public OHLCV chart requests are intentionally served by the dedicated exchange candle source (`ExternalOHLCVService`, Binance klines first with CEX fallback) so the app does not depend on paid CMC OHLCV endpoints. The legacy CMC OHLCV adapter remains available for compatibility tests but is not used by `/api/v1/market-data/ohlcv`.
+CoinGecko is the default provider for latest pricing, listings, search, and alerts. CMC remains available for agent-specific identity/contract resolution and MCP usage under the Basic credit budget. Public OHLCV chart requests are intentionally served by the dedicated exchange candle source (`ExternalOHLCVService`, Binance klines first with CEX fallback) so the app does not depend on paid CMC OHLCV endpoints. The legacy CMC OHLCV adapter remains available for compatibility tests but is not used by `/api/v1/market-data/ohlcv`.
 
 ## Step 4 Execution Setup
 

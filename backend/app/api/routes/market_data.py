@@ -45,7 +45,7 @@ async def select_provider(
     registry: RegistryDep,
     _: AdminAccessDep,
 ) -> ProviderSelectionResponse:
-    """Select one global provider until restart. No fallback is performed."""
+    """Select one persisted global UI/market provider. No fallback is performed."""
 
     registry.select(request.provider)
     return ProviderSelectionResponse(

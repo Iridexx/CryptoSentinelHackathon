@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-07-02
+Ultimo aggiornamento: 2026-07-15
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -45,7 +45,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
-|   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale admin-only.
+|   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
@@ -80,7 +80,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- market_data/ - astrazione multi-provider Step 3.
 |   |   |   |   |-- base.py - interfaccia MarketDataProvider, identità asset e modelli normalizzati.
 |   |   |   |   |-- aliases.py - mapping ID storico app/CoinGecko verso slug CMC.
-|   |   |   |   |-- registry.py - selettore globale e riconciliazione ID storici resiliente: conserva i risultati CMC se il catalogo identità è indisponibile, mantiene una cache in memoria delle identità risolte e la popola anche dalle liste ranked per ridurre refresh lenti su preferiti/alert.
+|   |   |   |   |-- registry.py - selettore globale UI/market, factory dedicata per alert su provider configurato separatamente, riconciliazione ID storici resiliente, cache in memoria delle identità risolte e popolamento dalle liste ranked per ridurre refresh lenti.
 |   |   |   |   |-- cmc.py - adapter CMC REST con liste a blocchi da 200, ricerca progressiva e risoluzione preferiti per simbolo/ID.
 |   |   |   |   |-- coingecko.py - adapter CoinGecko secondario e catalogo identità degli ID storici con cache giornaliera.
 |   |   |   |   |-- http.py - client condiviso con cache, rate limiting e contatore crediti.
@@ -111,7 +111,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- i18n/locales/ - traduzioni backend en.json e it.json, incluse chiavi market data Step 3.
 |   |   |-- notifications/ - sistema notifiche server-side.
 |   |   |   |-- alert_store.py - persistenza DB configurazione, stato checker e badge preferiti pendenti (DB-backed da Step 5; interfaccia pubblica invariata).
-|   |   |   |-- price_checker.py - controllo prezzi ogni 60s; raggruppa i token per device_id e invia a ogni device solo i suoi alert; supporta soglie one-shot e crossing con riarmo percentuale (fallback globale per token legacy senza device_id).
+|   |   |   |-- price_checker.py - controllo prezzi ogni 60s usando `market_data.alert_provider` (CoinGecko di default, indipendente dal selettore UI); raggruppa i token per device_id e invia a ogni device solo i suoi alert; supporta soglie one-shot e crossing con riarmo percentuale.
 |   |   |   |-- alert_store.py - store per-device (DeviceAlertConfig per device_id; AlertConfig legacy come fallback). get_alert_store(device_id) con cache per device.
 |   |   |   |-- agent_notifier.py - AgentNotifier: notifiche push tipizzate per trade spot/perp (idempotenti via set trade_id in RuntimeState), allarmi rischio (anti-spam, stesso alert_type+detail non re-notifica), riepilogo giornaliero e eventi critici agente; singleton get_agent_notifier(); legge/scrive preferenze utente in RuntimeState.
 |   |   |   |-- service.py - orchestration registry + FCM client.
@@ -414,8 +414,8 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Badge preferiti persistente backend | Un push consegnato crea uno stato pending per coin. L'app lo recupera all'avvio/rientro in foreground e lo rimuove solo dopo “Ho capito”, coprendo app chiusa, avvio manuale e mancato tap sulla notifica. |
 | Scope client separati | Il token device registra/rimuove solo device; il token alerts sincronizza solo alert; stato FCM richiede read e invio manuale richiede admin. |
 | Stato checker autorevole lato backend | Sincronizzazioni identiche non riarmano alert già notificati e non sovrascrivono i riferimenti preferiti aggiornati mentre l'app era chiusa. |
-| Adapter multi-provider, non migrazione | CMC resta il default e CoinGecko rimane selezionabile; consumer, checker e frontend dipendono solo dal contratto normalizzato. |
-| Selettore globale senza fallback | Il provider è unico per tutto il processo; il cambio richiede admin e il default da Settings torna al riavvio. Fallback automatico e selezione per funzione restano V2. |
+| Adapter multi-provider, non migrazione | CoinGecko è il default per mercato/UI/alert; CMC rimane selezionabile e disponibile per agent/resolver/MCP; consumer, checker e frontend dipendono solo dal contratto normalizzato. |
+| Selettore UI/market senza fallback | Il provider UI/market richiede admin e viene persistito in RuntimeState. Gli alert usano `market_data.alert_provider` separato per non consumare CMC accidentalmente. |
 | ID applicativo stabile | L'app conserva gli ID storici usati prima dello Step 3 (`bitcoin`, `binancecoin`, ecc.); gli adapter mantengono separati slug e ID nativi dei provider. |
 | Compatibilità preferiti pre-Step 3 | Gli ID CoinGecko persistiti dalle release precedenti restano l'identità dell'app; l'adapter CMC traduce alias come `binancecoin/bnb`, `ripple/xrp` e `avalanche-2/avalanche` in entrambe le direzioni. |
 | Preferiti indipendenti dal mercato | L'app richiede sempre tutti gli ID preferiti e conserva gli ultimi dati validi; il selettore 50/100/200/400/600 riguarda soltanto la lista mercato. |
@@ -423,7 +423,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Ordinamento Preferiti indipendente | Mercati e Preferiti mantengono separatamente criterio, direzione e periodo visualizzato per Rank, 24h, 7g, Volume e Prezzo. |
 | Logger moduli inizializzati lazy | Provider market-data e checker notifiche acquisiscono la configurazione structlog definitiva applicata durante l'avvio backend. |
 | Catalogo CMC paginato | `/v1/cryptocurrency/map` viene letto in pagine da 5.000 elementi fino a esaurimento; i preferiti meno capitalizzati non spariscono perché fuori dalla prima pagina CMC. |
-| Cache prima del conteggio crediti | Una cache hit non incrementa richieste o crediti CMC; il budget osservato espone livelli ok/warning/critical/exhausted. |
+| Cache prima del conteggio crediti | Una cache hit non incrementa richieste o crediti CMC; il budget osservato espone livelli ok/warning/critical/exhausted sul limite Basic da 15.000 crediti/mese. |
 | Single-flight provider | Richieste concorrenti con la stessa chiave condividono una sola chiamata esterna; le altre attendono il risultato in cache senza consumare rate limit o crediti. |
 | Cache identita' provider | Le identita' app/provider gia' risolte restano in memoria nel `MarketDataRegistry`; le liste ranked popolano la stessa cache, cosi' refresh prezzo e preferiti ripetuti non rieseguono la mappa CMC completa. |
 | MCP CMC separato da REST | Lo stato espone endpoint/header ufficiali senza chiavi; REST serve i flussi applicativi, MCP resta disponibile per futuri client agente. |

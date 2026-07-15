@@ -8,7 +8,7 @@
 
 ### Monitoraggio prezzi
 - Lista aggiornabile delle top criptovalute per capitalizzazione (fino a 600)
-- Prezzi in tempo reale tramite backend multi-provider, con CMC predefinito e CoinGecko selezionabile
+- Prezzi in tempo reale tramite backend multi-provider, con CoinGecko predefinito e CMC riservabile all'agente
 - Supporto multi-valuta: USD, EUR e BTC
 - Ricerca rapida per nome o simbolo
 - Pull-to-refresh manuale
@@ -135,7 +135,7 @@ android/app/src/main/java/com/cryptosentinelai/app/
 
 ## Note sull'API
 
-L'app usa il backend normalizzato con il provider globale selezionato. CMC è il default; cache e rate limiter backend proteggono crediti e limiti upstream.
+L'app usa il backend normalizzato con il provider globale selezionato. CoinGecko è il default per mercato e alert; CMC resta disponibile per funzioni agente/resolver con budget base protetto da cache e rate limiter.
 
 ---
 

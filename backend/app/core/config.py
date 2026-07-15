@@ -104,6 +104,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
     },
     "market_data": {
         "provider": "market_data_provider",
+        "alert_provider": "market_data_alert_provider",
         "cache_ttl_seconds": "market_data_cache_ttl_seconds",
         "request_timeout_seconds": "market_data_request_timeout_seconds",
         "coingecko_base_url": "coingecko_base_url",
@@ -373,8 +374,12 @@ class Settings(BaseSettings):
     cmc_mcp_server_url: str | None = Field(default=None, alias="CMC_MCP_SERVER_URL")
     cmc_credit_warning_threshold: int = Field(default=20, alias="CMC_CREDIT_WARNING_THRESHOLD")
     cmc_credit_critical_threshold: int = Field(default=10, alias="CMC_CREDIT_CRITICAL_THRESHOLD")
-    cmc_monthly_credit_limit: int = Field(default=450_000, alias="CMC_MONTHLY_CREDIT_LIMIT")
-    market_data_provider: Literal["cmc", "coingecko"] = Field(default="cmc", alias="MARKET_DATA_PROVIDER")
+    cmc_monthly_credit_limit: int = Field(default=15_000, alias="CMC_MONTHLY_CREDIT_LIMIT")
+    market_data_provider: Literal["cmc", "coingecko"] = Field(default="coingecko", alias="MARKET_DATA_PROVIDER")
+    market_data_alert_provider: Literal["cmc", "coingecko"] = Field(
+        default="coingecko",
+        alias="MARKET_DATA_ALERT_PROVIDER",
+    )
     market_data_cache_ttl_seconds: int = Field(default=60, alias="MARKET_DATA_CACHE_TTL_SECONDS")
     market_data_request_timeout_seconds: float = Field(
         default=15.0,
@@ -385,7 +390,7 @@ class Settings(BaseSettings):
         alias="COINGECKO_BASE_URL",
     )
     coingecko_requests_per_minute: int = Field(default=25, alias="COINGECKO_REQUESTS_PER_MINUTE")
-    cmc_requests_per_minute: int = Field(default=120, alias="CMC_REQUESTS_PER_MINUTE")
+    cmc_requests_per_minute: int = Field(default=30, alias="CMC_REQUESTS_PER_MINUTE")
 
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
     anthropic_model: str = Field(default="claude-haiku-4-5-20251001", alias="ANTHROPIC_MODEL")

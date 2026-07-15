@@ -47,7 +47,7 @@ def test_backend_market_data_response_shape() -> None:
     client = TestClient(app)
 
     markets = client.get("/api/v1/market-data/markets").json()
-    assert markets["provider"] == "cmc"
+    assert markets["provider"] == "coingecko"
     assert markets["items"][0]["symbol"] == "BTC"
     assert markets["items"][0]["price"] == 100
     assert markets["items"][0]["volume_24h"] == 50

@@ -85,17 +85,19 @@ cmc:
   mcp_server_url: https://mcp.coinmarketcap.com/mcp
   credit_warning_threshold: 20
   credit_critical_threshold: 10
-  monthly_credit_limit: 450000
+  monthly_credit_limit: 15000
 
 market_data:
-  # Global static default. Runtime changes in developer settings last until restart.
-  provider: cmc
+  # Global UI/market default. Runtime changes in developer settings persist.
+  provider: coingecko
+  # Background alert checks use this provider and ignore the runtime UI selector.
+  alert_provider: coingecko
   cache_ttl_seconds: 60
   request_timeout_seconds: 15
   coingecko_base_url: https://api.coingecko.com/api/v3
   coingecko_requests_per_minute: 25
-  # Startup allows 600/min overall; quotes/latest v3 documents 120/min.
-  cmc_requests_per_minute: 120
+  # Basic CMC is kept for agent/resolver paths; keep this conservative.
+  cmc_requests_per_minute: 30
 
 anthropic:
   model: claude-sonnet-4-5

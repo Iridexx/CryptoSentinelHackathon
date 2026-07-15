@@ -137,12 +137,29 @@ async def test_global_selector_routes_calls_to_selected_provider() -> None:
     )
 
     await registry.active.get_market_list("usd", 1)
-    assert cmc.calls == 1
-    assert coingecko.calls == 0
+    assert cmc.calls == 0
+    assert coingecko.calls == 1
 
-    registry.select(ProviderName.COINGECKO)
+    registry.select(ProviderName.CMC)
     await registry.active.get_market_list("usd", 1)
     assert cmc.calls == 1
+    assert coingecko.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_registry_active_override_ignores_configured_global_provider() -> None:
+    cmc = StubProvider(ProviderName.CMC)
+    coingecko = StubProvider(ProviderName.COINGECKO)
+    registry = MarketDataRegistry(
+        settings(market_data_provider="cmc", market_data_alert_provider="coingecko"),
+        providers={ProviderName.CMC: cmc, ProviderName.COINGECKO: coingecko},
+        active_override=ProviderName.COINGECKO,
+    )
+
+    await registry.active.get_market_list("usd", 1)
+
+    assert registry.active_name is ProviderName.COINGECKO
+    assert cmc.calls == 0
     assert coingecko.calls == 1
 
 
@@ -195,7 +212,7 @@ async def test_registry_reconciles_legacy_coingecko_id_without_price_fallback() 
     cmc = IdentityProvider(ProviderName.CMC)
     coingecko = IdentityProvider(ProviderName.COINGECKO)
     registry = MarketDataRegistry(
-        settings(),
+        settings(market_data_provider="cmc"),
         providers={ProviderName.CMC: cmc, ProviderName.COINGECKO: coingecko},
     )
 
@@ -258,7 +275,7 @@ async def test_registry_keeps_cmc_results_when_identity_lookup_fails() -> None:
             raise ProviderError("identity source unavailable")
 
     registry = MarketDataRegistry(
-        settings(),
+        settings(market_data_provider="cmc"),
         providers={
             ProviderName.CMC: PartialCMCProvider(ProviderName.CMC),
             ProviderName.COINGECKO: FailingIdentityProvider(ProviderName.COINGECKO),
@@ -328,7 +345,7 @@ async def test_registry_caches_identity_resolution_for_repeated_price_refreshes(
     cmc = CountingIdentityProvider(ProviderName.CMC)
     coingecko = CountingIdentityProvider(ProviderName.COINGECKO)
     registry = MarketDataRegistry(
-        settings(),
+        settings(market_data_provider="cmc"),
         providers={ProviderName.CMC: cmc, ProviderName.COINGECKO: coingecko},
     )
 
@@ -994,5 +1011,5 @@ def test_frontend_has_no_direct_coingecko_api_calls() -> None:
 def test_notification_checker_depends_on_registry() -> None:
     root = Path(__file__).resolve().parents[3]
     source = (root / "backend/app/notifications/price_checker.py").read_text(encoding="utf-8")
-    assert "get_market_data_registry" in source
+    assert "get_alert_market_data_registry" in source
     assert "api.coingecko.com" not in source

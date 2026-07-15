@@ -33,6 +33,7 @@ class MarketDataRegistry:
         self,
         settings: Settings,
         providers: dict[ProviderName, MarketDataProvider] | None = None,
+        active_override: ProviderName | None = None,
     ) -> None:
         self.settings = settings
         self._providers = providers or {
@@ -40,7 +41,7 @@ class MarketDataRegistry:
             ProviderName.COINGECKO: CoinGeckoProvider(settings),
         }
         self._user_id = str(settings.default_user_id)
-        self._active = self._load_active(settings)
+        self._active = active_override or self._load_active(settings)
         self._identity_cache: dict[ProviderName, dict[str, AssetIdentity]] = {
             provider_name: {} for provider_name in self._providers
         }
@@ -255,3 +256,14 @@ def get_market_data_registry() -> MarketDataRegistry:
     """Return the process-wide provider selector."""
 
     return MarketDataRegistry(get_settings())
+
+
+@lru_cache
+def get_alert_market_data_registry() -> MarketDataRegistry:
+    """Return the provider selector dedicated to background alert checks."""
+
+    settings = get_settings()
+    return MarketDataRegistry(
+        settings,
+        active_override=ProviderName(settings.market_data_alert_provider),
+    )

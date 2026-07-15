@@ -39,4 +39,4 @@ class ProviderSelectionResponse(BaseModel):
     active: ProviderName
     providers: list[ProviderRuntimeStatus]
     cmc_mcp: CMCMPConnection
-    selection_scope: str = Field(default="process", description="Selection resets to config on restart.")
+    selection_scope: str = Field(default="runtime_state", description="Selection is persisted in RuntimeState.")

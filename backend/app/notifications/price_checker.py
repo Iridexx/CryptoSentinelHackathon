@@ -7,7 +7,10 @@ import time
 
 from backend.app.core.logging import get_logger
 from backend.app.data.market_data.base import ProviderError
-from backend.app.data.market_data.registry import MarketDataRegistry, get_market_data_registry
+from backend.app.data.market_data.registry import (
+    MarketDataRegistry,
+    get_alert_market_data_registry,
+)
 from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
 from backend.app.notifications.alert_store import AlertStore, get_alert_store
 from backend.app.notifications.service import NotificationService, get_notification_service
@@ -36,7 +39,7 @@ async def _fetch_prices(
     vs_currencies: list[str],
     registry: MarketDataRegistry | None = None,
 ) -> dict[str, dict[str, float]]:
-    selected_registry = registry or get_market_data_registry()
+    selected_registry = registry or get_alert_market_data_registry()
     try:
         quotes = await selected_registry.get_prices(coin_ids, vs_currencies)
         prices: dict[str, dict[str, float]] = {}
@@ -117,13 +120,13 @@ async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
     if not prices:
         logger.warning(
             "price_check_no_prices",
-            provider=(registry or get_market_data_registry()).active_name.value,
+            provider=(registry or get_alert_market_data_registry()).active_name.value,
             requested_count=len(union_coins),
         )
         return
     logger.info(
         "price_check_prices_loaded",
-        provider=(registry or get_market_data_registry()).active_name.value,
+        provider=(registry or get_alert_market_data_registry()).active_name.value,
         device_count=len(units),
         requested_count=len(union_coins),
         returned_count=len(prices),

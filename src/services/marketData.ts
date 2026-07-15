@@ -61,7 +61,7 @@ export interface ProviderSelectionResponse {
     server_url: string;
     auth_header: string;
   };
-  selection_scope: 'process';
+  selection_scope: 'runtime_state';
 }
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
