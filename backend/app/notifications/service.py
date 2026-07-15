@@ -32,7 +32,9 @@ class NotificationService:
             platform=request.platform,
             device_id=request.device_id,
             app_version=request.app_version,
+            build_number=request.build_number,
             locale=request.locale,
+            display_name=request.display_name,
         )
         return DeviceRegistrationResponse(status="registered", token_id=record.token_id, user_id=request.user_id)
 

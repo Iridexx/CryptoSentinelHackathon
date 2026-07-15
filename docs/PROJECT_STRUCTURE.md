@@ -45,6 +45,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
+|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi, elenco utente e gestione admin con risposta/risoluzione/chiusura.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
@@ -131,6 +132,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
+|   |   |   |   |-- device_profiles.py - DeviceProfile per associare device_id a display name utente senza usare il device token come identita'.
+|   |   |   |   |-- support.py - SupportTicket e SupportMessage per ticket utente/admin con stato open/in_progress/waiting_user/resolved/closed.
 |   |   |   |   |-- alerts.py - AlertConfig (legacy, una riga per utente, config_json + state_json).
 |   |   |   |   |-- device_alert_configs.py - DeviceAlertConfig (una riga per (user_id, device_id): alert separati per device).
 |   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc/block_timestamp_utc separati, PnL, fee, slippage e funding snapshot.
@@ -147,6 +150,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   `-- repositories/ - repository ORM per ogni aggregato.
 |   |   |       |-- __init__.py - esporta tutti i repository.
 |   |   |       |-- device_tokens.py - DeviceTokenRepository (upsert, remove, tokens_for_user, count).
+|   |   |       |-- device_profiles.py - repository profili device/display name per supporto e registrazione FCM.
+|   |   |       |-- support.py - repository ticket supporto con creazione, lista, thread messaggi e cambio stato.
 |   |   |       |-- alerts.py - AlertConfigRepository (save, load → tuple[config|None, state]).
 |   |   |       |-- trades.py - SpotTradeRepository e PerpTradeRepository (save, get, list, win_rate).
 |   |   |       |-- positions.py - SpotPositionRepository e PerpPositionRepository (save, open_for_user, history).
@@ -158,6 +163,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- schemas/ - schemi API.
 |   |   |   |-- alerts.py - payload sincronizzazione soglie, range e preferiti, incluse opzioni crossing/riarmo per alert prezzo.
 |   |   |   |-- notifications.py - device token, notification request/response e status.
+|   |   |   |-- support.py - schemi profilo device, ticket, messaggi, risposte admin e cambio stato.
 |   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
@@ -181,6 +187,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_alert_store.py - regressione stato alert tra sincronizzazioni (DB-backed da Step 5).
 |       |-- unit/test_auth_scopes.py - separazione scope device, alerts e admin.
 |       |-- unit/test_market_data_rate_limit.py - accodamento richieste oltre soglia.
+|       |-- integration/test_support_api.py - flusso ticket utente/admin: profilo device, creazione, reply, risoluzione e chiusura.
 |       |-- unit/test_execution_layer.py - gate gas, approval, RPC, EIP-712, TWAK, retry e x402.
 |       |-- unit/test_execution_providers.py - interfaccia ExecutionProvider, selettore twak/pancakeswap, quote getAmountsOut, costruzione swap tx, guardrail (slippage/gas/gate mainnet), normalizzazione TWAK.
 |       |-- unit/test_perp_providers.py - interfaccia PerpExecutionProvider, BnbSdkPerpProvider (status, sign/submit delega al bridge, open/close/get_position gated), selettore perp.
@@ -237,6 +244,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_dashboard_scripts.md - report script avvio/riavvio dashboard.
 |       |-- report_docs_code_reconciliation_2026-06-26.md - report ricognizione codice e riallineamento documentazione.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
+|       |-- report_support_tickets_2026-07-15.md - report ticket supporto in-app e dashboard.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
 |   |-- index.html - entrypoint HTML dashboard.
@@ -244,9 +252,9 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
-|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Export e dettaglio trade con grafico/fee/margine.
-|       |-- api.ts - client API dashboard verso backend con token read/admin separati.
-|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp e trade detail.
+|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support, Export e dettaglio trade con grafico/fee/margine.
+|       |-- api.ts - client API dashboard verso backend con token read/admin separati, inclusa gestione ticket supporto admin.
+|       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp, trade detail e support ticket.
 |       `-- styles.css - layout desktop-first e stati UI.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
@@ -258,14 +266,16 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   `-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket, reply utente e modalita' admin opzionale per risposta/chiusura.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.
+|   |-- services/supportApi.ts - client supporto in-app con diagnostica whitelisted e API utente/admin.
 |   |-- utils/ - notifiche, update, haptics, audio, energy saving.
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
 |   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
-|   |   `-- notifications.ts - registrazione token FCM e rendering locale push in foreground.
+|   |   `-- notifications.ts - registrazione token FCM con build number/display name e rendering locale push in foreground.
 |   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati e monta la tab agente additiva Step 7.
 |   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti con fetch dedicato di tutti gli ID salvati, retry rapido e righe temporanee per tutti gli ID salvati.
 |   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.

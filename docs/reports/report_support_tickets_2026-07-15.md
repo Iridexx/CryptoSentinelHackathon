@@ -1,0 +1,43 @@
+# Ticket supporto in-app - 2026-07-15
+
+## 1. COSA È STATO FATTO
+
+- Aggiunto un sistema ticket in-app per utenti e amministratori.
+- Aggiunto il profilo device con display name utente, separato dal device token FCM.
+- Permesso all'utente di creare ticket, vedere tutti i propri ticket, leggere risposte e stato finale.
+- Permesso all'admin di vedere i ticket da dashboard e app, rispondere, segnare risolto e chiudere.
+- Aggiunto client frontend dedicato e test backend di integrazione.
+
+## 2. COME È STATO FATTO
+
+- Introdotti modelli SQLite `DeviceProfile`, `SupportTicket` e `SupportMessage`.
+- Introdotti repository dedicati per profilo device e ticket.
+- Aggiunto router FastAPI `/api/v1/support` con endpoint read per utente e admin-only per gestione amministrativa.
+- Estesa la registrazione FCM per salvare `display_name` e `build_number` senza usare il token device come identita' applicativa.
+- Aggiornata la tab impostazioni dell'app con nome utente, form ticket, lista ticket, thread messaggi e modalita' admin.
+- Aggiornata la dashboard con tab Support e azioni admin.
+
+## 3. COSA È STATO VERIFICATO
+
+- `backend\.venv\Scripts\python.exe -m pytest backend/tests/integration/test_support_api.py -q`
+- Esito: `1 passed in 5.00s`.
+- `backend\.venv\Scripts\python.exe -m pytest backend/tests/unit/test_device_alert_separation.py backend/tests/integration/test_market_data_api.py backend/tests/integration/test_support_api.py -q`
+- Esito: `7 passed in 17.07s`.
+- `npm run build`
+- Esito: build completata; resta il warning Vite noto sul chunk oltre 500 kB.
+- `npm run dashboard:build`
+- Esito: build completata.
+
+## 4. SCOSTAMENTI DAL PIANO
+
+- Nessuno scostamento funzionale rispetto alle regole concordate.
+- Non sono state introdotte notifiche push automatiche per nuove risposte ticket; il thread e lo stato sono consultabili da app/dashboard.
+
+## 5. QUESTIONI APERTE
+
+- Verificare su APK/dispositivo reale il flusso completo di apertura ticket e risposta admin con backend operativo.
+- Valutare in uno step futuro notifiche push o badge quando l'admin risponde o chiude un ticket.
+
+## 6. STATO DELIVERABLE
+
+- Deliverable completato e verificato localmente con test backend mirati e build frontend/dashboard.

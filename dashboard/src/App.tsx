@@ -20,7 +20,10 @@ import {
   fetchReady,
   fetchSettings,
   fetchSpot,
+  fetchSupportTicket,
+  fetchSupportTickets,
   fetchTradeDetail,
+  replySupportTicket,
   resetDatabase,
   adjustEquity,
   fetchEquityAdjustments,
@@ -33,6 +36,7 @@ import {
   setPerpExecutionProvider,
   setRpcEndpoint,
   setSpotExecutionProvider,
+  updateSupportTicketStatus,
   validateOnboarding,
   type DashboardSession,
   type EquityAdjustment,
@@ -60,11 +64,14 @@ import type {
   PerpView,
   SettingsResponse,
   SpotView,
+  SupportTicketDetail,
+  SupportTicketListResponse,
+  SupportTicketStatus,
   TradeChart,
   TradeDetail,
 } from './types';
 
-type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'analytics' | 'health' | 'wallet' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
+type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'analytics' | 'health' | 'wallet' | 'support' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
 type LoadState<T> = { data: T | null; loading: boolean; error: string | null };
 
 const tabs: { id: Tab; label: string }[] = [
@@ -75,6 +82,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'analytics', label: 'Analytics' },
   { id: 'health', label: 'Health' },
   { id: 'wallet', label: 'Wallet' },
+  { id: 'support', label: 'Support' },
   { id: 'logs', label: 'Logs' },
   { id: 'settings', label: 'Settings' },
   { id: 'onboarding', label: 'Onboarding' },
@@ -167,6 +175,9 @@ export default function App() {
   const [wallets, setWallets] = useState<LoadState<ExecutionWalletsResponse>>(emptyState());
   const [coverage, setCoverage] = useState<LoadState<DataCoverageResponse>>(emptyState());
   const [logs, setLogs] = useState<LoadState<LogEntry[]>>(emptyState([]));
+  const [supportTickets, setSupportTickets] = useState<LoadState<SupportTicketListResponse>>(emptyState({ items: [], total: 0 }));
+  const [supportDetail, setSupportDetail] = useState<LoadState<SupportTicketDetail>>(emptyState());
+  const [supportReply, setSupportReply] = useState('');
   const [settings, setSettings] = useState<LoadState<SettingsResponse>>(emptyState());
   const [settingsDraft, setSettingsDraft] = useState<AgentSettings>({});
   const [equityInput, setEquityInput] = useState('');
@@ -264,6 +275,34 @@ export default function App() {
     } catch (error) {
       setLogs({ data: [], loading: false, error: error instanceof Error ? error.message : 'Request failed' });
     }
+  }
+
+  async function refreshSupport() {
+    if (!canAdmin) {
+      setSupportTickets({ data: { items: [], total: 0 }, loading: false, error: 'Admin token required' });
+      return;
+    }
+    await load(setSupportTickets, () => fetchSupportTickets(session));
+  }
+
+  async function openSupportTicket(ticketId: string) {
+    if (!canAdmin) return;
+    await load(setSupportDetail, () => fetchSupportTicket(session, ticketId));
+  }
+
+  async function submitSupportReply() {
+    if (!canAdmin || !supportDetail.data || !supportReply.trim()) return;
+    const detail = await load(setSupportDetail, () => replySupportTicket(session, supportDetail.data!.ticket_id, supportReply.trim()));
+    if (detail) {
+      setSupportReply('');
+      await refreshSupport();
+    }
+  }
+
+  async function updateSupportStatus(status: SupportTicketStatus) {
+    if (!canAdmin || !supportDetail.data) return;
+    const detail = await load(setSupportDetail, () => updateSupportTicketStatus(session, supportDetail.data!.ticket_id, status));
+    if (detail) await refreshSupport();
   }
 
   async function refreshSettings() {
@@ -591,6 +630,19 @@ export default function App() {
             onWallet={(address) => void updateExecutionWallet(address)}
             onAddWallet={() => void submitWalletAddress()}
             onSend={(payload) => sendToken(session, payload)}
+          />
+        )}
+        {tab === 'support' && (
+          <SupportPanel
+            tickets={supportTickets}
+            detail={supportDetail}
+            reply={supportReply}
+            onReply={setSupportReply}
+            canAdmin={canAdmin}
+            onRefresh={() => void refreshSupport()}
+            onOpen={(ticketId) => void openSupportTicket(ticketId)}
+            onSend={() => void submitSupportReply()}
+            onStatus={(status) => void updateSupportStatus(status)}
           />
         )}
         {tab === 'logs' && <LogsPanel logs={logs} onRefresh={() => void refreshLogs()} canAdmin={canAdmin} />}
@@ -1878,6 +1930,91 @@ function KillSwitchPanel({
         <button className="danger" onClick={() => onSet('hard_stop')} disabled={!canAdmin}>Hard</button>
       </div>
       {!canAdmin && <p className="hint">Admin token required for safety controls.</p>}
+    </Panel>
+  );
+}
+
+function SupportPanel({
+  tickets,
+  detail,
+  reply,
+  onReply,
+  canAdmin,
+  onRefresh,
+  onOpen,
+  onSend,
+  onStatus,
+}: {
+  tickets: LoadState<SupportTicketListResponse>;
+  detail: LoadState<SupportTicketDetail>;
+  reply: string;
+  onReply: (value: string) => void;
+  canAdmin: boolean;
+  onRefresh: () => void;
+  onOpen: (ticketId: string) => void;
+  onSend: () => void;
+  onStatus: (status: SupportTicketStatus) => void;
+}) {
+  const statuses: SupportTicketStatus[] = ['open', 'in_progress', 'waiting_user', 'resolved', 'closed'];
+  return (
+    <Panel title="Support Tickets" action={<button onClick={onRefresh}>Load tickets</button>} className="wide">
+      {!canAdmin && <Empty title="Admin token required" detail="Support queue management is admin-only in the dashboard." />}
+      <StateBlock state={tickets} empty="No support tickets loaded" />
+      {canAdmin && tickets.data && (
+        <div className="support-layout">
+          <div className="support-list">
+            {tickets.data.items.map((ticket) => (
+              <button key={ticket.ticket_id} onClick={() => onOpen(ticket.ticket_id)} className="support-ticket">
+                <span>{ticket.display_name}</span>
+                <strong>{ticket.subject}</strong>
+                <em>{ticket.category} · {ticket.priority} · {ticket.status}</em>
+              </button>
+            ))}
+          </div>
+          <div className="support-detail">
+            <StateBlock state={detail} empty="Select a ticket" />
+            {detail.data && (
+              <>
+                <div className="detail-head">
+                  <div>
+                    <h3>{detail.data.subject}</h3>
+                    <p>{detail.data.display_name} · {detail.data.device_id ?? 'no device'} · {detail.data.status}</p>
+                  </div>
+                  <button onClick={() => onStatus('closed')} disabled={detail.data.status === 'closed'}>Close</button>
+                </div>
+                <div className="status-row">
+                  {statuses.map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => onStatus(status)}
+                      className={detail.data?.status === status ? 'active' : ''}
+                    >
+                      {status.replace('_', ' ')}
+                    </button>
+                  ))}
+                </div>
+                <div className="support-thread">
+                  {detail.data.messages.map((message) => (
+                    <div key={message.message_id} className={`support-message ${message.sender_type}`}>
+                      <span>{message.sender_type} · {shortDate(message.created_at)}</span>
+                      <p>{message.body}</p>
+                      {message.diagnostics && (
+                        <pre>{JSON.stringify(message.diagnostics, null, 2)}</pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {detail.data.status !== 'closed' && (
+                  <div className="support-reply">
+                    <textarea value={reply} onChange={(event) => onReply(event.target.value)} placeholder="Admin reply" />
+                    <button className="primary" onClick={onSend} disabled={!reply.trim()}>Send reply</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </Panel>
   );
 }

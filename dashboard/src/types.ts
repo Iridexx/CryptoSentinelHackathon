@@ -1,4 +1,42 @@
 export type KillSwitchState = 'running' | 'soft_stop' | 'hard_stop' | 'degraded';
+export type SupportTicketStatus = 'open' | 'in_progress' | 'waiting_user' | 'resolved' | 'closed';
+
+export type SupportMessage = {
+  message_id: string;
+  ticket_id: string;
+  sender_type: 'user' | 'admin';
+  sender_id?: string | null;
+  body: string;
+  diagnostics?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type SupportTicketSummary = {
+  ticket_id: string;
+  user_id: string;
+  device_id?: string | null;
+  display_name: string;
+  category: string;
+  priority: string;
+  status: SupportTicketStatus;
+  subject: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+  resolved_at?: string | null;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  message_count: number;
+};
+
+export type SupportTicketDetail = SupportTicketSummary & {
+  messages: SupportMessage[];
+};
+
+export type SupportTicketListResponse = {
+  items: SupportTicketSummary[];
+  total: number;
+};
 
 export type SpotPosition = {
   position_id: string;

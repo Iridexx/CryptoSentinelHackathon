@@ -12,6 +12,23 @@ import {
   type ProviderSelectionResponse,
 } from '../services/marketData';
 import { resetDatabase } from '../services/agentApi';
+import {
+  adminListSupportTickets,
+  adminGetSupportTicket,
+  adminReplySupportTicket,
+  adminUpdateSupportStatus,
+  closeSupportTicket,
+  createSupportTicket,
+  getSupportTicket,
+  listSupportTickets,
+  replySupportTicket,
+  syncDeviceProfile,
+  type SupportTicketDetail,
+  type SupportTicketSummary,
+  type TicketCategory,
+  type TicketPriority,
+  type TicketStatus,
+} from '../services/supportApi';
 
 const DONATION_OPTIONS = [
   {
@@ -150,11 +167,37 @@ const INTERVALS = [
   { label: '5 min', ms: 300_000 },
 ];
 
+const SUPPORT_CATEGORIES: Array<{ value: TicketCategory; label: string }> = [
+  { value: 'bug', label: 'Bug' },
+  { value: 'alert', label: 'Alert' },
+  { value: 'market', label: 'Mercato' },
+  { value: 'agent', label: 'Agente' },
+  { value: 'wallet', label: 'Wallet' },
+  { value: 'other', label: 'Altro' },
+];
+
+const SUPPORT_PRIORITIES: Array<{ value: TicketPriority; label: string }> = [
+  { value: 'low', label: 'Bassa' },
+  { value: 'medium', label: 'Media' },
+  { value: 'high', label: 'Alta' },
+  { value: 'critical', label: 'Critica' },
+];
+
+const SUPPORT_STATUSES: Array<{ value: TicketStatus; label: string }> = [
+  { value: 'open', label: 'Aperto' },
+  { value: 'in_progress', label: 'In lavorazione' },
+  { value: 'waiting_user', label: 'Attesa utente' },
+  { value: 'resolved', label: 'Risolto' },
+  { value: 'closed', label: 'Chiuso' },
+];
+
 const DEV_PIN = '6878';
+const SUPPORT_DISPLAY_NAME_KEY = 'cs_support_display_name';
 
 type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
 type DevState = 'locked' | 'pin-entry' | 'unlocked';
 type DevLoadState = 'idle' | 'loading' | 'loaded' | 'error';
+type SupportMode = 'user' | 'admin';
 
 interface Props {
   refreshInterval: number;
@@ -220,6 +263,18 @@ const SettingsTab: FC<Props> = ({
   const [providerLoadState, setProviderLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [resetState, setResetState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
   const [resetMsg, setResetMsg] = useState('');
+  const [supportDisplayName, setSupportDisplayName] = useState(() => localStorage.getItem(SUPPORT_DISPLAY_NAME_KEY) ?? '');
+  const [supportMode, setSupportMode] = useState<SupportMode>('user');
+  const [supportTickets, setSupportTickets] = useState<SupportTicketSummary[]>([]);
+  const [supportDetail, setSupportDetail] = useState<SupportTicketDetail | null>(null);
+  const [supportState, setSupportState] = useState<'idle' | 'loading' | 'saving' | 'error'>('idle');
+  const [supportError, setSupportError] = useState('');
+  const [supportCategory, setSupportCategory] = useState<TicketCategory>('bug');
+  const [supportPriority, setSupportPriority] = useState<TicketPriority>('medium');
+  const [supportSubject, setSupportSubject] = useState('');
+  const [supportMessage, setSupportMessage] = useState('');
+  const [supportReply, setSupportReply] = useState('');
+  const [supportDiagnostics, setSupportDiagnostics] = useState(true);
 
   type DiagState = 'idle' | 'checking' | 'done';
   interface DiagResult {
@@ -393,6 +448,124 @@ const SettingsTab: FC<Props> = ({
     }
   };
 
+  const loadSupportTickets = async (mode: SupportMode = supportMode) => {
+    setSupportState('loading');
+    setSupportError('');
+    try {
+      const response = mode === 'admin' && adminToken
+        ? await adminListSupportTickets(adminToken)
+        : await listSupportTickets();
+      setSupportTickets(response.items);
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Supporto non disponibile');
+    }
+  };
+
+  const saveSupportDisplayName = async () => {
+    const normalized = supportDisplayName.trim();
+    localStorage.setItem(SUPPORT_DISPLAY_NAME_KEY, normalized);
+    setSupportState('saving');
+    setSupportError('');
+    try {
+      await syncDeviceProfile(normalized);
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Nome non sincronizzato');
+    }
+  };
+
+  const createTicket = async () => {
+    if (!supportSubject.trim() || !supportMessage.trim()) return;
+    setSupportState('saving');
+    setSupportError('');
+    try {
+      const detail = await createSupportTicket({
+        displayName: supportDisplayName.trim(),
+        category: supportCategory,
+        priority: supportPriority,
+        subject: supportSubject.trim(),
+        message: supportMessage.trim(),
+        includeDiagnostics: supportDiagnostics,
+      });
+      setSupportDetail(detail);
+      setSupportSubject('');
+      setSupportMessage('');
+      await loadSupportTickets('user');
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Ticket non creato');
+    }
+  };
+
+  const openTicket = async (ticket: SupportTicketSummary) => {
+    setSupportState('loading');
+    setSupportError('');
+    try {
+      const detail = supportMode === 'admin' && adminToken
+        ? await adminGetSupportTicket(ticket.ticket_id, adminToken)
+        : await getSupportTicket(ticket.ticket_id);
+      setSupportDetail(detail);
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Ticket non caricato');
+    }
+  };
+
+  const sendTicketReply = async () => {
+    if (!supportDetail || !supportReply.trim()) return;
+    setSupportState('saving');
+    setSupportError('');
+    try {
+      const detail = supportMode === 'admin' && adminToken
+        ? await adminReplySupportTicket(supportDetail.ticket_id, supportReply.trim(), adminToken)
+        : await replySupportTicket(supportDetail.ticket_id, supportReply.trim());
+      setSupportDetail(detail);
+      setSupportReply('');
+      await loadSupportTickets(supportMode);
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Risposta non inviata');
+    }
+  };
+
+  const updateTicketStatus = async (status: TicketStatus) => {
+    if (!supportDetail || !adminToken) return;
+    setSupportState('saving');
+    setSupportError('');
+    try {
+      const detail = await adminUpdateSupportStatus(supportDetail.ticket_id, status, adminToken);
+      setSupportDetail(detail);
+      await loadSupportTickets('admin');
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Stato non aggiornato');
+    }
+  };
+
+  const closeCurrentTicket = async () => {
+    if (!supportDetail) return;
+    setSupportState('saving');
+    setSupportError('');
+    try {
+      const detail = supportMode === 'admin' && adminToken
+        ? await adminUpdateSupportStatus(supportDetail.ticket_id, 'closed', adminToken)
+        : await closeSupportTicket(supportDetail.ticket_id);
+      setSupportDetail(detail);
+      await loadSupportTickets(supportMode);
+      setSupportState('idle');
+    } catch (err) {
+      setSupportState('error');
+      setSupportError(err instanceof Error ? err.message : 'Ticket non chiuso');
+    }
+  };
+
   const handleLoadDevBuild = async () => {
     setDevLoadState('loading');
     try {
@@ -403,6 +576,18 @@ const SettingsTab: FC<Props> = ({
       setDevLoadState('error');
     }
   };
+
+  const statusLabel = (status: TicketStatus) =>
+    SUPPORT_STATUSES.find((item) => item.value === status)?.label ?? status;
+  const categoryLabel = (category: TicketCategory) =>
+    SUPPORT_CATEGORIES.find((item) => item.value === category)?.label ?? category;
+  const priorityLabel = (priority: TicketPriority) =>
+    SUPPORT_PRIORITIES.find((item) => item.value === priority)?.label ?? priority;
+
+  useEffect(() => {
+    void loadSupportTickets('user');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleDownload = async (url: string) => {
     onDownloadStart();
@@ -710,6 +895,201 @@ const SettingsTab: FC<Props> = ({
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Supporto */}
+      <section>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-1">Supporto</h2>
+        <div className="bg-dark-800 rounded-xl divide-y divide-dark-700">
+          <div className="px-4 py-3">
+            <p className="text-sm text-white mb-2">Nome utente</p>
+            <div className="flex gap-2">
+              <input
+                value={supportDisplayName}
+                onChange={(event) => setSupportDisplayName(event.target.value)}
+                placeholder="Es. Marco S23"
+                className="flex-1 bg-dark-700 text-white text-sm rounded-lg px-3 py-2 outline-none border border-dark-600 focus:border-accent-blue"
+                maxLength={120}
+              />
+              <button
+                onClick={saveSupportDisplayName}
+                className="px-3 py-2 bg-accent-blue text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+                disabled={supportState === 'saving'}
+              >
+                Salva
+              </button>
+            </div>
+          </div>
+
+          <div className="px-4 py-3 space-y-3">
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setSupportMode('user'); void loadSupportTickets('user'); }}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium ${supportMode === 'user' ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}
+              >
+                I miei ticket
+              </button>
+              <button
+                onClick={() => { setSupportMode('admin'); void loadSupportTickets('admin'); }}
+                disabled={!adminToken}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-40 ${supportMode === 'admin' ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}
+              >
+                Admin
+              </button>
+              <button
+                onClick={() => void loadSupportTickets()}
+                className="px-3 py-2 bg-dark-700 text-gray-400 rounded-lg text-sm"
+              >
+                ↻
+              </button>
+            </div>
+            {supportError && <p className="text-xs text-accent-red">{supportError}</p>}
+          </div>
+
+          {supportMode === 'user' && (
+            <div className="px-4 py-3 space-y-3">
+              <p className="text-sm text-white">Apri ticket</p>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={supportCategory}
+                  onChange={(event) => setSupportCategory(event.target.value as TicketCategory)}
+                  className="bg-dark-700 text-white text-sm rounded-lg px-3 py-2 outline-none"
+                >
+                  {SUPPORT_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+                <select
+                  value={supportPriority}
+                  onChange={(event) => setSupportPriority(event.target.value as TicketPriority)}
+                  className="bg-dark-700 text-white text-sm rounded-lg px-3 py-2 outline-none"
+                >
+                  {SUPPORT_PRIORITIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </div>
+              <input
+                value={supportSubject}
+                onChange={(event) => setSupportSubject(event.target.value)}
+                placeholder="Oggetto"
+                className="w-full bg-dark-700 text-white text-sm rounded-lg px-3 py-2 outline-none border border-dark-600 focus:border-accent-blue"
+                maxLength={160}
+              />
+              <textarea
+                value={supportMessage}
+                onChange={(event) => setSupportMessage(event.target.value)}
+                placeholder="Descrivi il problema o la richiesta"
+                className="w-full min-h-24 bg-dark-700 text-white text-sm rounded-lg px-3 py-2 outline-none border border-dark-600 focus:border-accent-blue resize-none"
+                maxLength={4000}
+              />
+              <label className="flex items-center justify-between text-sm text-gray-400">
+                <span>Includi diagnostica tecnica</span>
+                <input
+                  type="checkbox"
+                  checked={supportDiagnostics}
+                  onChange={(event) => setSupportDiagnostics(event.target.checked)}
+                  className="w-4 h-4"
+                />
+              </label>
+              <button
+                onClick={createTicket}
+                disabled={supportState === 'saving' || !supportSubject.trim() || !supportMessage.trim()}
+                className="w-full py-2.5 bg-accent-green/20 text-accent-green text-sm font-semibold rounded-lg disabled:opacity-40"
+              >
+                {supportState === 'saving' ? 'Invio…' : 'Invia ticket'}
+              </button>
+            </div>
+          )}
+
+          <div className="px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-white">Ticket</p>
+              <span className="text-xs text-gray-500">{supportTickets.length}</span>
+            </div>
+            {supportTickets.length === 0 ? (
+              <p className="text-xs text-gray-500">Nessun ticket caricato.</p>
+            ) : (
+              supportTickets.slice(0, 8).map((ticket) => (
+                <button
+                  key={ticket.ticket_id}
+                  onClick={() => void openTicket(ticket)}
+                  className={`w-full text-left px-3 py-2 rounded-lg bg-dark-700 border ${supportDetail?.ticket_id === ticket.ticket_id ? 'border-accent-blue' : 'border-transparent'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-white truncate">{ticket.subject}</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">{statusLabel(ticket.status)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">
+                    {supportMode === 'admin' ? `${ticket.display_name} · ` : ''}{categoryLabel(ticket.category)} · {priorityLabel(ticket.priority)}
+                  </p>
+                </button>
+              ))
+            )}
+          </div>
+
+          {supportDetail && (
+            <div className="px-4 py-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-semibold truncate">{supportDetail.subject}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {supportDetail.display_name} · {statusLabel(supportDetail.status)}
+                  </p>
+                </div>
+                {supportDetail.status !== 'closed' && (
+                  <button onClick={closeCurrentTicket} className="text-xs px-3 py-1.5 bg-accent-red/15 text-accent-red rounded-lg">
+                    Chiudi
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {supportDetail.messages.map((message) => (
+                  <div
+                    key={message.message_id}
+                    className={`px-3 py-2 rounded-lg ${message.sender_type === 'admin' ? 'bg-accent-blue/15' : 'bg-dark-700'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-gray-400">{message.sender_type === 'admin' ? 'Admin' : 'Utente'}</span>
+                      <span className="text-[11px] text-gray-600">{new Date(message.created_at).toLocaleString('it-IT')}</span>
+                    </div>
+                    <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{message.body}</p>
+                  </div>
+                ))}
+              </div>
+
+              {supportMode === 'admin' && adminToken && (
+                <div className="grid grid-cols-2 gap-2">
+                  {SUPPORT_STATUSES.map((item) => (
+                    <button
+                      key={item.value}
+                      onClick={() => void updateTicketStatus(item.value)}
+                      className={`py-2 rounded-lg text-xs font-semibold ${supportDetail.status === item.value ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {supportDetail.status !== 'closed' && (
+                <div className="space-y-2">
+                  <textarea
+                    value={supportReply}
+                    onChange={(event) => setSupportReply(event.target.value)}
+                    placeholder={supportMode === 'admin' ? 'Risposta admin' : 'Rispondi al supporto'}
+                    className="w-full min-h-20 bg-dark-700 text-white text-sm rounded-lg px-3 py-2 outline-none border border-dark-600 focus:border-accent-blue resize-none"
+                    maxLength={4000}
+                  />
+                  <button
+                    onClick={sendTicketReply}
+                    disabled={supportState === 'saving' || !supportReply.trim() || (supportMode === 'admin' && !adminToken)}
+                    className="w-full py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg disabled:opacity-40"
+                  >
+                    Invia risposta
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

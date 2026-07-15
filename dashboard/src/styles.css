@@ -691,6 +691,104 @@ button.danger {
   overflow-wrap: anywhere;
 }
 
+.support-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(320px, 1.6fr);
+  gap: 16px;
+}
+
+.support-list,
+.support-detail,
+.support-thread {
+  display: grid;
+  gap: 10px;
+}
+
+.support-ticket {
+  text-align: left;
+  border: 1px solid #30362f;
+  background: #141814;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.support-ticket span,
+.support-message span {
+  color: #a7b0a4;
+  font-size: 12px;
+}
+
+.support-ticket strong {
+  display: block;
+  color: #f4f7f2;
+  margin: 3px 0;
+}
+
+.support-ticket em {
+  color: #a7b0a4;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.detail-head,
+.status-row,
+.support-reply {
+  display: flex;
+  gap: 10px;
+}
+
+.detail-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.detail-head h3,
+.detail-head p {
+  margin: 0;
+}
+
+.status-row {
+  flex-wrap: wrap;
+}
+
+.status-row button.active {
+  border-color: #47b2ff;
+  color: #47b2ff;
+}
+
+.support-message {
+  border: 1px solid #30362f;
+  border-radius: 8px;
+  padding: 10px;
+  background: #141814;
+}
+
+.support-message.admin {
+  border-color: rgba(71, 178, 255, 0.45);
+}
+
+.support-message p {
+  white-space: pre-wrap;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.support-message pre {
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.support-reply {
+  flex-direction: column;
+}
+
+.support-reply textarea {
+  width: 100%;
+  min-height: 120px;
+}
+
 .settings-grid,
 .check-grid {
   display: grid;

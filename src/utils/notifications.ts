@@ -22,6 +22,7 @@ const DAILY_MS = 24 * 60 * 60 * 1000;
 const RETRY_DELAYS_MS = [30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
 
 const PENDING_FAV_ALERTS_KEY = 'cs_pending_fcm_fav_alerts';
+const SUPPORT_DISPLAY_NAME_KEY = 'cs_support_display_name';
 
 let pushRegistrationStarted = false;
 
@@ -199,6 +200,8 @@ async function sendPushTokenToBackend(token: string): Promise<boolean> {
         platform: 'android',
         device_id: getDeviceId(),
         app_version: __APP_VERSION__,
+        build_number: String(__APP_BUILD_NUMBER__),
+        display_name: localStorage.getItem(SUPPORT_DISPLAY_NAME_KEY) ?? undefined,
         locale: navigator.language,
       },
       connectTimeout: 8000,

@@ -6,11 +6,13 @@ from .archives import ArchivedRun
 from .base import Base
 from .decisions import AgentDecision
 from .device_alert_configs import DeviceAlertConfig
+from .device_profiles import DeviceProfile
 from .equity_adjustments import EquityAdjustment
 from .device_tokens import DeviceToken
 from .pnl import PnlSnapshot, PortfolioState
 from .positions import PerpPosition, SpotPosition
 from .runtime_state import RuntimeState
+from .support import SupportMessage, SupportTicket
 from .trade_charts import TradeChartSnapshot
 from .trades import PerpTrade, SpotTrade
 from .x402 import X402DailyBudget
@@ -22,6 +24,7 @@ __all__ = [
     "ArchivedRun",
     "AgentDecision",
     "DeviceAlertConfig",
+    "DeviceProfile",
     "EquityAdjustment",
     "DeviceToken",
     "PnlSnapshot",
@@ -29,6 +32,8 @@ __all__ = [
     "PerpPosition",
     "SpotPosition",
     "RuntimeState",
+    "SupportMessage",
+    "SupportTicket",
     "TradeChartSnapshot",
     "PerpTrade",
     "SpotTrade",

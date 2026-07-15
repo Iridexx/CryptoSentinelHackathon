@@ -43,6 +43,7 @@ async def list_devices(
                 platform=r.platform,
                 device_id=r.device_id,
                 app_version=r.app_version,
+                display_name=r.display_name,
                 locale=r.locale,
                 registered_at=r.created_at,
                 updated_at=r.updated_at,

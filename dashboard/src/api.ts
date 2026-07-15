@@ -20,6 +20,9 @@ import type {
   PerpView,
   SettingsResponse,
   SpotView,
+  SupportTicketDetail,
+  SupportTicketListResponse,
+  SupportTicketStatus,
   TradeDetail,
 } from './types';
 
@@ -184,6 +187,28 @@ export function fetchLogs(session: DashboardSession, params: { level?: string; s
   if (params.level) search.set('level', params.level);
   if (params.search) search.set('search', params.search);
   return requestJson<LogResponse>(session, `/api/v1/observability/logs?${search.toString()}`, 'admin');
+}
+
+export function fetchSupportTickets(session: DashboardSession) {
+  return requestJson<SupportTicketListResponse>(session, '/api/v1/support/admin/tickets', 'admin');
+}
+
+export function fetchSupportTicket(session: DashboardSession, ticketId: string) {
+  return requestJson<SupportTicketDetail>(session, `/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}`, 'admin');
+}
+
+export function replySupportTicket(session: DashboardSession, ticketId: string, message: string) {
+  return requestJson<SupportTicketDetail>(session, `/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}/messages`, 'admin', {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}
+
+export function updateSupportTicketStatus(session: DashboardSession, ticketId: string, status: SupportTicketStatus) {
+  return requestJson<SupportTicketDetail>(session, `/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}/status`, 'admin', {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
 }
 
 export function fetchSettings(session: DashboardSession) {

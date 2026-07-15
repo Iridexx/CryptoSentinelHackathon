@@ -20,7 +20,9 @@ class DeviceRegistrationRequest(BaseModel):
     user_id: UUID = DEFAULT_SINGLE_USER_ID
     device_id: str | None = None
     app_version: str | None = None
+    build_number: str | None = None
     locale: str | None = None
+    display_name: str | None = Field(default=None, max_length=120)
 
 
 class DeviceUnregisterRequest(BaseModel):
@@ -80,6 +82,7 @@ class DeviceRecord(BaseModel):
     platform: str
     device_id: str | None
     app_version: str | None
+    display_name: str | None = None
     locale: str | None
     registered_at: str
     updated_at: str
