@@ -237,7 +237,10 @@ async def dev_reset_db(request: ResetDbRequest, session: SessionDep, _: AdminAcc
     settings = get_settings()
     label = (request.backup_name or "").strip() or None
     result = await reset_all_data(
-        session, user_id=str(settings.default_user_id), backup_label=label
+        session,
+        user_id=str(settings.default_user_id),
+        backup_label=label,
+        reset_portfolio_capital_usd=Decimal(str(settings.dry_run_capital_usd)),
     )
 
     # Stato agente al default: riavvia da running e azzera eventuali degraded.

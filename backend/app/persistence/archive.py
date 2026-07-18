@@ -84,6 +84,7 @@ async def reset_all_data(
     *,
     user_id: str,
     backup_label: str | None = None,
+    reset_portfolio_capital_usd: Decimal | None = None,
 ) -> dict:
     """Azzera l'intero dataset di trading dell'utente.
 
@@ -146,6 +147,23 @@ async def reset_all_data(
     await session.execute(delete(PerpPosition).where(PerpPosition.user_id == user_id))
     await session.execute(delete(TradeChartSnapshot).where(TradeChartSnapshot.user_id == user_id))
     await session.execute(delete(PortfolioState).where(PortfolioState.user_id == user_id))
+    if reset_portfolio_capital_usd is not None:
+        session.add(
+            PortfolioState(
+                user_id=user_id,
+                total_equity_usd=reset_portfolio_capital_usd,
+                initial_equity_usd=reset_portfolio_capital_usd,
+                peak_equity_usd=reset_portfolio_capital_usd,
+                drawdown_pct=Decimal("0"),
+                max_drawdown_pct=Decimal("0"),
+                exposure_pct=Decimal("0"),
+                daily_pnl_usd=Decimal("0"),
+                daily_loss_limit_used_pct=Decimal("0"),
+                agent_status="idle",
+                trades_today=0,
+                updated_at=archived_at,
+            )
+        )
 
     await session.commit()
     return {
@@ -153,6 +171,10 @@ async def reset_all_data(
         "archived_run_id": archived_run_id,
         "backup_label": backup_label if archived_run_id else None,
         "deleted": counts,
+        "portfolio_reset": reset_portfolio_capital_usd is not None,
+        "reset_portfolio_capital_usd": (
+            str(reset_portfolio_capital_usd) if reset_portfolio_capital_usd is not None else None
+        ),
     }
 
 

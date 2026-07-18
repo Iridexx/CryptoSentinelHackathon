@@ -580,29 +580,54 @@ async def test_reset_all_data_wipes_everything_and_optionally_backs_up(db) -> No
         )
         await PnlRepository(session).upsert_portfolio(
             USER, total_equity_usd=Decimal("612"), initial_equity_usd=Decimal("500"),
-            peak_equity_usd=Decimal("650"),
+            peak_equity_usd=Decimal("650"), drawdown_pct=Decimal("20.86"),
+            max_drawdown_pct=Decimal("20.86"), daily_loss_limit_used_pct=Decimal("-9"),
+            exposure_pct=Decimal("12.5"), agent_status="running", trades_today=3,
         )
         await session.commit()
 
     async with factory() as session:
-        result = await reset_all_data(session, user_id=USER, backup_label="snap_2026")
+        result = await reset_all_data(
+            session,
+            user_id=USER,
+            backup_label="snap_2026",
+            reset_portfolio_capital_usd=Decimal("500"),
+        )
         runs = await list_archived_runs(session, user_id=USER)
         trades = await SpotTradeRepository(session).list_for_user(USER)
         perps = await PerpPositionRepository(session).open_for_user(USER)
         snapshots = await PnlRepository(session).recent_for_user(USER)
         portfolio = await PnlRepository(session).get_portfolio(USER)
+        view = await ViewService(
+            session,
+            drawdown_cap_pct=-15.0,
+            daily_loss_limit_pct=-8.0,
+            min_portfolio_value_usd=5.0,
+        ).global_view(USER)
 
     # Backup salvato con i conteggi corretti.
     assert result["archived_run_id"] is not None
     assert result["backup_label"] == "snap_2026"
     assert result["deleted"]["spot_trades"] == 1
     assert result["deleted"]["perp_positions"] == 1
+    assert result["portfolio_reset"] is True
+    assert result["reset_portfolio_capital_usd"] == "500"
     assert runs[0]["archive_label"] == "snap_2026"
     # Tutto azzerato.
     assert trades == []
     assert perps == []
     assert snapshots == []
-    assert portfolio is None
+    assert portfolio is not None
+    assert portfolio.total_equity_usd == Decimal("500")
+    assert portfolio.initial_equity_usd == Decimal("500")
+    assert portfolio.peak_equity_usd == Decimal("500")
+    assert portfolio.drawdown_pct == Decimal("0")
+    assert portfolio.max_drawdown_pct == Decimal("0")
+    assert portfolio.daily_loss_limit_used_pct == Decimal("0")
+    assert portfolio.trades_today == 0
+    assert portfolio.agent_status == "idle"
+    assert view.risk_guardrail is not None
+    assert view.risk_guardrail.blocked is False
 
 
 @pytest.mark.asyncio
@@ -718,6 +743,8 @@ async def test_reset_all_data_without_backup_does_not_archive(db) -> None:
         trades = await SpotTradeRepository(session).list_for_user(USER)
 
     assert result["archived_run_id"] is None
+    assert result["portfolio_reset"] is False
+    assert result["reset_portfolio_capital_usd"] is None
     assert runs == []
     assert trades == []
 
