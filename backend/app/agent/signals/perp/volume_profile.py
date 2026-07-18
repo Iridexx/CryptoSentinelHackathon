@@ -90,9 +90,12 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
         # da subito (breakeven + trailing dinamico). Resta None → UI "non attivo".
         trailing_stop = None
         use_lowest = getattr(self.settings, "perp_sl_mode", "atr") == "lowest"
+        lookback = max(2, int(getattr(self.settings, "perp_structural_stop_lookback_candles", 20)))
+        buffer_pct = max(0.0, float(getattr(self.settings, "perp_structural_stop_buffer_pct", 1.10)))
         if side == "long":
             if use_lowest:
-                stop_loss = min(c.low for c in candles[-14:])
+                structural_low = min(c.low for c in candles[-lookback:])
+                stop_loss = structural_low * (1 - buffer_pct / 100)
             elif atr_v is not None:
                 stop_loss = current - atr_v * sl_mult
             else:
@@ -106,7 +109,8 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
                 take_profit_2 = poc
         elif side == "short":
             if use_lowest:
-                stop_loss = max(c.high for c in candles[-14:])
+                structural_high = max(c.high for c in candles[-lookback:])
+                stop_loss = structural_high * (1 + buffer_pct / 100)
             elif atr_v is not None:
                 stop_loss = current + atr_v * sl_mult
             else:

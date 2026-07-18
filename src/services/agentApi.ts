@@ -288,6 +288,10 @@ export interface AgentMobileSettings {
   perp_breakeven_mode: string;
   spot_sl_mode: string;
   perp_sl_mode: string;
+  spot_structural_stop_lookback_candles: number;
+  spot_structural_stop_buffer_pct: number;
+  perp_structural_stop_lookback_candles: number;
+  perp_structural_stop_buffer_pct: number;
   // Spot
   spot_capital_per_trade_pct: number;
   spot_per_trade_pct: number;

@@ -49,7 +49,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
-|   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 14, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
+|   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 20 con buffer percentuale, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
 |   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
@@ -167,7 +167,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
-|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, modalita' stop loss Spot/Perp, credential checks e wallet summary con balance asset non-zero.
+|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, modalita' stop loss Spot/Perp con lookback/buffer strutturale, credential checks e wallet summary con balance asset non-zero.
 |   |   |   |-- observability.py - schemi Step 8 per log viewer dashboard.
 |   |   |   `-- views.py - SpotView, PerpView, GlobalView, ClaudeUsageView, PnlPoint e campi analytics PnL/Sharpe/fee/margine per dashboard/app.
 |   |   |-- services/ - namespace application services.
@@ -196,7 +196,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
 |       |-- unit/test_agent_step6.py - regressioni Step 6/9 per segnali Spot/Perp, risk guardrail, meta-controller, kill switch, daily heartbeat, watchlist scanner e dry-run agent service con persistenza decisione/trade.
 |       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti/applicati live, onboarding validation e wallet multi-network.
-|       |-- unit/test_signal_stop_loss_modes.py - regressioni signal engine per stop loss Spot/Perp in modalita' ATR e Min/Max 14 candele.
+|       |-- unit/test_signal_stop_loss_modes.py - regressioni signal engine per stop loss Spot/Perp in modalita' ATR e Min/Max 20 candele con buffer.
 |       |-- integration/test_market_data_providers.py - regressioni provider market-data, inclusa cache identità su refresh ripetuti dei prezzi.
 |       |-- unit/test_persistence_layer.py - test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, archiviazione dry-run e backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.
@@ -268,7 +268,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con stop loss ATR o Min/Max 14 per Spot/Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con stop loss ATR o Min/Max 20 con buffer per Spot/Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
 |   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket, reply utente, modalita' admin opzionale per risposta/chiusura e uso dello stesso admin token persistito dell'AgentTab.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
@@ -455,6 +455,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Liquidazione Perp informativa | Le posizioni Perp salvano una stima di liquidazione derivata da entry/leva/side; il dettaglio trade la mostra come livello informativo, senza usarla nei grafici o come trigger di uscita. |
 | Equity adjustment separato dal PnL | Versamenti e prelievi aggiornano capitale iniziale/equity e restano tracciati in tabella dedicata, evitando che un deposito storico appaia come profitto o perdita. |
 | Dettaglio trade riproducibile | Alla chiusura viene salvato uno snapshot JSON di candele e livelli, inclusa la liquidazione Perp quando presente; le posizioni aperte usano un grafico live best-effort dallo stesso feed. |
+| Grafici trade chiusi allineati | Il dettaglio trade normalizza le candele per timestamp, taglia lo snapshot alla candela che contiene `closed_at` e aggiunge solo post-close successive al confine gia' mostrato; app e dashboard disegnano la linea di chiusura dopo la candela reale di uscita. |
 | Polling analytics 45s | Dashboard e tab mobile Agente aggiornano automaticamente i dati completi ogni 45 secondi; la tab mobile usa anche un refresh leggero single-flight ogni 15 secondi per Spot/Perp/Global, senza ricaricare wallet o dettagli trade quando un ciclo precedente è ancora in corso. |
 | Step 7 solo additivo | La mobile app esistente resta intatta: le nuove funzioni agente vivono in `AgentTab`, il client API e' separato e `CoinCard` riceve solo prop opzionali per lo stato AI. |
 | Priorita' UI Spot | Dopo conferma organizzatori del 18 giugno, solo i trade Spot contano per il ranking PnL Track 1; le viste Perp restano implementate per completezza architetturale ma non dominano la UI. |

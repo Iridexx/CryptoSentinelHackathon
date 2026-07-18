@@ -21,6 +21,7 @@ from backend.app.agent.signals.perp.binance_klines import BinanceKlineCacheEntry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal
 from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.agent.watchlist import set_selected_watchlist
+from backend.app.api.routes import views as view_routes
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
 from backend.app.persistence.repositories.positions import SpotPositionRepository
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
@@ -705,6 +706,43 @@ async def test_close_generates_chart_snapshot(db) -> None:
     assert payload["entry_price"] == "100"
     assert payload["exit_price"] == "103"
     assert len(payload["candles"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_closed_trade_chart_trims_snapshot_and_dedupes_post_close(monkeypatch) -> None:
+    closed_at = datetime(2026, 7, 18, 10, 57, tzinfo=UTC)
+    chart = {
+        "interval": "5m",
+        "opened_at": datetime(2026, 7, 18, 10, 45, tzinfo=UTC).isoformat(),
+        "closed_at": closed_at.isoformat(),
+        "candles": [
+            {"t": datetime(2026, 7, 18, 10, 55, tzinfo=UTC).isoformat(), "o": 100, "h": 104, "l": 99, "c": 103},
+            {"t": datetime(2026, 7, 18, 11, 0, tzinfo=UTC).isoformat(), "o": 103, "h": 105, "l": 102, "c": 104},
+            {"t": datetime(2026, 7, 18, 10, 50, tzinfo=UTC).isoformat(), "o": 99, "h": 101, "l": 98, "c": 100},
+        ],
+    }
+    normalized = view_routes._normalize_closed_chart(chart)
+    assert [c["t"] for c in normalized["candles"]] == [
+        datetime(2026, 7, 18, 10, 50, tzinfo=UTC).isoformat(),
+        datetime(2026, 7, 18, 10, 55, tzinfo=UTC).isoformat(),
+    ]
+
+    cached = [
+        Candle(timestamp=datetime(2026, 7, 18, 10, 55, tzinfo=UTC), open=100, high=104, low=99, close=103, volume=1),
+        Candle(timestamp=datetime(2026, 7, 18, 11, 0, tzinfo=UTC), open=103, high=105, low=102, close=104, volume=1),
+        Candle(timestamp=datetime(2026, 7, 18, 11, 5, tzinfo=UTC), open=104, high=106, low=103, close=105, volume=1),
+    ]
+    monkeypatch.setattr(view_routes, "_cached_klines", lambda *_, **__: cached)
+    monkeypatch.setattr(view_routes, "datetime", SimpleNamespace(
+        now=lambda _tz: datetime(2026, 7, 18, 11, 10, tzinfo=UTC),
+        fromisoformat=datetime.fromisoformat,
+    ))
+
+    post = await view_routes._fetch_post_close_candles(normalized, "BTC", "spot", count=5)
+    assert [c["t"] for c in post] == [
+        datetime(2026, 7, 18, 11, 0, tzinfo=UTC).isoformat(),
+        datetime(2026, 7, 18, 11, 5, tzinfo=UTC).isoformat(),
+    ]
 
 
 @pytest.mark.asyncio

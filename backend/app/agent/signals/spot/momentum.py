@@ -130,9 +130,12 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 spike_rejected = True
 
         # A (v3): stop calcolato in base alla modalità configurata.
-        # "atr": entry − ATR×mult (default). "lowest": minimo delle ultime 14 candele.
+        # "atr": entry − ATR×mult (default). "lowest": minimo strutturale con buffer verso il basso.
         if getattr(self.settings, "spot_sl_mode", "atr") == "lowest":
-            stop_loss = min(c.low for c in candles[-14:])
+            lookback = max(2, int(getattr(self.settings, "spot_structural_stop_lookback_candles", 20)))
+            buffer_pct = max(0.0, float(getattr(self.settings, "spot_structural_stop_buffer_pct", 1.10)))
+            structural_low = min(c.low for c in candles[-lookback:])
+            stop_loss = structural_low * (1 - buffer_pct / 100)
         else:
             stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
         # B (v3): TP ATR-based, nessuna % fissa. TP1 vicino (parziale), TP2 target finale.

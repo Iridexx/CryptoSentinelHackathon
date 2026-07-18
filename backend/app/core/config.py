@@ -185,6 +185,8 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "relative_volume_threshold": "spot_relative_volume_threshold",
         "atr_stop_multiplier": "spot_atr_stop_multiplier",
         "sl_mode": "spot_sl_mode",
+        "structural_stop_lookback_candles": "spot_structural_stop_lookback_candles",
+        "structural_stop_buffer_pct": "spot_structural_stop_buffer_pct",
         "tp1_atr_multiplier": "spot_tp1_atr_multiplier",
         "tp2_atr_multiplier": "spot_tp2_atr_multiplier",
         "breakeven_enabled": "spot_breakeven_enabled",
@@ -233,6 +235,8 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "value_area_pct": "perp_value_area_pct",
         "atr_stop_multiplier": "perp_atr_stop_multiplier",
         "sl_mode": "perp_sl_mode",
+        "structural_stop_lookback_candles": "perp_structural_stop_lookback_candles",
+        "structural_stop_buffer_pct": "perp_structural_stop_buffer_pct",
         "tp1_atr_multiplier": "perp_tp1_atr_multiplier",
         "tp2_atr_multiplier": "perp_tp2_atr_multiplier",
         "use_poc_for_tp2": "perp_use_poc_for_tp2",
@@ -528,6 +532,8 @@ class Settings(BaseSettings):
     spot_relative_volume_threshold: float = Field(default=1.3, alias="SPOT_RELATIVE_VOLUME_THRESHOLD")
     spot_atr_stop_multiplier: float = Field(default=2.2, alias="SPOT_ATR_STOP_MULTIPLIER")
     spot_sl_mode: str = Field(default="atr", alias="SPOT_SL_MODE")
+    spot_structural_stop_lookback_candles: int = Field(default=20, alias="SPOT_STRUCTURAL_STOP_LOOKBACK_CANDLES")
+    spot_structural_stop_buffer_pct: float = Field(default=1.10, alias="SPOT_STRUCTURAL_STOP_BUFFER_PCT")
     spot_tp1_atr_multiplier: float = Field(default=2.0, alias="SPOT_TP1_ATR_MULTIPLIER")
     spot_tp2_atr_multiplier: float = Field(default=3.5, alias="SPOT_TP2_ATR_MULTIPLIER")
     spot_breakeven_enabled: bool = Field(default=True, alias="SPOT_BREAKEVEN_ENABLED")
@@ -590,6 +596,8 @@ class Settings(BaseSettings):
     # del target ATR; altrimenti resta sul target ATR. Garantisce R:R minimo.
     perp_use_poc_for_tp2: bool = Field(default=True, alias="PERP_USE_POC_FOR_TP2")
     perp_sl_mode: str = Field(default="atr", alias="PERP_SL_MODE")
+    perp_structural_stop_lookback_candles: int = Field(default=20, alias="PERP_STRUCTURAL_STOP_LOOKBACK_CANDLES")
+    perp_structural_stop_buffer_pct: float = Field(default=1.10, alias="PERP_STRUCTURAL_STOP_BUFFER_PCT")
     # ── Protezione posizione perp (breakeven + trailing dinamico sulla leva) ──────
     # Breakeven: a +N×ATR dall'entry lo SL sale a entry (+costi), niente più perdita.
     perp_breakeven_enabled: bool = Field(default=True, alias="PERP_BREAKEVEN_ENABLED")

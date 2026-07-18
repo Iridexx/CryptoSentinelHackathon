@@ -43,6 +43,8 @@ def _spot_settings(sl_mode: str = "atr") -> SimpleNamespace:
         spot_spike_action="skip",
         spot_spike_reduced_size_fraction=0.5,
         spot_sl_mode=sl_mode,
+        spot_structural_stop_lookback_candles=20,
+        spot_structural_stop_buffer_pct=1.10,
         spot_atr_stop_multiplier=2.2,
         spot_tp1_atr_multiplier=2.0,
         spot_tp2_atr_multiplier=3.5,
@@ -60,6 +62,8 @@ def _perp_settings(sl_mode: str = "atr", direction: str = "long_short") -> Simpl
         perp_value_area_pct=68.0,
         perp_direction_mode=direction,
         perp_sl_mode=sl_mode,
+        perp_structural_stop_lookback_candles=20,
+        perp_structural_stop_buffer_pct=1.10,
         perp_atr_stop_multiplier=0.8,
         perp_tp1_atr_multiplier=2.5,
         perp_tp2_atr_multiplier=4.0,
@@ -71,15 +75,16 @@ def _perp_settings(sl_mode: str = "atr", direction: str = "long_short") -> Simpl
 
 
 @pytest.mark.asyncio
-async def test_spot_lowest_stop_mode_uses_last_14_candle_low() -> None:
+async def test_spot_lowest_stop_mode_uses_last_20_candle_low_with_downside_buffer() -> None:
     candles = _candles(60)
+    candles[-19] = Candle(candles[-19].timestamp, 101.0, 102.0, 88.25, 101.5, 1000.0)
     candles[-7] = Candle(candles[-7].timestamp, 101.0, 102.0, 91.25, 101.5, 1000.0)
 
     result = await SpotMomentumSignal(_spot_settings("lowest")).evaluate(
         {"asset": "ETH", "candles": candles, "btc_context_score": 1.0, "sentiment_score": 1.0}
     )
 
-    assert result["stop_loss"] == 91.25
+    assert result["stop_loss"] == pytest.approx(88.25 * 0.989)
 
 
 @pytest.mark.asyncio
@@ -93,7 +98,7 @@ async def test_perp_lowest_stop_mode_uses_low_for_long_and_high_for_short() -> N
     )
 
     assert long_result["side"] == "long"
-    assert long_result["stop_loss"] == min(candle.low for candle in long_candles[-14:])
+    assert long_result["stop_loss"] == pytest.approx(min(candle.low for candle in long_candles[-20:]) * 0.989)
 
     short_candles = _candles(30, base=100.0, volume=2000.0)
     short_candles[-2] = Candle(short_candles[-2].timestamp, 104.0, 111.5, 103.0, 110.0, 2000.0)
@@ -104,4 +109,4 @@ async def test_perp_lowest_stop_mode_uses_low_for_long_and_high_for_short() -> N
     )
 
     assert short_result["side"] == "short"
-    assert short_result["stop_loss"] == max(candle.high for candle in short_candles[-14:])
+    assert short_result["stop_loss"] == pytest.approx(max(candle.high for candle in short_candles[-20:]) * 1.011)

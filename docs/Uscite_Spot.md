@@ -10,7 +10,7 @@ Lo spot e' solo long: l'agente compra e poi rivende. Il comportamento corrente n
 
 | Livello | Formula corrente | Default | Uso |
 |---|---|---:|---|
-| Stop Loss | `entry - ATR * atr_stop_multiplier` oppure minimo ultime 14 candele se `spot_sl_mode=lowest` | `2.2 ATR` | uscita in perdita |
+| Stop Loss | `entry - ATR * atr_stop_multiplier` oppure minimo ultime 20 candele con buffer se `spot_sl_mode=lowest` | `2.2 ATR` oppure `1.10%` sotto minimo20 | uscita in perdita |
 | Take Profit 1 | `entry + ATR * tp1_atr_multiplier` | `2.0 ATR` | chiusura parziale |
 | Take Profit 2 | `entry + ATR * tp2_atr_multiplier` | `3.5 ATR` | chiusura finale dopo TP1 |
 | Breakeven | `entry + costi round-trip + buffer` | trigger `0.6 ATR`, buffer `0.1%` | protezione trade in profitto |
@@ -23,7 +23,9 @@ La modalita' stop loss e' selezionabile dal setup mobile:
 | Modalita' | Regola |
 |---|---|
 | `spot_sl_mode: atr` | `entry - ATR(14) * spot_atr_stop_multiplier` |
-| `spot_sl_mode: lowest` | minimo delle ultime 14 candele |
+| `spot_sl_mode: lowest` | `minimo ultime 20 candele * (1 - structural_stop_buffer_pct / 100)` |
+
+Default strutturale: `structural_stop_lookback_candles: 20`, `structural_stop_buffer_pct: 1.10`.
 
 ## 2. Ordine di controllo
 

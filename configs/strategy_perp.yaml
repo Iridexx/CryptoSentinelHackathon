@@ -3,6 +3,9 @@
 perp:
   direction_mode: long_short
   value_area_pct: 68.0
+  sl_mode: atr               # "atr" | "lowest"; lowest usa minimo/massimo strutturale
+  structural_stop_lookback_candles: 20
+  structural_stop_buffer_pct: 1.10 # long: minimo_20 -1.10%; short: massimo_20 +1.10%
   # SL/TP ancorati all'entry via ATR(14): R:R controllato a prescindere dalla leva.
   atr_stop_multiplier: 0.8   # SL = entry ∓ 0.8×ATR
   tp1_atr_multiplier: 2.5    # TP1 = entry ± 2.5×ATR (R:R ~1.67)

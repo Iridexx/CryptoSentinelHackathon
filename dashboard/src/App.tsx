@@ -1149,14 +1149,19 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   const cx = (i: number) => padL + colW * (i + 0.5);
 
   const ts = (s: string) => new Date(s).getTime();
-  const nearest = (target: number, pool: typeof candles) => {
+  const nearest = (target: number, pool: typeof allCandles) => {
     let best = 0;
     let bestD = Infinity;
     pool.forEach((c, i) => { const d = Math.abs(ts(c.t) - target); if (d < bestD) { bestD = d; best = i; } });
     return best;
   };
-  const entryIdx = nearest(ts(chart.opened_at), candles);
-  const exitIdx = nearest(ts(chart.closed_at), candles);
+  const atOrBefore = (target: number, pool: typeof allCandles) => {
+    let best = -1;
+    pool.forEach((c, i) => { if (ts(c.t) <= target) best = i; });
+    return best >= 0 ? best : nearest(target, pool);
+  };
+  const entryIdx = nearest(ts(chart.opened_at), allCandles);
+  const exitIdx = atOrBefore(ts(chart.closed_at), allCandles);
   const exitGood = exit >= entry;
 
   const levelLine = (price: number | null, color: string, dash: string) =>
@@ -1178,8 +1183,8 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
     ? allCandles.map((_, i) => i)
     : [0, Math.floor(last / 3), Math.floor((2 * last) / 3), last];
 
-  // Linea verticale di separazione pre/post close.
-  const closeLineX = postClose.length > 0 ? padL + colW * candles.length : null;
+  // Linea verticale subito dopo la candela di chiusura.
+  const closeLineX = postClose.length > 0 ? padL + colW * (exitIdx + 1) : null;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>

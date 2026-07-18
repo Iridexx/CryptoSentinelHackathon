@@ -26,6 +26,10 @@ class AgentMobileSettings(BaseModel):
     perp_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
     spot_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")
     perp_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")
+    spot_structural_stop_lookback_candles: int = Field(default=20, ge=2, le=100)
+    spot_structural_stop_buffer_pct: float = Field(default=1.10, ge=0.0, le=20.0)
+    perp_structural_stop_lookback_candles: int = Field(default=20, ge=2, le=100)
+    perp_structural_stop_buffer_pct: float = Field(default=1.10, ge=0.0, le=20.0)
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

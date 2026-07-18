@@ -10,7 +10,7 @@ Il perp supporta long e short con leva. Il comportamento corrente combina Volume
 
 | Livello | LONG | SHORT | Default |
 |---|---|---|---:|
-| Stop Loss | `entry - ATR * atr_stop_multiplier` oppure minimo ultime 14 candele | `entry + ATR * atr_stop_multiplier` oppure massimo ultime 14 candele | `0.8 ATR` |
+| Stop Loss | `entry - ATR * atr_stop_multiplier` oppure minimo ultime 20 candele con buffer | `entry + ATR * atr_stop_multiplier` oppure massimo ultime 20 candele con buffer | `0.8 ATR` oppure `1.10%` oltre Min/Max20 |
 | TP1 | `entry + ATR * tp1_atr_multiplier` | `entry - ATR * tp1_atr_multiplier` | `2.5 ATR` |
 | TP2 | target ATR o POC se piu' ambizioso | target ATR o POC se piu' ambizioso | `4.0 ATR` |
 | Liquidazione stimata | `entry * (1 - 1 / leva)` | `entry * (1 + 1 / leva)` | informativa |
@@ -24,7 +24,9 @@ La modalita' stop loss e' selezionabile dal setup mobile:
 | Modalita' | LONG | SHORT |
 |---|---|---|
 | `perp_sl_mode: atr` | `entry - ATR(14) * perp_atr_stop_multiplier` | `entry + ATR(14) * perp_atr_stop_multiplier` |
-| `perp_sl_mode: lowest` | minimo delle ultime 14 candele | massimo delle ultime 14 candele |
+| `perp_sl_mode: lowest` | `minimo ultime 20 candele * (1 - structural_stop_buffer_pct / 100)` | `massimo ultime 20 candele * (1 + structural_stop_buffer_pct / 100)` |
+
+Default strutturale: `structural_stop_lookback_candles: 20`, `structural_stop_buffer_pct: 1.10`.
 
 La liquidazione stimata viene salvata sulla posizione Perp, esposta nel dettaglio trade e disegnata come livello sul grafico. Non e' un trigger di chiusura gestito dall'agente: serve a capire quanto margine c'e' tra stop loss operativo e rischio di liquidazione.
 

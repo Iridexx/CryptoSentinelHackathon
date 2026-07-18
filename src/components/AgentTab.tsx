@@ -94,6 +94,10 @@ const defaultSettings: AgentMobileSettings = {
   perp_breakeven_mode: 'atr' as const,
   spot_sl_mode: 'atr' as const,
   perp_sl_mode: 'atr' as const,
+  spot_structural_stop_lookback_candles: 20,
+  spot_structural_stop_buffer_pct: 1.10,
+  perp_structural_stop_lookback_candles: 20,
+  perp_structural_stop_buffer_pct: 1.10,
   spot_capital_per_trade_pct: 6,
   spot_per_trade_pct: 1.5,
   spot_max_open_positions: 3,
@@ -1406,7 +1410,7 @@ const SetupPane: FC<{
           onChange={(v) => patch({ spot_sl_mode: v })}
           options={[
             { value: 'atr', label: 'ATR (attuale)' },
-            { value: 'lowest', label: 'Minimo 14 candele' },
+            { value: 'lowest', label: 'Minimo 20 candele' },
           ]}
         />
         <SelectInput
@@ -1415,7 +1419,7 @@ const SetupPane: FC<{
           onChange={(v) => patch({ perp_sl_mode: v })}
           options={[
             { value: 'atr', label: 'ATR (attuale)' },
-            { value: 'lowest', label: 'Min/Max 14 candele' },
+            { value: 'lowest', label: 'Min/Max 20 candele' },
           ]}
         />
         <ToggleInput
@@ -1469,6 +1473,7 @@ const SetupPane: FC<{
           <NumberInput label="Vol trigger %" value={settings.spot_volatility_trigger_pct} onChange={(spot_volatility_trigger_pct) => patch({ spot_volatility_trigger_pct })} />
           <NumberInput label="Rel volume" value={settings.spot_relative_volume_threshold} step={0.1} onChange={(spot_relative_volume_threshold) => patch({ spot_relative_volume_threshold })} />
           <NumberInput label="ATR stop" value={settings.spot_atr_stop_multiplier} step={0.1} onChange={(spot_atr_stop_multiplier) => patch({ spot_atr_stop_multiplier })} />
+          <NumberInput label="Buffer Min20 %" value={settings.spot_structural_stop_buffer_pct} step={0.1} onChange={(spot_structural_stop_buffer_pct) => patch({ spot_structural_stop_buffer_pct })} />
           <NumberInput label="Chiudi a TP1 %" value={settings.spot_tp1_close_pct} step={5} onChange={(spot_tp1_close_pct) => patch({ spot_tp1_close_pct })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.spot_fee_mode} onChange={(v) => patch({ spot_fee_mode: v as 'all' | 'none' })} options={[
             { value: 'all', label: 'Swap fee + Slippage — 0.15%' },
@@ -1501,6 +1506,7 @@ const SetupPane: FC<{
           <NumberInput label="Leva max (bassa vol.)" value={settings.perp_max_leverage} onChange={(perp_max_leverage) => patch({ perp_max_leverage })} />
           <NumberInput label="Value area %" value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
           <NumberInput label="ATR stop" value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
+          <NumberInput label="Buffer Min/Max20 %" value={settings.perp_structural_stop_buffer_pct} step={0.1} onChange={(perp_structural_stop_buffer_pct) => patch({ perp_structural_stop_buffer_pct })} />
           <SelectInput label="Trailing ATR (adatta alla leva)" value={settings.perp_trailing_mode} onChange={(v) => patch({ perp_trailing_mode: v as 'largo' | 'stretto' })} options={[
             { value: 'largo', label: 'Largo — lascia correre' },
             { value: 'stretto', label: 'Stretto — blocca prima' },
@@ -1557,16 +1563,21 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const colW = (plotR - padX) / allCandles.length;
   const cx = (i: number) => padX + colW * (i + 0.5);
 
-  // Marker temporali: candela piu' vicina ad apertura/chiusura (solo su candles pre-close).
+  // Marker temporali: candela piu' vicina ad apertura/chiusura sull'intero grafico.
   const ts = (s: string) => new Date(s).getTime();
-  const nearest = (target: number, pool: typeof candles) => {
+  const nearest = (target: number, pool: typeof allCandles) => {
     let best = 0;
     let bestD = Infinity;
     pool.forEach((c, i) => { const d = Math.abs(ts(c.t) - target); if (d < bestD) { bestD = d; best = i; } });
     return best;
   };
-  const entryIdx = nearest(ts(chart.opened_at), candles);
-  const exitIdx = nearest(ts(chart.closed_at), candles);
+  const atOrBefore = (target: number, pool: typeof allCandles) => {
+    let best = -1;
+    pool.forEach((c, i) => { if (ts(c.t) <= target) best = i; });
+    return best >= 0 ? best : nearest(target, pool);
+  };
+  const entryIdx = nearest(ts(chart.opened_at), allCandles);
+  const exitIdx = atOrBefore(ts(chart.closed_at), allCandles);
   const exitGood = exit >= entry;
 
   // Etichette asse Y (prezzo).
@@ -1594,8 +1605,8 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       <line x1={padX} x2={plotR} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
     );
 
-  // Linea verticale tratteggiata che separa le candele post-close.
-  const closeLineX = postClose.length > 0 ? cx(candles.length - 0.5) : null;
+  // Linea verticale tratteggiata subito dopo la candela di chiusura.
+  const closeLineX = postClose.length > 0 ? cx(exitIdx + 0.5) : null;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>

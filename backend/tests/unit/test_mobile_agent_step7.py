@@ -63,6 +63,8 @@ def settings(**overrides):
         spot_relative_volume_threshold=1.8,
         spot_breakeven_enabled=True,
         spot_sl_mode="atr",
+        spot_structural_stop_lookback_candles=20,
+        spot_structural_stop_buffer_pct=1.10,
         spot_atr_stop_multiplier=1.5,
         spot_tp1_atr_multiplier=2.0,
         spot_tp2_atr_multiplier=3.5,
@@ -111,6 +113,8 @@ def settings(**overrides):
         perp_tp2_atr_multiplier=4.0,
         perp_use_poc_for_tp2=True,
         perp_sl_mode="atr",
+        perp_structural_stop_lookback_candles=20,
+        perp_structural_stop_buffer_pct=1.10,
         perp_time_stop_hours=8,
         cmc_api_key="configured",
         twak_access_id="configured",
@@ -151,12 +155,16 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
         perp_breakeven_enabled=True,
         spot_sl_mode="lowest",
         perp_sl_mode="lowest",
+        spot_structural_stop_buffer_pct=1.25,
+        perp_structural_stop_buffer_pct=1.35,
     )
     live_settings = settings()
     updated = await update_mobile_agent_settings(payload, live_settings, AuthScope.ADMIN)
     assert updated.persisted is True
     assert live_settings.spot_sl_mode == "lowest"
     assert live_settings.perp_sl_mode == "lowest"
+    assert live_settings.spot_structural_stop_buffer_pct == 1.25
+    assert live_settings.perp_structural_stop_buffer_pct == 1.35
 
     loaded = await mobile_agent_settings(settings(), AuthScope.READ)
     assert loaded.source == "runtime"
@@ -169,6 +177,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert loaded.settings.perp_breakeven_enabled is True
     assert loaded.settings.spot_sl_mode == "lowest"
     assert loaded.settings.perp_sl_mode == "lowest"
+    assert loaded.settings.spot_structural_stop_buffer_pct == 1.25
+    assert loaded.settings.perp_structural_stop_buffer_pct == 1.35
 
 
 @pytest.mark.asyncio
