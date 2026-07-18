@@ -1273,7 +1273,7 @@ const SetupPane: FC<{
           <button onClick={() => onKill('soft_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-yellow/20 px-2 py-2.5 text-xs font-semibold text-accent-yellow disabled:opacity-40">Soft</button>
           <button onClick={() => onKill('hard_stop')} disabled={!adminToken || saving} className="rounded-lg bg-accent-red/20 px-2 py-2.5 text-xs font-semibold text-accent-red disabled:opacity-40">Hard</button>
         </div>
-        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
+        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token salvato.</p>}
       </section>
 
       <section className="rounded-xl border border-accent-red/30 bg-dark-800 px-4 py-4 space-y-3">
@@ -1295,7 +1295,7 @@ const SetupPane: FC<{
         >
           ▶ Riprendi agente
         </button>
-        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
+        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token salvato.</p>}
       </section>
 
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
@@ -1320,7 +1320,7 @@ const SetupPane: FC<{
             Applica
           </button>
         </div>
-        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token di sessione.</p>}
+        {!adminToken && <p className="text-xs text-gray-600">Richiede admin token salvato.</p>}
       </section>
 
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">

@@ -49,7 +49,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
-|   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
+|   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 14, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
 |   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
@@ -167,7 +167,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
-|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, credential checks e wallet summary con balance asset non-zero.
+|   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, modalita' stop loss Spot/Perp, credential checks e wallet summary con balance asset non-zero.
 |   |   |   |-- observability.py - schemi Step 8 per log viewer dashboard.
 |   |   |   `-- views.py - SpotView, PerpView, GlobalView, ClaudeUsageView, PnlPoint e campi analytics PnL/Sharpe/fee/margine per dashboard/app.
 |   |   |-- services/ - namespace application services.
@@ -195,7 +195,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_encrypt_wallet_script.py - verifica output cifrato e azzeramento buffer chiave.
 |       |-- unit/test_device_alert_separation.py - regressione isolamento per-device e alert crossing con riarmo percentuale.
 |       |-- unit/test_agent_step6.py - regressioni Step 6/9 per segnali Spot/Perp, risk guardrail, meta-controller, kill switch, daily heartbeat, watchlist scanner e dry-run agent service con persistenza decisione/trade.
-|       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti, onboarding validation e wallet multi-network.
+|       |-- unit/test_mobile_agent_step7.py - regressioni Step 7 per settings mobile persistiti/applicati live, onboarding validation e wallet multi-network.
+|       |-- unit/test_signal_stop_loss_modes.py - regressioni signal engine per stop loss Spot/Perp in modalita' ATR e Min/Max 14 candele.
 |       |-- integration/test_market_data_providers.py - regressioni provider market-data, inclusa cache identità su refresh ripetuti dei prezzi.
 |       |-- unit/test_persistence_layer.py - test async: check_db, migrazione idempotente, x402 budget, SpotTrade dual timestamp, PerpPosition leverage/liquidation, portfolio upsert, decision reasoning, GlobalView, SpotView/PerpView, archiviazione dry-run e backup.
 |       `-- integration/ - gate Step 3 e API execution Step 4.
@@ -245,6 +246,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_docs_code_reconciliation_2026-06-26.md - report ricognizione codice e riallineamento documentazione.
 |       |-- report_fix_market_regression.md - report regressione prezzi preferiti e lentezza market-data.
 |       |-- report_support_tickets_2026-07-15.md - report ticket supporto in-app e dashboard.
+|       |-- report_stop_loss_mode_toggle_2026-07-18.md - report fix toggle stop loss ATR/Min-Max 14.
 |       `-- report_config_refactor.md - report task intermedio ambiente/config.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
 |   |-- index.html - entrypoint HTML dashboard.
@@ -266,8 +268,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con ATR stop Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, wallet caricati solo nella vista dedicata ed empty state dedicati.
-|   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket, reply utente e modalita' admin opzionale per risposta/chiusura.
+|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con stop loss ATR o Min/Max 14 per Spot/Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket, reply utente, modalita' admin opzionale per risposta/chiusura e uso dello stesso admin token persistito dell'AgentTab.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.
@@ -496,7 +498,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | GitHub Releases | Gli step release sono non bloccanti; se falliscono, controllare il job ma scaricare comunque l'APK dagli artifact CI. |
 | Firebase Android app | Creare/scaricare un nuovo `google-services.json` per package `com.cryptosentinelai.app`, salvarlo come GitHub Secret `GOOGLE_SERVICES_JSON` in base64 e non committarlo. |
 | Step 5 | Completato: readiness DB con SELECT 1 + latency; migrazione JSON→DB (FCM, alert, x402, provider selector); schema ORM completo; 16 test passed. |
-| Step 7 | Nuova tab mobile agente additiva; verificare su APK/dispositivo reale layout, token admin session-only, onboarding validation e kill switch contro backend avviato. |
+| Step 7 | Nuova tab mobile agente additiva; verificare su APK/dispositivo reale layout, admin token persistito localmente, onboarding validation e kill switch contro backend avviato. |
 | Documentazione uscite | Aggiornata al comportamento corrente: livelli ATR, breakeven con costi+buffer, trailing ATR/dinamico, TP1 parziale e time stop ATR-aware/orario. |
 | Step 3 CMC reale | Verificato dall'utente con chiave esportata nel processo: `1 passed, 9 deselected in 3.71s`, senza leggere `.env`. |
 | Step 3 i18n | Le chiavi backend Step 3 sono EN/IT; la conversione completa dei testi legacy frontend resta da chiudere prima di dichiarare lo Step 3 completamente raggiunto. |

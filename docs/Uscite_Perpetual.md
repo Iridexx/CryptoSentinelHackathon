@@ -10,7 +10,7 @@ Il perp supporta long e short con leva. Il comportamento corrente combina Volume
 
 | Livello | LONG | SHORT | Default |
 |---|---|---|---:|
-| Stop Loss | `entry - ATR * atr_stop_multiplier` | `entry + ATR * atr_stop_multiplier` | `1.5 ATR` |
+| Stop Loss | `entry - ATR * atr_stop_multiplier` oppure minimo ultime 14 candele | `entry + ATR * atr_stop_multiplier` oppure massimo ultime 14 candele | `0.8 ATR` |
 | TP1 | `entry + ATR * tp1_atr_multiplier` | `entry - ATR * tp1_atr_multiplier` | `2.5 ATR` |
 | TP2 | target ATR o POC se piu' ambizioso | target ATR o POC se piu' ambizioso | `4.0 ATR` |
 | Liquidazione stimata | `entry * (1 - 1 / leva)` | `entry * (1 + 1 / leva)` | informativa |
@@ -18,6 +18,13 @@ Il perp supporta long e short con leva. Il comportamento corrente combina Volume
 | Trailing | estremo favorevole `- ATR * mult` | estremo favorevole `+ ATR * mult` | dinamico sulla leva |
 
 Se `use_poc_for_tp2` e' attivo, TP2 usa il POC quando e' piu' ambizioso del target ATR: sopra il target ATR per long, sotto il target ATR per short.
+
+La modalita' stop loss e' selezionabile dal setup mobile:
+
+| Modalita' | LONG | SHORT |
+|---|---|---|
+| `perp_sl_mode: atr` | `entry - ATR(14) * perp_atr_stop_multiplier` | `entry + ATR(14) * perp_atr_stop_multiplier` |
+| `perp_sl_mode: lowest` | minimo delle ultime 14 candele | massimo delle ultime 14 candele |
 
 La liquidazione stimata viene salvata sulla posizione Perp, esposta nel dettaglio trade e disegnata come livello sul grafico. Non e' un trigger di chiusura gestito dall'agente: serve a capire quanto margine c'e' tra stop loss operativo e rischio di liquidazione.
 
@@ -92,7 +99,7 @@ Il time stop perp resta orario: con `time_stop_hours: 8`, una posizione aperta o
 
 | Parametro | Valore attuale |
 |---|---:|
-| `atr_stop_multiplier` | `1.5` |
+| `atr_stop_multiplier` | `0.8` |
 | `tp1_atr_multiplier` | `2.5` |
 | `tp2_atr_multiplier` | `4.0` |
 | `use_poc_for_tp2` | `true` |

@@ -201,6 +201,8 @@ type DevLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type SupportMode = 'user' | 'admin';
 
 interface Props {
+  adminToken: string;
+  onAdminToken: (value: string) => void;
   refreshInterval: number;
   onIntervalChange: (ms: number) => void;
   favoritesCount: number;
@@ -226,6 +228,8 @@ interface Props {
 }
 
 const SettingsTab: FC<Props> = ({
+  adminToken,
+  onAdminToken,
   refreshInterval,
   onIntervalChange,
   favoritesCount,
@@ -259,7 +263,6 @@ const SettingsTab: FC<Props> = ({
   const [showToken, setShowToken] = useState(false);
   const [mergeState, setMergeState] = useState<'idle' | 'merging' | 'done' | 'error'>('idle');
   const [mergeError, setMergeError] = useState('');
-  const [adminToken, setAdminToken] = useState('');
   const [providerState, setProviderState] = useState<ProviderSelectionResponse | null>(null);
   const [providerLoadState, setProviderLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [resetState, setResetState] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
@@ -1462,8 +1465,8 @@ const SettingsTab: FC<Props> = ({
                 <input
                   type="password"
                   value={adminToken}
-                  onChange={(event) => setAdminToken(event.target.value)}
-                  placeholder="Admin token (session only)"
+                  onChange={(event) => onAdminToken(event.target.value)}
+                  placeholder="Admin token salvato"
                   autoComplete="off"
                   className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-accent-blue font-mono"
                 />

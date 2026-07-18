@@ -89,7 +89,7 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
         # Il trailing non viene più seminato all'apertura: lo gestisce il service
         # da subito (breakeven + trailing dinamico). Resta None → UI "non attivo".
         trailing_stop = None
-        use_lowest = self.settings.perp_sl_mode == "lowest"
+        use_lowest = getattr(self.settings, "perp_sl_mode", "atr") == "lowest"
         if side == "long":
             if use_lowest:
                 stop_loss = min(c.low for c in candles[-14:])

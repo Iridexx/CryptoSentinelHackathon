@@ -8,6 +8,7 @@
 - Permesso all'admin di vedere i ticket da dashboard e app, rispondere, segnare risolto e chiudere.
 - Aggiunta archiviazione admin: long-press/context menu in app, rimozione dalle liste app e archivio consultabile solo da dashboard.
 - Corretto il filtro utente: i ticket restano visibili per `user_id` anche se cambia il `device_id`; il device id rimane solo associazione device/notifiche.
+- Reso persistente l'admin token mobile: Agent e Settings condividono lo stesso valore salvato localmente.
 - Aggiunto client frontend dedicato e test backend di integrazione.
 
 ## 2. COME È STATO FATTO
@@ -20,6 +21,7 @@
 - Aggiornata la dashboard con tab Support, vista Active/Archive e azioni admin.
 - Esteso lo stato ticket con `archived`, escluso dalle liste utente/admin app e richiedibile esplicitamente dalla dashboard.
 - Rimosso il `device_id` come filtro di proprieta' dei ticket utente, mantenendolo come metadato/sender id.
+- `SettingsTab` non mantiene piu' un admin token solo in memoria, ma riceve quello persistito dalla root app.
 
 ## 3. COSA È STATO VERIFICATO
 

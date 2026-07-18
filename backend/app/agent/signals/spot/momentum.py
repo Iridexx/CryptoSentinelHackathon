@@ -131,7 +131,7 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
 
         # A (v3): stop calcolato in base alla modalità configurata.
         # "atr": entry − ATR×mult (default). "lowest": minimo delle ultime 14 candele.
-        if self.settings.spot_sl_mode == "lowest":
+        if getattr(self.settings, "spot_sl_mode", "atr") == "lowest":
             stop_loss = min(c.low for c in candles[-14:])
         else:
             stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier

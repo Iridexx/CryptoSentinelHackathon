@@ -10,13 +10,20 @@ Lo spot e' solo long: l'agente compra e poi rivende. Il comportamento corrente n
 
 | Livello | Formula corrente | Default | Uso |
 |---|---|---:|---|
-| Stop Loss | `entry - ATR * atr_stop_multiplier` | `2.2 ATR` | uscita in perdita |
+| Stop Loss | `entry - ATR * atr_stop_multiplier` oppure minimo ultime 14 candele se `spot_sl_mode=lowest` | `2.2 ATR` | uscita in perdita |
 | Take Profit 1 | `entry + ATR * tp1_atr_multiplier` | `2.0 ATR` | chiusura parziale |
 | Take Profit 2 | `entry + ATR * tp2_atr_multiplier` | `3.5 ATR` | chiusura finale dopo TP1 |
 | Breakeven | `entry + costi round-trip + buffer` | trigger `0.6 ATR`, buffer `0.1%` | protezione trade in profitto |
 | Trailing | `max_price - ATR * trailing_multiplier` | `2.5 ATR`, cappato a TP1 | segue il massimo favorevole |
 
 I costi dry-run spot sono stimati in `backend/app/execution/spot_fees.py`: swap fee PancakeSwap V3 e slippage simulato. Se `breakeven_offset_costs` e' attivo, lo stop a breakeven copre anche fee/slippage di apertura e chiusura.
+
+La modalita' stop loss e' selezionabile dal setup mobile:
+
+| Modalita' | Regola |
+|---|---|
+| `spot_sl_mode: atr` | `entry - ATR(14) * spot_atr_stop_multiplier` |
+| `spot_sl_mode: lowest` | minimo delle ultime 14 candele |
 
 ## 2. Ordine di controllo
 

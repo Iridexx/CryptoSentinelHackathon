@@ -907,6 +907,8 @@ export default function App() {
 
           {tab === 'settings' && (
             <SettingsTab
+              adminToken={adminToken}
+              onAdminToken={handleAdminTokenChange}
               refreshInterval={refreshInterval}
               onIntervalChange={handleIntervalChange}
               favoritesCount={favorites.size}
