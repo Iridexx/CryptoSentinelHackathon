@@ -327,6 +327,25 @@ async def test_global_view_assembles_from_portfolio(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_global_view_without_portfolio_uses_base_equity(db) -> None:
+    factory = get_session_factory()
+    async with factory() as session:
+        view = await ViewService(
+            session,
+            drawdown_cap_pct=-15.0,
+            daily_loss_limit_pct=-8.0,
+            min_portfolio_value_usd=5.0,
+            base_equity_usd=Decimal("200"),
+        ).global_view(USER)
+
+    assert view.total_equity_usd == Decimal("200")
+    assert view.initial_equity_usd == Decimal("200")
+    assert view.drawdown_pct == Decimal("0")
+    assert view.max_drawdown_pct == Decimal("0")
+    assert view.risk_guardrail is None
+
+
+@pytest.mark.asyncio
 async def test_global_view_perp_exposure_is_margin_not_notional(db) -> None:
     """L'esposizione perp deve essere il MARGINE (nozionale/leva), non il nozionale,
     così riflette il capitale realmente consumato dall'equity."""

@@ -55,11 +55,13 @@ class ViewService:
         drawdown_cap_pct: float = -15.0,
         daily_loss_limit_pct: float = -8.0,
         min_portfolio_value_usd: float = 5.0,
+        base_equity_usd: Decimal | float | str = Decimal("0"),
     ) -> None:
         self._session = session
         self._drawdown_cap_pct = drawdown_cap_pct
         self._daily_loss_limit_pct = daily_loss_limit_pct
         self._min_portfolio_value_usd = min_portfolio_value_usd
+        self._base_equity_usd = Decimal(str(base_equity_usd))
 
     async def spot_view(self, user_id: str) -> SpotView:
         pos_repo = SpotPositionRepository(self._session)
@@ -236,9 +238,10 @@ class ViewService:
         total_fees_usd = fees_spot + fees_perp
 
         if portfolio is None:
+            base_equity = self._base_equity_usd
             return GlobalView(
-                total_equity_usd=Decimal("0"),
-                initial_equity_usd=Decimal("0"),
+                total_equity_usd=base_equity,
+                initial_equity_usd=base_equity,
                 pnl_total_usd=realized + unrealized,
                 pnl_total_pct=0.0,
                 realized_pnl_usd=realized,

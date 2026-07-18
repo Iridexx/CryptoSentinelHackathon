@@ -36,6 +36,7 @@ async def spot_view(
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
         min_portfolio_value_usd=settings.min_portfolio_value_usd,
+        base_equity_usd=Decimal(str(settings.dry_run_capital_usd)),
     )
     return await service.spot_view(str(settings.default_user_id))
 
@@ -53,6 +54,7 @@ async def perp_view(
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
         min_portfolio_value_usd=settings.min_portfolio_value_usd,
+        base_equity_usd=Decimal(str(settings.dry_run_capital_usd)),
     )
     return await service.perp_view(str(settings.default_user_id))
 
@@ -70,6 +72,7 @@ async def global_view(
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
         min_portfolio_value_usd=settings.min_portfolio_value_usd,
+        base_equity_usd=Decimal(str(settings.dry_run_capital_usd)),
     )
     return await service.global_view(str(settings.default_user_id))
 
@@ -144,7 +147,11 @@ async def asset_breakdown(
     """PnL breakdown by asset."""
 
     user_id = str(settings.default_user_id)
-    portfolio = await ViewService(session, drawdown_cap_pct=settings.risk_max_drawdown_pct).global_view(user_id)
+    portfolio = await ViewService(
+        session,
+        drawdown_cap_pct=settings.risk_max_drawdown_pct,
+        base_equity_usd=Decimal(str(settings.dry_run_capital_usd)),
+    ).global_view(user_id)
     current_equity = Decimal(portfolio.total_equity_usd or 0)
     if market == "spot":
         trades = list((await session.execute(select(SpotTrade).where(SpotTrade.user_id == user_id))).scalars().all())
