@@ -27,6 +27,7 @@ from backend.app.schemas.views import (
     PerpTradeView,
     PerpView,
     PnlPoint,
+    RiskGuardrailView,
     SpotPositionView,
     SpotTradeView,
     SpotView,
@@ -47,9 +48,18 @@ def _market_risk_off(user_id: str) -> bool:
 class ViewService:
     """Assembles the Spot / Perp / Global dashboard payloads."""
 
-    def __init__(self, session: AsyncSession, *, drawdown_cap_pct: float = -15.0) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        drawdown_cap_pct: float = -15.0,
+        daily_loss_limit_pct: float = -8.0,
+        min_portfolio_value_usd: float = 5.0,
+    ) -> None:
         self._session = session
         self._drawdown_cap_pct = drawdown_cap_pct
+        self._daily_loss_limit_pct = daily_loss_limit_pct
+        self._min_portfolio_value_usd = min_portfolio_value_usd
 
     async def spot_view(self, user_id: str) -> SpotView:
         pos_repo = SpotPositionRepository(self._session)
@@ -249,6 +259,7 @@ class ViewService:
                 trades_today=0,
                 open_spot_positions=len(open_spot),
                 open_perp_positions=len(open_perp),
+                risk_guardrail=None,
                 pnl_history=[],
             )
 
@@ -286,6 +297,14 @@ class ViewService:
             trades_today=portfolio.trades_today,
             open_spot_positions=len(open_spot),
             open_perp_positions=len(open_perp),
+            risk_guardrail=_risk_guardrail(
+                total_equity=total_equity,
+                drawdown_pct=portfolio.drawdown_pct,
+                drawdown_cap_pct=self._drawdown_cap_pct,
+                daily_loss_used_pct=portfolio.daily_loss_limit_used_pct,
+                daily_loss_limit_pct=self._daily_loss_limit_pct,
+                min_portfolio_value_usd=self._min_portfolio_value_usd,
+            ),
             pnl_history=[
                 PnlPoint(
                     timestamp_utc=s.timestamp_utc.isoformat(),
@@ -295,6 +314,64 @@ class ViewService:
                 for s in reversed(snapshots)
             ],
         )
+
+
+def _risk_guardrail(
+    *,
+    total_equity: Decimal,
+    drawdown_pct: Decimal,
+    drawdown_cap_pct: float,
+    daily_loss_used_pct: Decimal,
+    daily_loss_limit_pct: float,
+    min_portfolio_value_usd: float,
+) -> RiskGuardrailView:
+    drawdown_cap = abs(Decimal(str(drawdown_cap_pct)))
+    daily_cap = Decimal(str(daily_loss_limit_pct))
+    floor = Decimal(str(min_portfolio_value_usd))
+    if total_equity <= floor:
+        return RiskGuardrailView(
+            blocked=True,
+            reason="portfolio_floor_guard",
+            title="Trading blocked: portfolio floor",
+            detail=f"Equity {total_equity:.2f} USD is at or below the safety floor {floor:.2f} USD.",
+            drawdown_pct=drawdown_pct,
+            drawdown_cap_pct=drawdown_cap_pct,
+            daily_loss_used_pct=daily_loss_used_pct,
+            daily_loss_limit_pct=daily_loss_limit_pct,
+            min_portfolio_value_usd=min_portfolio_value_usd,
+        )
+    if drawdown_pct >= drawdown_cap:
+        return RiskGuardrailView(
+            blocked=True,
+            reason="drawdown_cap_guard",
+            title="Trading blocked: drawdown cap",
+            detail=f"Drawdown {drawdown_pct:.2f}% is above the cap {drawdown_cap:.2f}%. New entries are suspended.",
+            drawdown_pct=drawdown_pct,
+            drawdown_cap_pct=drawdown_cap_pct,
+            daily_loss_used_pct=daily_loss_used_pct,
+            daily_loss_limit_pct=daily_loss_limit_pct,
+            min_portfolio_value_usd=min_portfolio_value_usd,
+        )
+    if daily_loss_used_pct <= daily_cap:
+        return RiskGuardrailView(
+            blocked=True,
+            reason="daily_loss_limit_guard",
+            title="Trading blocked: daily loss limit",
+            detail=f"Daily PnL {daily_loss_used_pct:.2f}% is below the limit {daily_cap:.2f}%. New entries are suspended.",
+            drawdown_pct=drawdown_pct,
+            drawdown_cap_pct=drawdown_cap_pct,
+            daily_loss_used_pct=daily_loss_used_pct,
+            daily_loss_limit_pct=daily_loss_limit_pct,
+            min_portfolio_value_usd=min_portfolio_value_usd,
+        )
+    return RiskGuardrailView(
+        blocked=False,
+        drawdown_pct=drawdown_pct,
+        drawdown_cap_pct=drawdown_cap_pct,
+        daily_loss_used_pct=daily_loss_used_pct,
+        daily_loss_limit_pct=daily_loss_limit_pct,
+        min_portfolio_value_usd=min_portfolio_value_usd,
+    )
 
 
 def _fmt_pnl(pnl: Decimal | None) -> str:

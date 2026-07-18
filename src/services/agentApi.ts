@@ -159,6 +159,17 @@ export interface GlobalView {
   total_fees_usd: string;
   daily_pnl_net_pct: number;
   pnl_total_net_pct: number;
+  risk_guardrail?: {
+    blocked: boolean;
+    reason?: string | null;
+    title: string;
+    detail: string;
+    drawdown_pct: string;
+    drawdown_cap_pct: number;
+    daily_loss_used_pct: string;
+    daily_loss_limit_pct: number;
+    min_portfolio_value_usd: number;
+  } | null;
   pnl_history: PnlPoint[];
 }
 

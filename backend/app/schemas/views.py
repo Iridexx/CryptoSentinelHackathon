@@ -129,6 +129,18 @@ class PnlPoint(BaseModel):
     drawdown_pct: Decimal
 
 
+class RiskGuardrailView(BaseModel):
+    blocked: bool = False
+    reason: str | None = None
+    title: str = "Risk guardrails OK"
+    detail: str = "New entries are allowed by portfolio guardrails."
+    drawdown_pct: Decimal = Decimal("0")
+    drawdown_cap_pct: float
+    daily_loss_used_pct: Decimal = Decimal("0")
+    daily_loss_limit_pct: float
+    min_portfolio_value_usd: float
+
+
 class GlobalView(BaseModel):
     total_equity_usd: Decimal
     initial_equity_usd: Decimal
@@ -152,4 +164,5 @@ class GlobalView(BaseModel):
     trades_today: int
     open_spot_positions: int
     open_perp_positions: int
+    risk_guardrail: RiskGuardrailView | None = None
     pnl_history: list[PnlPoint]

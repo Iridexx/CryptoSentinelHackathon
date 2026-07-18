@@ -31,7 +31,12 @@ async def spot_view(
 ) -> SpotView:
     """Open spot positions, history, PnL and win rate."""
 
-    service = ViewService(session, drawdown_cap_pct=settings.risk_max_drawdown_pct)
+    service = ViewService(
+        session,
+        drawdown_cap_pct=settings.risk_max_drawdown_pct,
+        daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
+        min_portfolio_value_usd=settings.min_portfolio_value_usd,
+    )
     return await service.spot_view(str(settings.default_user_id))
 
 
@@ -43,7 +48,12 @@ async def perp_view(
 ) -> PerpView:
     """Open perpetual positions (leverage, liquidation, funding), history, PnL, win rate."""
 
-    service = ViewService(session, drawdown_cap_pct=settings.risk_max_drawdown_pct)
+    service = ViewService(
+        session,
+        drawdown_cap_pct=settings.risk_max_drawdown_pct,
+        daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
+        min_portfolio_value_usd=settings.min_portfolio_value_usd,
+    )
     return await service.perp_view(str(settings.default_user_id))
 
 
@@ -55,7 +65,12 @@ async def global_view(
 ) -> GlobalView:
     """Total PnL, capital vs initial, drawdown vs cap, exposure, balance."""
 
-    service = ViewService(session, drawdown_cap_pct=settings.risk_max_drawdown_pct)
+    service = ViewService(
+        session,
+        drawdown_cap_pct=settings.risk_max_drawdown_pct,
+        daily_loss_limit_pct=settings.risk_daily_loss_limit_pct,
+        min_portfolio_value_usd=settings.min_portfolio_value_usd,
+    )
     return await service.global_view(str(settings.default_user_id))
 
 

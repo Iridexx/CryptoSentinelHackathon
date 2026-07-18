@@ -157,6 +157,17 @@ export type GlobalView = {
   trades_today: number;
   open_spot_positions: number;
   open_perp_positions: number;
+  risk_guardrail?: {
+    blocked: boolean;
+    reason?: string | null;
+    title: string;
+    detail: string;
+    drawdown_pct: string;
+    drawdown_cap_pct: number;
+    daily_loss_used_pct: string;
+    daily_loss_limit_pct: number;
+    min_portfolio_value_usd: number;
+  } | null;
   pnl_history: PnlPoint[];
 };
 

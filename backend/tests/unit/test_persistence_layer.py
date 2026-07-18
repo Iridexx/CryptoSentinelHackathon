@@ -352,6 +352,35 @@ async def test_global_view_perp_exposure_is_margin_not_notional(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_global_view_exposes_drawdown_guardrail_block(db) -> None:
+    factory = get_session_factory()
+    async with factory() as session:
+        await PnlRepository(session).upsert_portfolio(
+            USER,
+            total_equity_usd=Decimal("600"),
+            initial_equity_usd=Decimal("750"),
+            peak_equity_usd=Decimal("760"),
+            drawdown_pct=Decimal("20.86"),
+            daily_loss_limit_used_pct=Decimal("0"),
+            agent_status="running",
+        )
+        await session.commit()
+
+    async with factory() as session:
+        view = await ViewService(
+            session,
+            drawdown_cap_pct=-15.0,
+            daily_loss_limit_pct=-8.0,
+            min_portfolio_value_usd=5.0,
+        ).global_view(USER)
+
+    assert view.risk_guardrail is not None
+    assert view.risk_guardrail.blocked is True
+    assert view.risk_guardrail.reason == "drawdown_cap_guard"
+    assert view.risk_guardrail.drawdown_pct == Decimal("20.86")
+
+
+@pytest.mark.asyncio
 async def test_spot_and_perp_views_return_open_positions(db) -> None:
     factory = get_session_factory()
     now = datetime.now(UTC)

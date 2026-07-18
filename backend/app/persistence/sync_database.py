@@ -12,7 +12,7 @@ engine at startup; this module only opens sessions.
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 _engine = None
@@ -33,7 +33,16 @@ def init_sync_db(database_url: str, *, echo: bool = False) -> None:
     global _engine, _session_factory
     if _engine is not None:
         return
-    _engine = create_engine(_sync_url(database_url), echo=echo, future=True)
+    sync_url = _sync_url(database_url)
+    connect_args = {"timeout": 30} if sync_url.startswith("sqlite") else {}
+    _engine = create_engine(sync_url, echo=echo, future=True, connect_args=connect_args)
+    if sync_url.startswith("sqlite"):
+        @event.listens_for(_engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.close()
     _session_factory = sessionmaker(_engine, expire_on_commit=False, class_=Session)
 
 

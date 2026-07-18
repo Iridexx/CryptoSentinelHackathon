@@ -9,17 +9,23 @@ interface is unchanged so the alerts route and price checker are unaffected.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from threading import Lock
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from backend.app.domain.common.models import DEFAULT_SINGLE_USER_ID
 from backend.app.persistence.models.alerts import AlertConfig
 from backend.app.persistence.models.device_alert_configs import DeviceAlertConfig
 from backend.app.persistence.sync_database import get_sync_session
 from backend.app.schemas.alerts import AlertSyncRequest, PendingFavAlert
+
+SQLITE_WRITE_RETRIES = 3
+SQLITE_WRITE_RETRY_DELAY_SECONDS = 0.25
+_db_write_lock = Lock()
 
 
 @dataclass
@@ -155,6 +161,17 @@ class AlertStore:
         config_json = json.dumps(self._config.model_dump()) if self._config else None
         state_json = json.dumps(self._state_to_dict())
         now = datetime.now(UTC)
+        for attempt in range(SQLITE_WRITE_RETRIES):
+            try:
+                with _db_write_lock:
+                    self._persist_once(config_json=config_json, state_json=state_json, now=now)
+                return
+            except OperationalError as exc:
+                if "database is locked" not in str(exc).lower() or attempt == SQLITE_WRITE_RETRIES - 1:
+                    raise
+                time.sleep(SQLITE_WRITE_RETRY_DELAY_SECONDS * (attempt + 1))
+
+    def _persist_once(self, *, config_json: str | None, state_json: str, now: datetime) -> None:
         with get_sync_session() as session:
             if self.device_id is not None:
                 row = session.execute(

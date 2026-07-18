@@ -744,6 +744,38 @@ function Panel({
   );
 }
 
+const RISK_GUARDRAIL_COPY: Record<string, { title: string; detail: string }> = {
+  drawdown_cap_guard: {
+    title: 'Trading blocked: drawdown cap',
+    detail: 'Drawdown is above the configured cap. New Spot and Perp entries are suspended.',
+  },
+  daily_loss_limit_guard: {
+    title: 'Trading blocked: daily loss limit',
+    detail: 'Daily loss reached the configured limit. New entries are suspended until the UTC reset.',
+  },
+  portfolio_floor_guard: {
+    title: 'Trading blocked: portfolio floor',
+    detail: 'Portfolio equity is at the safety floor. New entries are suspended.',
+  },
+};
+
+function RiskGuardrailBanner({ guardrail }: { guardrail: GlobalView['risk_guardrail'] }) {
+  if (!guardrail?.blocked) return null;
+  const copy = guardrail.reason ? RISK_GUARDRAIL_COPY[guardrail.reason] : undefined;
+  return (
+    <div className="guardrail-banner">
+      <div>
+        <strong>{copy?.title ?? guardrail.title}</strong>
+        <p>{copy?.detail ?? guardrail.detail}</p>
+      </div>
+      <div className="guardrail-values">
+        <span>{guardrail.reason?.replace(/_/g, ' ') ?? 'blocked'}</span>
+        <span>DD {guardrail.drawdown_pct}% / cap {Math.abs(guardrail.drawdown_cap_pct).toFixed(2)}%</span>
+      </div>
+    </div>
+  );
+}
+
 function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<GlobalView>; equity: LoadState<EquityCurveResponse>; expanded?: boolean }) {
   const data = global.data;
   return (
@@ -751,6 +783,7 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
       <StateBlock state={global} empty="Waiting for global agent data" />
       {data && (
         <>
+          <RiskGuardrailBanner guardrail={data.risk_guardrail} />
           <div className="metric-grid">
             <Metric label="Equity" value={money(data.total_equity_usd)} />
             <Metric label="PnL tot." value={money(data.pnl_total_usd)} tone={Number(data.pnl_total_usd) >= 0 ? 'good' : 'bad'} />
@@ -760,7 +793,7 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
             <Metric label="PnL % Day" value={`${data.daily_pnl_net_pct >= 0 ? '+' : ''}${data.daily_pnl_net_pct.toFixed(2)}%`} tone={data.daily_pnl_net_pct >= 0 ? 'good' : 'bad'} />
             <Metric label="PnL % Global" value={`${data.pnl_total_net_pct >= 0 ? '+' : ''}${data.pnl_total_net_pct.toFixed(2)}%`} tone={data.pnl_total_net_pct >= 0 ? 'good' : 'bad'} />
             <Metric label="Trades" value={String(data.trades_today)} />
-            <Metric label="Drawdown" value={`${data.drawdown_pct}%`} tone="warn" />
+            <Metric label="Drawdown" value={`${data.drawdown_pct}%`} tone={Number(data.drawdown_pct) >= 10 ? 'bad' : 'warn'} />
             <Metric label="Exposure" value={`${data.exposure_pct}%`} />
             <Metric label="Exposure Spot" value={money(data.spot_exposure_usd ?? '0')} />
             <Metric label="Exposure Perp" value={money(data.perp_exposure_usd ?? '0')} />

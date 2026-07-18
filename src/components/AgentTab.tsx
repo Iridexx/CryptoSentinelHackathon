@@ -74,6 +74,21 @@ const fmtPct = (value: string | number | null | undefined) => {
   return `${n.toFixed(2)}%`;
 };
 
+const riskGuardrailText: Record<string, { title: string; detail: string }> = {
+  drawdown_cap_guard: {
+    title: 'Trading bloccato: drawdown cap',
+    detail: 'Il drawdown ha superato la soglia impostata. Le nuove entrate spot e perp sono sospese.',
+  },
+  daily_loss_limit_guard: {
+    title: 'Trading bloccato: perdita giornaliera',
+    detail: 'La perdita giornaliera ha raggiunto il limite. Le nuove entrate sono sospese fino al reset UTC.',
+  },
+  portfolio_floor_guard: {
+    title: 'Trading bloccato: equity minima',
+    detail: 'Il capitale è sotto il floor di sicurezza. Le nuove entrate sono sospese.',
+  },
+};
+
 const defaultSettings: AgentMobileSettings = {
   mode: 'conservative',
   markets_enabled: 'both',
@@ -235,6 +250,28 @@ const EmptyState: FC<{ title: string; detail: string }> = ({ title, detail }) =>
     <p className="mt-1 text-xs text-gray-500 leading-relaxed">{detail}</p>
   </div>
 );
+
+const RiskGuardrailBanner: FC<{ guardrail: GlobalView['risk_guardrail'] }> = ({ guardrail }) => {
+  if (!guardrail?.blocked) return null;
+  const copy = guardrail.reason ? riskGuardrailText[guardrail.reason] : undefined;
+  return (
+    <div className="rounded-xl border border-accent-red/30 bg-accent-red/10 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-accent-red">{copy?.title ?? guardrail.title}</p>
+          <p className="mt-1 text-xs leading-5 text-gray-300">{copy?.detail ?? guardrail.detail}</p>
+        </div>
+        <span className="rounded-full bg-accent-red/15 px-2 py-1 text-[11px] font-semibold text-accent-red">
+          {guardrail.reason?.replace(/_/g, ' ') ?? 'blocked'}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <span className="rounded-lg bg-dark-900/70 px-3 py-2 text-gray-400">Drawdown <b className="text-white">{fmtPct(guardrail.drawdown_pct)}</b></span>
+        <span className="rounded-lg bg-dark-900/70 px-3 py-2 text-gray-400">Cap <b className="text-white">{fmtPct(Math.abs(guardrail.drawdown_cap_pct))}</b></span>
+      </div>
+    </div>
+  );
+};
 
 const Stat: FC<{ label: string; value: string; tone?: 'good' | 'bad' | 'neutral' }> = ({ label, value, tone = 'neutral' }) => (
   <div className="rounded-lg bg-dark-800 px-3 py-2 min-w-0">
@@ -799,6 +836,7 @@ const GlobalPane: FC<{
 
   return (
     <div className="space-y-3">
+      <RiskGuardrailBanner guardrail={data?.risk_guardrail} />
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
         <Stat label="PnL tot." value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
@@ -806,7 +844,7 @@ const GlobalPane: FC<{
         <Stat label="PnL realizzato" value={fmtUsd(data?.realized_pnl_usd)} tone={Number(data?.realized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL % Global" value={`${Number(data?.pnl_total_net_pct ?? 0) >= 0 ? '+' : ''}${Number(data?.pnl_total_net_pct ?? 0).toFixed(2)}%`} tone={Number(data?.pnl_total_net_pct ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL % Day" value={`${Number(data?.daily_pnl_net_pct ?? 0) >= 0 ? '+' : ''}${Number(data?.daily_pnl_net_pct ?? 0).toFixed(2)}%`} tone={Number(data?.daily_pnl_net_pct ?? 0) >= 0 ? 'good' : 'bad'} />
-        <Stat label="Drawdown" value={fmtPct(data?.drawdown_pct)} tone={Number(data?.drawdown_pct ?? 0) < -10 ? 'bad' : 'neutral'} />
+        <Stat label="Drawdown" value={fmtPct(data?.drawdown_pct)} tone={Number(data?.drawdown_pct ?? 0) >= 10 ? 'bad' : 'neutral'} />
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
         <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
         <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />

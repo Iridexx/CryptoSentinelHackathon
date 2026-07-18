@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from backend.app.notifications.alert_store import AlertStore, CheckerState
 from backend.app.persistence.sync_database import (
@@ -133,3 +134,20 @@ def test_removed_favorite_prunes_pending_badge(db) -> None:
     store.save_config(AlertSyncRequest())
 
     assert store.pending_fav_alerts() == []
+
+
+def test_persist_retries_transient_sqlite_lock(db, monkeypatch) -> None:
+    store = AlertStore()
+    calls = {"count": 0}
+
+    def flaky_persist_once(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise OperationalError("UPDATE alert_configs", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(store, "_persist_once", flaky_persist_once)
+    monkeypatch.setattr("backend.app.notifications.alert_store.time.sleep", lambda _seconds: None)
+
+    store.save_config(_config())
+
+    assert calls["count"] == 3
