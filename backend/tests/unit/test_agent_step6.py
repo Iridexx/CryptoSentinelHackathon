@@ -727,18 +727,29 @@ async def test_closed_trade_chart_trims_snapshot_and_dedupes_post_close(monkeypa
         datetime(2026, 7, 18, 10, 55, tzinfo=UTC).isoformat(),
     ]
 
-    cached = [
+    fetched = [
         Candle(timestamp=datetime(2026, 7, 18, 10, 55, tzinfo=UTC), open=100, high=104, low=99, close=103, volume=1),
         Candle(timestamp=datetime(2026, 7, 18, 11, 0, tzinfo=UTC), open=103, high=105, low=102, close=104, volume=1),
         Candle(timestamp=datetime(2026, 7, 18, 11, 5, tzinfo=UTC), open=104, high=106, low=103, close=105, volume=1),
     ]
-    monkeypatch.setattr(view_routes, "_cached_klines", lambda *_, **__: cached)
+    calls: list[dict] = []
+
+    class FakeKlineFeed:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def fetch(self, **kwargs):
+            calls.append(kwargs)
+            return fetched
+
+    monkeypatch.setattr(binance_klines, "BinanceKlineFeed", FakeKlineFeed)
     monkeypatch.setattr(view_routes, "datetime", SimpleNamespace(
         now=lambda _tz: datetime(2026, 7, 18, 11, 10, tzinfo=UTC),
         fromisoformat=datetime.fromisoformat,
     ))
 
     post = await view_routes._fetch_post_close_candles(normalized, "BTC", "spot", count=5)
+    assert calls[0]["start_time"] == closed_at + timedelta(milliseconds=1)
     assert [c["t"] for c in post] == [
         datetime(2026, 7, 18, 11, 0, tzinfo=UTC).isoformat(),
         datetime(2026, 7, 18, 11, 5, tzinfo=UTC).isoformat(),
@@ -1882,3 +1893,55 @@ async def test_perp_short_trailing_below_entry_labeled_trailing_stop(db) -> None
         trades = await PerpTradeRepository(session).list_for_user(str(USER_ID))
         closes = [t for t in trades if t.trade_id.startswith("cls_")]
         assert closes and "auto_close:trailing_stop" in (closes[0].notes or "")
+
+
+@pytest.mark.asyncio
+async def test_start_time_kline_fetch_does_not_populate_latest_cache(monkeypatch) -> None:
+    import httpx
+
+    from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, get_kline_cache_entry
+
+    clear_kline_cache()
+    calls: list[dict] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return [[
+                int(datetime(2026, 7, 8, 12, 5, tzinfo=UTC).timestamp() * 1000),
+                "100",
+                "102",
+                "99",
+                "101",
+                "10",
+            ]]
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, params=None):
+            calls.append(params or {})
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+
+    feed = BinanceKlineFeed()
+    candles = await feed.fetch(
+        symbol="BTCUSDT",
+        interval="5m",
+        limit=3,
+        market="spot",
+        start_time=datetime(2026, 7, 8, 12, 0, tzinfo=UTC),
+    )
+
+    assert len(candles) == 1
+    assert "startTime" in calls[0]
+    assert get_kline_cache_entry(market="spot", symbol="BTCUSDT", interval="5m") is None

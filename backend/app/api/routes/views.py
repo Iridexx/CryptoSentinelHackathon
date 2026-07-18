@@ -288,29 +288,25 @@ async def _fetch_post_close_candles(chart: dict, asset: str, feed_market: str, c
         # Aspettiamo almeno 1 periodo chiuso dopo la fine del trade.
         if now < closed_at + timedelta(minutes=interval_min):
             return []
-        chart_candles = _normalize_chart_candles(chart.get("candles", []))
+        normalized_snapshot = _normalize_closed_chart(chart) or chart
+        chart_candles = _normalize_chart_candles(normalized_snapshot.get("candles", []))
         last_snapshot_ts = chart_candles[-1][0] if chart_candles else None
         post_threshold = max(closed_at, last_snapshot_ts) if last_snapshot_ts is not None else closed_at
-        # Calcola quante candele totali servono per coprire dall'apertura del trade
-        # fino a count candele dopo la chiusura (Binance restituisce le ultime N).
-        elapsed_since_open_min = max(interval_min, int((now - opened_at).total_seconds() / 60))
-        needed = int(elapsed_since_open_min / interval_min) + count + 5
-        fetch_limit = min(500, needed)
         symbol = f"{asset}USDT"
-        candles = _cached_klines(feed_market, symbol, interval, min_limit=min(fetch_limit, 288))
-        if candles is None:
-            candles = await asyncio.wait_for(
-                BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
-                    symbol=symbol,
-                    interval=interval,
-                    limit=fetch_limit,
-                    market=feed_market,  # type: ignore[arg-type]
-                ),
-                timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
-            )
+        start_time = post_threshold + timedelta(milliseconds=1)
+        candles = await asyncio.wait_for(
+            BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
+                symbol=symbol,
+                interval=interval,
+                limit=count + 2,
+                market=feed_market,  # type: ignore[arg-type]
+                start_time=start_time,
+            ),
+            timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
+        )
         # Teniamo solo candele successive al confine gia' presente nello snapshot.
-        # I timestamp delle klines sono l'apertura della candela: usare anche
-        # last_snapshot_ts evita overlap con snapshot storici gia' salvati.
+        # startTime evita di appendere le ultime candele disponibili giorni dopo
+        # la chiusura, che deformerebbero i trade storici.
         post = [
             {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
             for c in candles
