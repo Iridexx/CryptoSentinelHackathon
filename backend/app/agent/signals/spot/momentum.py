@@ -131,11 +131,22 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
 
         # A (v3): stop calcolato in base alla modalità configurata.
         # "atr": entry − ATR×mult (default). "lowest": minimo strutturale con buffer verso il basso.
+        stop_reference = None
         if getattr(self.settings, "spot_sl_mode", "atr") == "lowest":
             lookback = max(2, int(getattr(self.settings, "spot_structural_stop_lookback_candles", 20)))
             buffer_pct = max(0.0, float(getattr(self.settings, "spot_structural_stop_buffer_pct", 1.10)))
-            structural_low = min(c.low for c in candles[-lookback:])
+            structural_window = candles[-lookback:]
+            reference_candle = min(structural_window, key=lambda c: c.low)
+            structural_low = reference_candle.low
             stop_loss = structural_low * (1 - buffer_pct / 100)
+            stop_reference = {
+                "mode": "lowest",
+                "field": "low",
+                "timestamp": reference_candle.timestamp.isoformat(),
+                "price": structural_low,
+                "lookback_candles": lookback,
+                "buffer_pct": buffer_pct,
+            }
         else:
             stop_loss = current - (current_atr or 0.0) * self.settings.spot_atr_stop_multiplier
         # B (v3): TP ATR-based, nessuna % fissa. TP1 vicino (parziale), TP2 target finale.
@@ -177,6 +188,7 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 "volatility_pct": round(volatility_pct, 4),
                 "vwap_atr_extension": round(extension_ratio, 4),
                 "extension_ok": extension_ok,
+                "stop_reference": stop_reference,
             },
         }
 

@@ -1158,7 +1158,7 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   if (allCandles.length < 2) {
     return <p className="muted">Grafico non disponibile per questo trade.</p>;
   }
-  const W = 520;
+  const W = Math.max(520, allCandles.length * 8 + 64);
   const H = 230;
   const padL = 8;
   const padR = 48;
@@ -1195,6 +1195,8 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   };
   const entryIdx = nearest(ts(chart.opened_at), allCandles);
   const exitIdx = atOrBefore(ts(chart.closed_at), allCandles);
+  const stopRefIdx = chart.stop_reference?.t ? nearest(ts(chart.stop_reference.t), allCandles) : null;
+  const stopRefPrice = chart.stop_reference?.price != null ? Number(chart.stop_reference.price) : null;
   const exitGood = exit >= entry;
 
   const levelLine = (price: number | null, color: string, dash: string) =>
@@ -1220,7 +1222,8 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   const closeLineX = postClose.length > 0 ? padL + colW * (exitIdx + 1) : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+    <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: `${W}px`, minWidth: '100%', height: 'auto' }}>
       {/* griglia + prezzo (Y) a destra */}
       {yTicks.map((p, i) => (
         <g key={`y${i}`}>
@@ -1251,6 +1254,15 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
       {closeLineX != null && (
         <line x1={closeLineX} x2={closeLineX} y1={padT} y2={padT + plotH} stroke="#6b7280" strokeWidth="1" strokeDasharray="3 2" opacity="0.8" />
       )}
+      {stopRefIdx != null && (
+        <>
+          <line x1={cx(stopRefIdx)} x2={cx(stopRefIdx)} y1={padT} y2={padT + plotH} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+          <text x={Math.min(W - padR - 4, cx(stopRefIdx) + 4)} y={padT + 8} fontSize="8" fill="#c084fc">SL ref</text>
+          {stopRefPrice != null && !Number.isNaN(stopRefPrice) && (
+            <circle cx={cx(stopRefIdx)} cy={y(stopRefPrice)} r="3" fill="#a855f7" stroke="#0b0e11" strokeWidth="1" />
+          )}
+        </>
+      )}
       {levelLine(sl, '#ef4444', '5 4')}
       {levelLine(tp1, '#22c55e', '5 4')}
       {levelLine(tp2, '#16a34a', '2 4')}
@@ -1271,6 +1283,7 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
         </text>
       ))}
     </svg>
+    </div>
   );
 }
 

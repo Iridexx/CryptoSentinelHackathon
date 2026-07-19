@@ -92,10 +92,21 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
         use_lowest = getattr(self.settings, "perp_sl_mode", "atr") == "lowest"
         lookback = max(2, int(getattr(self.settings, "perp_structural_stop_lookback_candles", 20)))
         buffer_pct = max(0.0, float(getattr(self.settings, "perp_structural_stop_buffer_pct", 1.10)))
+        stop_reference = None
         if side == "long":
             if use_lowest:
-                structural_low = min(c.low for c in candles[-lookback:])
+                structural_window = candles[-lookback:]
+                reference_candle = min(structural_window, key=lambda c: c.low)
+                structural_low = reference_candle.low
                 stop_loss = structural_low * (1 - buffer_pct / 100)
+                stop_reference = {
+                    "mode": "lowest",
+                    "field": "low",
+                    "timestamp": reference_candle.timestamp.isoformat(),
+                    "price": structural_low,
+                    "lookback_candles": lookback,
+                    "buffer_pct": buffer_pct,
+                }
             elif atr_v is not None:
                 stop_loss = current - atr_v * sl_mult
             else:
@@ -109,8 +120,18 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
                 take_profit_2 = poc
         elif side == "short":
             if use_lowest:
-                structural_high = max(c.high for c in candles[-lookback:])
+                structural_window = candles[-lookback:]
+                reference_candle = max(structural_window, key=lambda c: c.high)
+                structural_high = reference_candle.high
                 stop_loss = structural_high * (1 + buffer_pct / 100)
+                stop_reference = {
+                    "mode": "lowest",
+                    "field": "high",
+                    "timestamp": reference_candle.timestamp.isoformat(),
+                    "price": structural_high,
+                    "lookback_candles": lookback,
+                    "buffer_pct": buffer_pct,
+                }
             elif atr_v is not None:
                 stop_loss = current + atr_v * sl_mult
             else:
@@ -166,6 +187,7 @@ class VolumeProfileSignal(SignalModule[SignalPayload, SignalResult]):
                 "trend_bias": trend_bias,
                 "total_quote_volume": round(total_quote_volume, 2),
                 "value_area_pct": self.settings.perp_value_area_pct,
+                "stop_reference": stop_reference,
             },
         }
 

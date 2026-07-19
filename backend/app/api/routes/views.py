@@ -396,17 +396,38 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
         now = datetime.now(UTC)
         duration_min = max(1, int((now - opened_at).total_seconds() / 60))
         interval, per_min = _auto_chart_interval(duration_min)
-        limit = int(min(120, max(20, (duration_min / per_min) * 1.6)))
+        stop_reference_time = getattr(position, "stop_reference_time", None)
+        if stop_reference_time and stop_reference_time.tzinfo is None:
+            stop_reference_time = stop_reference_time.replace(tzinfo=UTC)
+        chart_start = (
+            stop_reference_time - timedelta(minutes=per_min * 10)
+            if stop_reference_time is not None
+            else None
+        )
+        chart_span_min = (
+            max(1, int((now - chart_start).total_seconds() / 60))
+            if chart_start is not None
+            else duration_min
+        )
+        limit = int(min(260, max(20, (chart_span_min / per_min) * 1.6)))
         feed_market = "futures" if market == "perp" else "spot"
         symbol = f"{position.asset}USDT"
-        candles = _cached_klines(feed_market, symbol, interval, min_limit=limit)
+        candles = None if chart_start is not None else _cached_klines(feed_market, symbol, interval, min_limit=limit)
         if candles is None:
-            candles = await BinanceKlineFeed(timeout_seconds=timeout_seconds).fetch(
-                symbol=symbol, interval=interval, limit=limit, market=feed_market
-            )
+            try:
+                fetch_kwargs = {"symbol": symbol, "interval": interval, "limit": limit, "market": feed_market}
+                if chart_start is not None:
+                    fetch_kwargs["start_time"] = chart_start
+                candles = await BinanceKlineFeed(timeout_seconds=timeout_seconds).fetch(**fetch_kwargs)
+            except Exception:
+                candles = await BinanceKlineFeed(timeout_seconds=timeout_seconds).fetch(
+                    symbol=symbol, interval=interval, limit=limit, market=feed_market
+                )
         if not candles:
             return None
         tp2 = getattr(position, "take_profit_2", None)
+        stop_reference_price = getattr(position, "stop_reference_price", None)
+        stop_reference_field = getattr(position, "stop_reference_field", None)
         return {
             "interval": interval,
             "market": market,
@@ -423,6 +444,16 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
             ),
             "opened_at": opened_at.isoformat(),
             "closed_at": now.isoformat(),
+            "stop_reference": (
+                {
+                    "t": stop_reference_time.isoformat(),
+                    "price": str(stop_reference_price) if stop_reference_price else None,
+                    "field": stop_reference_field,
+                    "pre_candles": 10,
+                }
+                if stop_reference_time is not None
+                else None
+            ),
             "live": True,
             "candles": [
                 {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}

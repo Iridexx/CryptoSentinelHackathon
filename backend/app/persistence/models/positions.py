@@ -29,6 +29,9 @@ class SpotPosition(Base):
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     # ── Gestione uscite v3 (ATR-based) ────────────────────────────────────────
     entry_atr: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # ATR congelato all'ingresso
+    stop_reference_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_reference_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    stop_reference_field: Mapped[str | None] = mapped_column(String(8), nullable=True)
     max_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # massimo dall'ingresso (per trailing)
     scale_in_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)    # n. aggiunte a favore (E)
     # ── Costi posizione (fee + slippage, solo dry-run) ────────────────────────
@@ -64,6 +67,9 @@ class PerpPosition(Base):
     trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # null finché non attivo
     # ── Protezione posizione (breakeven + trailing dinamico ATR) ──────────────
     entry_atr: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # ATR congelato all'ingresso
+    stop_reference_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_reference_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    stop_reference_field: Mapped[str | None] = mapped_column(String(8), nullable=True)
     max_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # estremo favorevole dall'ingresso
     liquidation_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
     funding_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)

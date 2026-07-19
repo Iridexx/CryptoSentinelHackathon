@@ -709,6 +709,61 @@ async def test_close_generates_chart_snapshot(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_close_chart_snapshot_starts_before_stop_reference(db) -> None:
+    service = AgentService(
+        settings(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime(2026, 7, 19, 10, 0, tzinfo=UTC)
+    reference_time = now - timedelta(minutes=70)
+    calls: list[dict] = []
+
+    class FakeFeed:
+        async def fetch(self, **kwargs):
+            calls.append(kwargs)
+            return [
+                Candle(timestamp=reference_time - timedelta(minutes=50) + timedelta(minutes=5 * i), open=100, high=101, low=99, close=100.5, volume=1.0)
+                for i in range(20)
+            ]
+
+    service.price_feed = FakeFeed()
+    pos = SpotPosition(
+        position_id="pos-chart-ref",
+        user_id=str(USER_ID),
+        asset="BTC",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("103"),
+        stop_loss=Decimal("98"),
+        initial_stop_loss=Decimal("98"),
+        stop_reference_time=reference_time,
+        stop_reference_price=Decimal("97.5"),
+        stop_reference_field="low",
+        take_profit_1=Decimal("103"),
+        take_profit_2=Decimal("106"),
+        tp1_reached=True,
+        status="open",
+        opened_at=now - timedelta(hours=2),
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._close_spot_position(session, pos, Decimal("103"), "take_profit_2", now)
+        snap = await TradeChartRepository(session).get_for_position(str(USER_ID), "pos-chart-ref")
+
+    assert calls[0]["start_time"] == reference_time - timedelta(minutes=50)
+    assert snap is not None
+    payload = json.loads(snap.payload)
+    assert payload["stop_reference"] == {
+        "t": reference_time.isoformat(),
+        "price": "97.5",
+        "field": "low",
+        "pre_candles": 10,
+    }
+    assert payload["candles"][0]["t"] == (reference_time - timedelta(minutes=50)).isoformat()
+
+
+@pytest.mark.asyncio
 async def test_closed_trade_chart_trims_snapshot_and_dedupes_post_close(monkeypatch) -> None:
     closed_at = datetime(2026, 7, 18, 10, 57, tzinfo=UTC)
     chart = {

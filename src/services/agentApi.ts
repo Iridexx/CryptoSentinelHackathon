@@ -236,6 +236,12 @@ export interface TradeChart {
   opened_at: string;
   closed_at: string;
   live?: boolean;
+  stop_reference?: {
+    t: string;
+    price?: string | null;
+    field?: string | null;
+    pre_candles?: number;
+  } | null;
   candles: TradeChartCandle[];
   post_close_candles?: TradeChartCandle[];
 }

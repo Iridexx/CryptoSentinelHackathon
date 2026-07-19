@@ -718,12 +718,40 @@ class AgentService:
                 opened_at = opened_at.replace(tzinfo=UTC)
             duration_min = max(1, int((now - opened_at).total_seconds() / 60))
             interval, per_min = _auto_chart_interval(duration_min)
-            limit = int(min(120, max(20, (duration_min / per_min) * 1.6)))
-            feed_market = "futures" if market == "perp" else "spot"
-            candles = await self.price_feed.fetch(
-                symbol=f"{pos.asset}USDT", interval=interval, limit=limit, market=feed_market
+            stop_reference_time = getattr(pos, "stop_reference_time", None)
+            if stop_reference_time and stop_reference_time.tzinfo is None:
+                stop_reference_time = stop_reference_time.replace(tzinfo=UTC)
+            chart_start = (
+                stop_reference_time - timedelta(minutes=per_min * 10)
+                if stop_reference_time is not None
+                else None
             )
+            chart_span_min = (
+                max(1, int((now - chart_start).total_seconds() / 60))
+                if chart_start is not None
+                else duration_min
+            )
+            limit = int(min(260, max(20, (chart_span_min / per_min) * 1.6)))
+            feed_market = "futures" if market == "perp" else "spot"
+            try:
+                fetch_kwargs = {
+                    "symbol": f"{pos.asset}USDT",
+                    "interval": interval,
+                    "limit": limit,
+                    "market": feed_market,
+                }
+                if chart_start is not None:
+                    fetch_kwargs["start_time"] = chart_start
+                candles = await self.price_feed.fetch(
+                    **fetch_kwargs,
+                )
+            except Exception:
+                candles = await self.price_feed.fetch(
+                    symbol=f"{pos.asset}USDT", interval=interval, limit=limit, market=feed_market
+                )
             tp2 = getattr(pos, "take_profit_2", None)
+            stop_reference_price = getattr(pos, "stop_reference_price", None)
+            stop_reference_field = getattr(pos, "stop_reference_field", None)
             payload = {
                 "interval": interval,
                 "market": market,
@@ -740,6 +768,16 @@ class AgentService:
                 ),
                 "opened_at": opened_at.isoformat(),
                 "closed_at": now.isoformat(),
+                "stop_reference": (
+                    {
+                        "t": stop_reference_time.isoformat(),
+                        "price": str(stop_reference_price) if stop_reference_price else None,
+                        "field": stop_reference_field,
+                        "pre_candles": 10,
+                    }
+                    if stop_reference_time is not None
+                    else None
+                ),
                 "candles": [
                     {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
                     for c in candles
@@ -1628,6 +1666,7 @@ class AgentService:
 
             # size = contratti controllati: capitale * leva / prezzo effettivo
             leveraged_size = size_quote * Decimal(leverage) / effective_price
+            stop_ref = _stop_reference_from_signal(signal)
 
             await PerpTradeRepository(session).save(
                 PerpTrade(
@@ -1670,6 +1709,9 @@ class AgentService:
                     trailing_stop=_optional_decimal(signal.get("trailing_stop")),
                     # Congelati all'ingresso per breakeven + trailing dinamico.
                     entry_atr=_optional_decimal((signal.get("components") or {}).get("atr")),
+                    stop_reference_time=stop_ref["time"],
+                    stop_reference_price=stop_ref["price"],
+                    stop_reference_field=stop_ref["field"],
                     max_price=effective_price,
                     liquidation_price=_estimate_liquidation_price(effective_price, leverage, side),
                     funding_rate=costs["funding_rate_8h"],
@@ -1698,6 +1740,7 @@ class AgentService:
             effective_spot_price = price
 
         spot_amount = size_quote / effective_spot_price
+        stop_ref = _stop_reference_from_signal(signal)
 
         await SpotTradeRepository(session).save(
             SpotTrade(
@@ -1734,6 +1777,9 @@ class AgentService:
                 trailing_stop=_optional_decimal(signal.get("trailing_stop")),
                 # C (v3): ATR congelato all'ingresso + max_price per breakeven/trailing ATR.
                 entry_atr=_optional_decimal((signal.get("components") or {}).get("atr")),
+                stop_reference_time=stop_ref["time"],
+                stop_reference_price=stop_ref["price"],
+                stop_reference_field=stop_ref["field"],
                 max_price=effective_spot_price,
                 fee_mode=spot_fee_mode,
                 swap_fee_usd=spot_costs["swap_fee_usd"],
@@ -2002,6 +2048,25 @@ def _optional_decimal(value) -> Decimal | None:
         return None
     parsed = Decimal(str(value))
     return parsed if parsed > 0 else None
+
+
+def _stop_reference_from_signal(signal: dict) -> dict[str, datetime | Decimal | str | None]:
+    ref = (signal.get("components") or {}).get("stop_reference")
+    if not isinstance(ref, dict):
+        return {"time": None, "price": None, "field": None}
+    parsed_time = None
+    try:
+        raw_time = ref.get("timestamp")
+        if raw_time:
+            parsed_time = datetime.fromisoformat(str(raw_time))
+            if parsed_time.tzinfo is None:
+                parsed_time = parsed_time.replace(tzinfo=UTC)
+            parsed_time = parsed_time.astimezone(UTC)
+    except Exception:
+        parsed_time = None
+    parsed_price = _optional_decimal(ref.get("price"))
+    field = str(ref.get("field") or "")[:8] or None
+    return {"time": parsed_time, "price": parsed_price, "field": field}
 
 
 def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:

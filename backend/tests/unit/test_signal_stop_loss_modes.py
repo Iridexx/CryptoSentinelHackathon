@@ -85,6 +85,10 @@ async def test_spot_lowest_stop_mode_uses_last_20_candle_low_with_downside_buffe
     )
 
     assert result["stop_loss"] == pytest.approx(88.25 * 0.989)
+    ref = result["components"]["stop_reference"]
+    assert ref["field"] == "low"
+    assert ref["timestamp"] == candles[-19].timestamp.isoformat()
+    assert ref["price"] == pytest.approx(88.25)
 
 
 @pytest.mark.asyncio
@@ -99,6 +103,9 @@ async def test_perp_lowest_stop_mode_uses_low_for_long_and_high_for_short() -> N
 
     assert long_result["side"] == "long"
     assert long_result["stop_loss"] == pytest.approx(min(candle.low for candle in long_candles[-20:]) * 0.989)
+    long_ref = long_result["components"]["stop_reference"]
+    assert long_ref["field"] == "low"
+    assert long_ref["timestamp"] == long_candles[-2].timestamp.isoformat()
 
     short_candles = _candles(30, base=100.0, volume=2000.0)
     short_candles[-2] = Candle(short_candles[-2].timestamp, 104.0, 111.5, 103.0, 110.0, 2000.0)
@@ -110,3 +117,6 @@ async def test_perp_lowest_stop_mode_uses_low_for_long_and_high_for_short() -> N
 
     assert short_result["side"] == "short"
     assert short_result["stop_loss"] == pytest.approx(max(candle.high for candle in short_candles[-20:]) * 1.011)
+    short_ref = short_result["components"]["stop_reference"]
+    assert short_ref["field"] == "high"
+    assert short_ref["timestamp"] == short_candles[-2].timestamp.isoformat()

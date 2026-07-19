@@ -278,6 +278,12 @@ export type TradeChart = {
   liquidation_price?: string | null;
   opened_at: string;
   closed_at: string;
+  stop_reference?: {
+    t: string;
+    price?: string | null;
+    field?: string | null;
+    pre_candles?: number;
+  } | null;
   candles: TradeChartCandle[];
   post_close_candles?: TradeChartCandle[];
 };

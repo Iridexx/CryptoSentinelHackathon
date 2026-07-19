@@ -51,11 +51,11 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 20 con buffer percentuale, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded, marker candela riferimento SL e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing con breakeven Spot/Perp configurabile e trailing etichettato separatamente dal breakeven, alert drawdown configurabile, snapshot grafici trade senza linea liquidazione Perp e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing con breakeven Spot/Perp configurabile e trailing etichettato separatamente dal breakeven, alert drawdown configurabile, snapshot grafici trade con 10 candele pre-reference SL e provider execution astratti.
 |   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
@@ -64,11 +64,11 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   `-- signals/ - signal engine modulare Spot/Perp/V2.
 |   |   |       |-- base.py - primitive base signal engine.
 |   |   |       |-- common/indicators.py - primitive Candle, EMA, VWAP, ATR, RSI e relative volume.
-|   |   |       |-- spot/momentum.py - Spot V1 momentum + struttura: warm-up OHLCV 5m Binance spot per asset singolo, VWAP, EMA 20/50, ATR, RSI filtro e relative volume.
+|   |   |       |-- spot/momentum.py - Spot V1 momentum + struttura: warm-up OHLCV 5m Binance spot per asset singolo, VWAP, EMA 20/50, ATR, RSI filtro, relative volume e metadata candela riferimento SL strutturale.
 |   |   |       |-- spot/relative_strength_v2.py - placeholder relative strength V2.
 |   |   |       |-- perp/binance_klines.py - feed Binance klines specializzato per signal engine (`/fapi/v1/klines` o `/api/v3/klines`) con cache in memoria per Data Coverage.
 |   |   |       |-- perp/cex_fallback.py - fallback best-effort Bitget/KuCoin per candele e prezzi quando Binance non copre il token.
-|   |   |       |-- perp/volume_profile.py - Volume Profile Perp V1 rolling 24h con POC/VAH/VAL, VWAP trend filter e stop ATR configurabile da setup bot.
+|   |   |       |-- perp/volume_profile.py - Volume Profile Perp V1 rolling 24h con POC/VAH/VAL, VWAP trend filter, stop ATR/Min-Max configurabile e metadata candela riferimento SL strutturale.
 |   |   |       `-- perp/orderflow_delta_v2.py - placeholder order-flow delta V2.
 |   |   |-- core/ - configurazione, logging e sicurezza.
 |   |   |   |-- config.py - unico loader Settings: fonde .env + configs/*.yaml, valida guardrail hard.
@@ -125,7 +125,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- database.py - engine async aiosqlite, async_sessionmaker, create_all, check_db con SELECT 1 e latency.
 |   |   |   |-- sync_database.py - engine sync sqlite3 per store legacy sincroni; stesso file SQLite, WAL e busy timeout allineato a 5s.
 |   |   |   |-- backup.py - copia SQLite con timestamp UTC, pruning retention, restituisce None se DB assente.
-|   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing e funding.
+|   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing, funding e reference stop loss.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
 |   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
@@ -137,7 +137,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- alerts.py - AlertConfig (legacy, una riga per utente, config_json + state_json).
 |   |   |   |   |-- device_alert_configs.py - DeviceAlertConfig (una riga per (user_id, device_id): alert separati per device).
 |   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc/block_timestamp_utc separati, PnL, fee, slippage e funding snapshot.
-|   |   |   |   |-- positions.py - SpotPosition e PerpPosition con livelli SL/TP/trailing, ATR entry, fee/slippage/funding, margin e stato TP1.
+|   |   |   |   |-- positions.py - SpotPosition e PerpPosition con livelli SL/TP/trailing, ATR entry, candela riferimento stop loss, fee/slippage/funding, margin e stato TP1.
 |   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
 |   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert).
 |   |   |   |   |-- archives.py - ArchivedRun: snapshot JSON dei dati dry-run simulati esclusi dalle viste live.

@@ -1578,7 +1578,7 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
     return <p className="text-xs text-gray-500">Grafico non disponibile per questo trade.</p>;
   }
   // Geometria: area di plot + margine destro per i prezzi (Y) e inferiore per gli orari (X).
-  const W = 340;
+  const W = Math.max(340, allCandles.length * 8 + 58);
   const H = 200;
   const padX = 6;
   const padTop = 10;
@@ -1616,6 +1616,8 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   };
   const entryIdx = nearest(ts(chart.opened_at), allCandles);
   const exitIdx = atOrBefore(ts(chart.closed_at), allCandles);
+  const stopRefIdx = chart.stop_reference?.t ? nearest(ts(chart.stop_reference.t), allCandles) : null;
+  const stopRefPrice = chart.stop_reference?.price != null ? Number(chart.stop_reference.price) : null;
   const exitGood = exit >= entry;
 
   // Etichette asse Y (prezzo).
@@ -1647,7 +1649,8 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const closeLineX = postClose.length > 0 ? cx(exitIdx + 0.5) : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
+    <div className="overflow-x-auto pb-1">
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: `${W}px`, minWidth: '100%', height: 'auto' }}>
       {/* griglia + etichette asse Y */}
       {yTicks.map((p, k) => (
         <g key={`yt${k}`}>
@@ -1695,6 +1698,15 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       {closeLineX != null && (
         <line x1={closeLineX} x2={closeLineX} y1={padTop} y2={plotB} stroke="#6b7280" strokeWidth="1" strokeDasharray="3 2" opacity="0.8" />
       )}
+      {stopRefIdx != null && (
+        <>
+          <line x1={cx(stopRefIdx)} x2={cx(stopRefIdx)} y1={padTop} y2={plotB} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+          <text x={Math.min(plotR - 4, cx(stopRefIdx) + 4)} y={padTop + 8} fontSize="8" fill="#c084fc">SL ref</text>
+          {stopRefPrice != null && !Number.isNaN(stopRefPrice) && (
+            <circle cx={cx(stopRefIdx)} cy={y(stopRefPrice)} r="3" fill="#a855f7" stroke="#0b0e11" strokeWidth="1" />
+          )}
+        </>
+      )}
       {levelLine(sl, '#ef4444', '4 3')}
       {levelLine(tp1, '#22c55e', '4 3')}
       {levelLine(tp2, '#16a34a', '2 3')}
@@ -1703,6 +1715,7 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       <circle cx={cx(entryIdx)} cy={y(entry)} r="3.5" fill="#e5e7eb" stroke="#0b0e11" strokeWidth="1" />
       <circle cx={cx(exitIdx)} cy={y(exit)} r="3.5" fill={exitGood ? '#22c55e' : '#ef4444'} stroke="#0b0e11" strokeWidth="1" />
     </svg>
+    </div>
   );
 };
 
@@ -1722,6 +1735,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
           <span>⚪ Entry</span>
           <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.chart.live ? 'Ora' : 'Exit'}</span>
           <span className="text-accent-red">- - SL</span>
+          {detail.chart.stop_reference && <span className="text-purple-300">- - SL ref</span>}
           <span className="text-accent-green">- - TP</span>
         </div>
       </section>
