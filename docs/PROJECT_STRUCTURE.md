@@ -469,6 +469,9 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Guardrail visibili UI | `/api/v1/views/global` espone `risk_guardrail` con blocco/motivo/soglie; app mobile e dashboard mostrano un banner quando drawdown cap, daily loss o portfolio floor sospendono le nuove entrate. |
 | Reset DB sblocca drawdown | Il reset admin `/api/v1/agent/dev/reset-db` ricrea subito `PortfolioState` al capitale dry-run con drawdown, max drawdown, daily loss, esposizione e contatori azzerati, evitando che un blocco risk rimanga dopo l'azzeramento dati. |
 | Equity base se portfolio assente | La vista globale usa il capitale dry-run da `Settings` come equity iniziale quando `PortfolioState` non esiste ancora, evitando display a 0 USD dopo reset o prima del primo tick agente. |
+| Portfolio base a startup | All'avvio backend viene creato un `PortfolioState` dry-run base se manca, così risk, sizing e UI non restano senza equity dopo reset manuali o DB vuoti. |
+| Stop backend Windows corretto | `backend/scripts/stop_backend.ps1` termina il processo su porta 8001 senza usare la variabile PowerShell riservata `$PID`. |
+| Run backend anti-doppio avvio | `backend/scripts/run_backend.ps1` controlla la porta configurata prima dell'avvio, termina eventuali listener esistenti e attende che la porta sia libera per evitare `Errno 10048`. |
 | SQLite alert lock hardening | Il motore SQLite sincrono usa timeout/WAL/busy timeout e `AlertStore` serializza le scritture con retry su `database is locked`, riducendo gli errori durante sync alert concorrenti. |
 | i18n legacy prima dello Step 8 | I testi frontend hardcoded saranno convertiti a EN default/IT conservato senza riscrivere la logica dei componenti. |
 | Dual engine SQLAlchemy (Step 5) | Engine async aiosqlite per nuovo codice; engine sync sqlite3 per store legacy sincroni (`AlertStore`, `DeviceTokenStore`). Stesso file SQLite; serializzazione a livello file. Sicuro per single-user hackathon. |

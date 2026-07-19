@@ -41,8 +41,48 @@ $Parts   = $HostPort.Trim().Split(' ')
 $ApiHost = $Parts[0]
 $ApiPort = $Parts[1]
 
+function Stop-ExistingBackendOnPort {
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$Port
+    )
+
+    $listeners = netstat -ano 2>$null |
+        Select-String ":$Port\s" |
+        Select-String "LISTENING"
+    if (-not $listeners) {
+        return
+    }
+
+    foreach ($line in $listeners) {
+        $parts = ($line -replace '\s+', ' ').Trim().Split(' ')
+        $processId = [int]$parts[-1]
+        if ($processId -le 0 -or $processId -eq $PID) {
+            continue
+        }
+        $proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        if ($proc) {
+            Write-Host "Porta $Port gia' occupata da PID $processId ($($proc.ProcessName)): terminazione prima del riavvio..."
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Milliseconds 250
+        $stillListening = netstat -ano 2>$null |
+            Select-String ":$Port\s" |
+            Select-String "LISTENING"
+        if (-not $stillListening) {
+            return
+        }
+    }
+
+    throw "La porta $Port risulta ancora occupata dopo il tentativo di stop."
+}
+
 $DevLabel = if ($Dev) { ' [DEV - reload attivo]' } else { '' }
 Write-Host "Avvio backend su $ApiHost`:$ApiPort$DevLabel"
+Stop-ExistingBackendOnPort -Port ([int]$ApiPort)
 
 $UvicornArgs = @(
     "-m", "uvicorn",

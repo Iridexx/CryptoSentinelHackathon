@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -26,6 +27,7 @@ from backend.app.notifications.price_checker import price_checker_loop
 from backend.app.persistence.backup import backup_db
 from backend.app.persistence.database import close_db, get_session_factory, init_db
 from backend.app.persistence.migration import migrate_json_to_db, upgrade_schema
+from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.sync_database import init_sync_db, reset_sync_db
 
 settings = get_settings()
@@ -76,6 +78,25 @@ async def _startup_ohlcv_warmup(settings: Settings) -> None:
         logger.warning("agent_startup_ohlcv_warmup_failed", error=str(exc))
 
 
+async def _ensure_base_portfolio(settings: Settings) -> None:
+    """Create the dry-run base portfolio when reset/startup leaves no state row."""
+
+    async with get_session_factory()() as session:
+        repo = PnlRepository(session)
+        user_id = str(settings.default_user_id)
+        if await repo.get_portfolio(user_id) is not None:
+            return
+        capital = Decimal(str(settings.dry_run_capital_usd))
+        await repo.upsert_portfolio(
+            user_id,
+            total_equity_usd=capital,
+            initial_equity_usd=capital,
+            peak_equity_usd=capital,
+            agent_status="idle",
+        )
+        logger.info("base_portfolio_created", total_equity_usd=str(capital))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop backend runtime tasks."""
@@ -90,6 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session,
             fcm_tokens_path=settings.fcm_token_store_path,
         )
+    await _ensure_base_portfolio(settings)
     seed_perp_watchlist_if_empty(settings)
     # Ripristina i parametri di rischio/strategia salvati dall'utente nel DB.
     mobile_settings, _, persisted = _settings_from_runtime(settings)
