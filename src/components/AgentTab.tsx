@@ -1679,12 +1679,13 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       {closeLineX != null && (
         <rect x={closeLineX} y={padTop} width={plotR - closeLineX} height={plotB - padTop} fill="#111827" opacity="0.4" />
       )}
-      {/* candele (pre-close a piena opacità, post-close attenuate) */}
+      {/* Candles outside the active trade window are contextual and muted. */}
       {allCandles.map((c, i) => {
         const isPost = i >= candles.length;
+        const isPreEntry = i < entryIdx;
         const up = c.c >= c.o;
         const color = isPost ? (up ? '#166534' : '#7f1d1d') : (up ? '#22c55e' : '#ef4444');
-        const opacity = isPost ? 0.55 : 1;
+        const opacity = isPost || isPreEntry ? 0.55 : 1;
         const bodyTop = y(Math.max(c.o, c.c));
         const bodyBot = y(Math.min(c.o, c.c));
         const bw = Math.max(1, colW * 0.6);

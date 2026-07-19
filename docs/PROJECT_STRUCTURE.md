@@ -254,7 +254,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
-|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export e dettaglio trade con grafico/fee/margine.
+|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export e dettaglio trade con grafico/fee/margine; nei grafici trade le candele fuori dalla finestra di posizione sono attenuate.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati, inclusa gestione ticket supporto admin.
 |       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp, trade detail e support ticket.
 |       `-- styles.css - layout desktop-first e stati UI.
@@ -268,7 +268,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, setup con stop loss ATR o Min/Max 20 con buffer per Spot/Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, grafici trade con candele pre-entry/post-close attenuate, setup con stop loss ATR o Min/Max 20 con buffer per Spot/Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
 |   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket, reply utente, modalita' admin opzionale per risposta/chiusura e uso dello stesso admin token persistito dell'AgentTab.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
