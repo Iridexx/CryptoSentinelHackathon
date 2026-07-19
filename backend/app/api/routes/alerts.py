@@ -1,5 +1,6 @@
 """Alert synchronization routes."""
 
+import anyio
 from fastapi import APIRouter
 
 from backend.app.api.dependencies import AlertsAccessDep
@@ -19,7 +20,7 @@ async def sync_alerts(
     The per-device store keeps each phone's alerts separate; tokens without a
     device_id fall back to the legacy global store.
     """
-    get_alert_store(request.device_id).save_config(request)
+    await anyio.to_thread.run_sync(_save_alert_config, request)
     return AlertSyncResponse(
         status="synced",
         price_alert_count=len(request.price_alerts),
@@ -48,3 +49,7 @@ async def dismiss_pending_favorite_alert(
 
     removed = get_alert_store(device_id).dismiss_pending_fav_alert(coin_id)
     return {"status": "dismissed" if removed else "not_found"}
+
+
+def _save_alert_config(request: AlertSyncRequest) -> None:
+    get_alert_store(request.device_id).save_config(request)

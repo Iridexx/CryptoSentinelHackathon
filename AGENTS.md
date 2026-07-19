@@ -125,6 +125,7 @@ Operational rules for AI agents working on CryptoSentinelHackathon.
 - For runtime bugs, inspect the available backend and frontend diagnostic logs before identifying a code-level cause or making corrective changes.
 - Correlate related events through `X-Request-ID` where available, and base the diagnosis on logged evidence rather than assumptions.
 - If the existing logs are insufficient, improve the relevant non-sensitive instrumentation first, reproduce the issue, and only then modify application behavior.
+- For backend tests and import checks on this Windows workspace, use the project backend virtualenv interpreter: `backend\.venv\Scripts\python.exe` from the repository root. Do not assume `.venv\Scripts\python.exe` exists at the repository root.
 - Verify backend import/startup paths after backend changes.
 - Verify guardrail failures when changing configuration logic.
 - Verify GitHub Actions status after CI workflow changes and report the run URL.

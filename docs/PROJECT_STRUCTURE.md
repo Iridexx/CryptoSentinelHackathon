@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-07-15
+Ultimo aggiornamento: 2026-07-19
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -8,7 +8,7 @@ Documento di riferimento per revisione esterna. Viene aggiornato al termine di o
 
 ```text
 CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack Track 1.
-|-- AGENTS.md - regole operative permanenti per agenti AI sul repository.
+|-- AGENTS.md - regole operative permanenti per agenti AI sul repository, incluso path Windows corretto per verifiche backend con `backend\.venv\Scripts\python.exe`.
 |-- .github/ - automazioni CI/CD GitHub.
 |   `-- workflows/build-apk.yml - workflow GitHub Actions per build APK debug con JDK 21, restore sicuro google-services da secret, artifact prima delle release e deploy Pages su gh-pages solo da main.
 |-- android/ - progetto Android Capacitor esistente.
@@ -41,7 +41,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
 |   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data/execution/views/mobile agent/observability.
-|   |   |       |-- alerts.py - sincronizzazione configurazione alert e pending badge preferiti con acknowledgement.
+|   |   |       |-- alerts.py - sincronizzazione configurazione alert e pending badge preferiti con acknowledgement; persistenza sync spostata fuori dall'event loop per evitare freeze API durante lock SQLite.
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
@@ -123,7 +123,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- persistence/ - layer persistenza dati Step 5.
 |   |   |   |-- __init__.py - esporta init_db, close_db, get_session, get_session_factory, check_db.
 |   |   |   |-- database.py - engine async aiosqlite, async_sessionmaker, create_all, check_db con SELECT 1 e latency.
-|   |   |   |-- sync_database.py - engine sync sqlite3 per store legacy sincroni; stesso file SQLite.
+|   |   |   |-- sync_database.py - engine sync sqlite3 per store legacy sincroni; stesso file SQLite, WAL e busy timeout allineato a 5s.
 |   |   |   |-- backup.py - copia SQLite con timestamp UTC, pruning retention, restituisce None se DB assente.
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing e funding.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.

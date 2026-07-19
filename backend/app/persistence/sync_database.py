@@ -34,14 +34,14 @@ def init_sync_db(database_url: str, *, echo: bool = False) -> None:
     if _engine is not None:
         return
     sync_url = _sync_url(database_url)
-    connect_args = {"timeout": 30} if sync_url.startswith("sqlite") else {}
+    connect_args = {"timeout": 5} if sync_url.startswith("sqlite") else {}
     _engine = create_engine(sync_url, echo=echo, future=True, connect_args=connect_args)
     if sync_url.startswith("sqlite"):
         @event.listens_for(_engine, "connect")
         def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.execute("PRAGMA busy_timeout=5000")
             cursor.close()
     _session_factory = sessionmaker(_engine, expire_on_commit=False, class_=Session)
 

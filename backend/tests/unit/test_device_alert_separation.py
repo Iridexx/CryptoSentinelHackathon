@@ -10,6 +10,7 @@ import pytest
 from backend.app.notifications import alert_store as alert_store_module
 from backend.app.notifications import price_checker
 from backend.app.notifications.alert_store import get_alert_store
+from backend.app.api.routes import alerts as alerts_routes
 from backend.app.persistence.sync_database import (
     create_all_sync,
     init_sync_db,
@@ -28,6 +29,23 @@ def db(tmp_path: Path):
     yield
     alert_store_module._instances.clear()
     reset_sync_db()
+
+
+@pytest.mark.asyncio
+async def test_alert_sync_persists_off_event_loop(monkeypatch) -> None:
+    calls = {"count": 0}
+
+    async def fake_run_sync(func, request):
+        calls["count"] += 1
+        assert func is alerts_routes._save_alert_config
+        assert request.device_id == "devA"
+
+    monkeypatch.setattr(alerts_routes.anyio.to_thread, "run_sync", fake_run_sync)
+
+    response = await alerts_routes.sync_alerts(AlertSyncRequest(device_id="devA"), None)
+
+    assert response.status == "synced"
+    assert calls["count"] == 1
 
 
 def _price_config(device_id: str | None, coin_id: str, coin_name: str) -> AlertSyncRequest:
