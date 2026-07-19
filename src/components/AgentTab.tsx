@@ -177,6 +177,7 @@ const needsPostCloseCandles = (detail: TradeDetail): boolean =>
 
 const hasCompleteTradeChart = (detail: TradeDetail): boolean => {
   if (!hasBaseTradeChart(detail)) return false;
+  if (!detail.chart?.stop_reference) return false;
   if (!needsPostCloseCandles(detail)) return true;
   return (detail.chart?.post_close_candles?.length ?? 0) > 0;
 };
@@ -1942,7 +1943,7 @@ const AgentTab: FC<AgentTabProps> = ({
       // senza aspettare la piu' lenta. I dati precedenti restano visibili nel frattempo.
       const activeTradeId = detailTradeIdRef.current;
       const detailFetch = activeTradeId && !hasCompleteCachedTradeDetail(activeTradeId)
-        ? loadActiveTradeDetail(activeTradeId).catch(() => {})
+        ? loadActiveTradeDetail(activeTradeId, true).catch(() => {})
         : Promise.resolve();
       const results = await Promise.allSettled([
         fetchAgentStatus().then(setStatus),
@@ -2147,7 +2148,7 @@ const AgentTab: FC<AgentTabProps> = ({
     }
     setLoadingDetail(true);
     try {
-      await loadActiveTradeDetail(tradeId, false);
+      await loadActiveTradeDetail(tradeId, true);
     } catch (err) {
       if (detailTradeIdRef.current === tradeId) {
         setActionError(err instanceof Error ? err.message : 'Unable to load trade detail');

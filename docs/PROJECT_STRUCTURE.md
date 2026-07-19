@@ -51,7 +51,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 20 con buffer percentuale, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded, marker candela riferimento SL e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con grafico opzionale best-effort bounded, marker candela riferimento SL, fallback legacy che ricostruisce il contesto pre-apertura per grafici senza stop_reference persistito e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.

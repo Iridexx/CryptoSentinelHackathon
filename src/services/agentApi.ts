@@ -241,6 +241,7 @@ export interface TradeChart {
     price?: string | null;
     field?: string | null;
     pre_candles?: number;
+    inferred?: boolean;
   } | null;
   candles: TradeChartCandle[];
   post_close_candles?: TradeChartCandle[];

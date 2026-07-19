@@ -79,7 +79,7 @@ export function fetchAssetBreakdown(session: DashboardSession, market: 'spot' | 
 }
 
 export function fetchTradeDetail(session: DashboardSession, tradeId: string) {
-  return requestJson<TradeDetail>(session, `/api/v1/views/trade-detail/${encodeURIComponent(tradeId)}`);
+  return requestJson<TradeDetail>(session, `/api/v1/views/trade-detail/${encodeURIComponent(tradeId)}?enrich_chart=true`);
 }
 
 export function fetchOperationalStats(session: DashboardSession) {

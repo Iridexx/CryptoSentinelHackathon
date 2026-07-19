@@ -812,6 +812,110 @@ async def test_closed_trade_chart_trims_snapshot_and_dedupes_post_close(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_live_trade_chart_infers_stop_reference_for_legacy_position(monkeypatch) -> None:
+    clear_kline_cache()
+    now = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
+    opened_at = datetime(2026, 7, 19, 11, 0, tzinfo=UTC)
+    expected_start = opened_at - timedelta(minutes=150)
+    reference_time = expected_start + timedelta(minutes=5 * 18)
+    calls: list[dict] = []
+
+    class FakeKlineFeed:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def fetch(self, **kwargs):
+            calls.append(kwargs)
+            out = []
+            for index in range(35):
+                ts = expected_start + timedelta(minutes=5 * index)
+                low = 88.0 if ts == reference_time else 97.0 + index / 100
+                out.append(Candle(timestamp=ts, open=100, high=101, low=low, close=100.5, volume=1))
+            return out
+
+    monkeypatch.setattr(binance_klines, "BinanceKlineFeed", FakeKlineFeed)
+    monkeypatch.setattr(view_routes, "datetime", SimpleNamespace(
+        now=lambda _tz: now,
+        fromisoformat=datetime.fromisoformat,
+    ))
+    position = SimpleNamespace(
+        asset="BTC",
+        side="long",
+        entry_price=Decimal("100"),
+        current_price=Decimal("101"),
+        stop_loss=Decimal("87"),
+        take_profit_1=Decimal("103"),
+        take_profit_2=Decimal("106"),
+        liquidation_price=None,
+        opened_at=opened_at,
+    )
+
+    chart = await view_routes._build_live_chart(position, "spot", settings=settings())
+
+    assert calls[0]["start_time"] == expected_start
+    assert chart is not None
+    assert chart["candles"][0]["t"] == expected_start.isoformat()
+    assert chart["stop_reference"] == {
+        "t": reference_time.isoformat(),
+        "price": "88.0",
+        "field": "low",
+        "pre_candles": 10,
+        "inferred": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_closed_trade_chart_enrichment_prepends_legacy_stop_context(monkeypatch) -> None:
+    opened_at = datetime(2026, 7, 19, 10, 0, tzinfo=UTC)
+    closed_at = datetime(2026, 7, 19, 10, 30, tzinfo=UTC)
+    expected_start = opened_at - timedelta(minutes=150)
+    reference_time = expected_start + timedelta(minutes=5 * 24)
+    chart = {
+        "interval": "5m",
+        "market": "spot",
+        "side": "long",
+        "entry_price": "100",
+        "exit_price": "102",
+        "stop_loss": "92",
+        "opened_at": opened_at.isoformat(),
+        "closed_at": closed_at.isoformat(),
+        "candles": [
+            {"t": opened_at.isoformat(), "o": 100, "h": 101, "l": 99, "c": 100.5},
+            {"t": (opened_at + timedelta(minutes=5)).isoformat(), "o": 100.5, "h": 102, "l": 100, "c": 101.5},
+        ],
+    }
+    calls: list[dict] = []
+
+    class FakeKlineFeed:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def fetch(self, **kwargs):
+            calls.append(kwargs)
+            out = []
+            for index in range(40):
+                ts = expected_start + timedelta(minutes=5 * index)
+                low = 91.0 if ts == reference_time else 98.0 + index / 100
+                out.append(Candle(timestamp=ts, open=100, high=101, low=low, close=100.5, volume=1))
+            return out
+
+    monkeypatch.setattr(binance_klines, "BinanceKlineFeed", FakeKlineFeed)
+
+    enriched = await view_routes._enrich_trade_chart_context(chart, "BTC", "spot", "spot", "long", settings())
+
+    assert calls[0]["start_time"] == expected_start
+    assert enriched is not None
+    assert enriched["candles"][0]["t"] == expected_start.isoformat()
+    assert enriched["stop_reference"] == {
+        "t": reference_time.isoformat(),
+        "price": "91.0",
+        "field": "low",
+        "pre_candles": 10,
+        "inferred": True,
+    }
+
+
+@pytest.mark.asyncio
 async def test_spot_trailing_active_from_start(db) -> None:
     # v3 (C): il trailing è attivo DA SUBITO, non più solo dopo TP1.
     service = AgentService(

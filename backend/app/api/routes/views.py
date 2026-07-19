@@ -210,19 +210,24 @@ async def trade_detail(
         position = await _find_trade_position(session, SpotPosition, spot)
         decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
         snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
-        live = await _live_chart_if_open(snapshot, position, "spot") if enrich_chart else None
+        live = await _live_chart_if_open(snapshot, position, "spot", settings) if enrich_chart else None
+        chart_payload = json.loads(snapshot.payload) if snapshot else None
         post_close: list[dict] = []
         if enrich_chart and live is None and snapshot is not None:
-            post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), spot.asset, "spot", post_close_count)
-        return _spot_trade_detail(spot, position, decision, snapshot, live, post_close)
+            chart_payload = await _enrich_trade_chart_context(chart_payload, spot.asset, "spot", "spot", "long", settings)
+            post_close = await _fetch_post_close_candles(chart_payload, spot.asset, "spot", post_close_count)
+        return _spot_trade_detail(spot, position, decision, snapshot, live, post_close, chart_payload)
     position = await _find_trade_position(session, PerpPosition, perp)
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
     snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
-    live = await _live_chart_if_open(snapshot, position, "perp") if enrich_chart else None
+    live = await _live_chart_if_open(snapshot, position, "perp", settings) if enrich_chart else None
+    chart_payload = json.loads(snapshot.payload) if snapshot else None
     post_close = []
     if enrich_chart and live is None and snapshot is not None:
-        post_close = await _fetch_post_close_candles(json.loads(snapshot.payload), perp.asset, "futures", post_close_count)
-    return _perp_trade_detail(perp, position, decision, snapshot, live, post_close)
+        side = position.side if position is not None else perp.side
+        chart_payload = await _enrich_trade_chart_context(chart_payload, perp.asset, "futures", "perp", side, settings)
+        post_close = await _fetch_post_close_candles(chart_payload, perp.asset, "futures", post_close_count)
+    return _perp_trade_detail(perp, position, decision, snapshot, live, post_close, chart_payload)
 
 
 async def _find_trade_position(session, model, trade):
@@ -254,7 +259,7 @@ async def _load_chart_snapshot(
     return snapshot
 
 
-async def _live_chart_if_open(snapshot, position, market: str) -> dict | None:
+async def _live_chart_if_open(snapshot, position, market: str, settings) -> dict | None:
     """Per una posizione ancora aperta costruisce un grafico dal vivo.
 
     Lo snapshot parziale (TP1) viene ignorato: la posizione è ancora aperta
@@ -264,7 +269,7 @@ async def _live_chart_if_open(snapshot, position, market: str) -> dict | None:
         return None
     try:
         return await asyncio.wait_for(
-            _build_live_chart(position, market, timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS),
+            _build_live_chart(position, market, settings=settings, timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS),
             timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
         )
     except Exception:
@@ -276,6 +281,7 @@ _INTERVAL_MINUTES: dict[str, int] = {
     "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440,
 }
 POST_CLOSE_CANDLES = 10
+STOP_REFERENCE_PRE_CANDLES = 10
 TRADE_DETAIL_CHART_TIMEOUT_SECONDS = 4.0
 TRADE_DETAIL_FEED_TIMEOUT_SECONDS = 1.5
 TRADE_DETAIL_KLINE_CACHE_MAX_AGE_SECONDS = 180
@@ -356,6 +362,118 @@ def _normalize_chart_candles(raw_candles: list[dict]) -> list[tuple[datetime, di
     return normalized
 
 
+def _parse_chart_datetime(value) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+        return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+    except Exception:
+        return None
+
+
+def _structural_stop_lookback(settings, market: str) -> int:
+    attr = "perp_structural_stop_lookback_candles" if market == "perp" else "spot_structural_stop_lookback_candles"
+    try:
+        return max(1, int(getattr(settings, attr, 20)))
+    except Exception:
+        return 20
+
+
+def _stop_reference_field(market: str, side: str | None) -> str:
+    if market == "perp" and str(side or "").lower() == "short":
+        return "high"
+    return "low"
+
+
+def _infer_stop_reference_from_chart(chart: dict, market: str, side: str | None, lookback: int) -> dict | None:
+    opened_at = _parse_chart_datetime(chart.get("opened_at"))
+    if opened_at is None:
+        return None
+    normalized = _normalize_chart_candles(chart.get("candles", []))
+    candidates = [(ts, candle) for ts, candle in normalized if ts <= opened_at]
+    if not candidates:
+        return None
+    window = candidates[-lookback:]
+    field = _stop_reference_field(market, side)
+    price_key = "h" if field == "high" else "l"
+
+    def price_of(item: tuple[datetime, dict]) -> Decimal:
+        return Decimal(str(item[1][price_key]))
+
+    selected_ts, selected = max(window, key=price_of) if field == "high" else min(window, key=price_of)
+    return {
+        "t": selected_ts.isoformat(),
+        "price": str(selected.get(price_key)),
+        "field": field,
+        "pre_candles": STOP_REFERENCE_PRE_CANDLES,
+        "inferred": True,
+    }
+
+
+def _ensure_stop_reference(chart: dict | None, market: str, side: str | None, lookback: int) -> dict | None:
+    if chart is None or chart.get("stop_reference"):
+        return chart
+    inferred = _infer_stop_reference_from_chart(chart, market, side, lookback)
+    if inferred is None:
+        return chart
+    return {**chart, "stop_reference": inferred}
+
+
+async def _enrich_trade_chart_context(
+    chart: dict | None,
+    asset: str,
+    feed_market: str,
+    market: str,
+    side: str | None,
+    settings,
+) -> dict | None:
+    """Add pre-open candles and infer the structural SL reference for old snapshots."""
+
+    if chart is None or chart.get("live"):
+        return chart
+    normalized_chart = _normalize_closed_chart(chart) or chart
+    opened_at = _parse_chart_datetime(normalized_chart.get("opened_at"))
+    if opened_at is None:
+        return _ensure_stop_reference(normalized_chart, market, side, _structural_stop_lookback(settings, market))
+    interval = str(normalized_chart.get("interval", "5m"))
+    interval_min = _INTERVAL_MINUTES.get(interval, 5)
+    lookback = _structural_stop_lookback(settings, market)
+    required_pre = lookback + STOP_REFERENCE_PRE_CANDLES
+    target_start = opened_at - timedelta(minutes=interval_min * required_pre)
+    existing = _normalize_chart_candles(normalized_chart.get("candles", []))
+    has_enough_context = bool(existing and existing[0][0] <= target_start + timedelta(minutes=interval_min))
+    if normalized_chart.get("stop_reference") and has_enough_context:
+        return normalized_chart
+
+    try:
+        from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+
+        closed_at = _parse_chart_datetime(normalized_chart.get("closed_at"))
+        limit = int(min(260, max(required_pre + len(existing) + 5, required_pre + 20)))
+        fetched = await asyncio.wait_for(
+            BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
+                symbol=f"{asset}USDT",
+                interval=interval,
+                limit=limit,
+                market=feed_market,  # type: ignore[arg-type]
+                start_time=target_start,
+            ),
+            timeout=TRADE_DETAIL_CHART_TIMEOUT_SECONDS,
+        )
+        fetched_candles = [
+            {"t": c.timestamp.isoformat(), "o": c.open, "h": c.high, "l": c.low, "c": c.close}
+            for c in fetched
+            if closed_at is None or c.timestamp <= closed_at
+        ]
+        by_ts = {candle["t"]: candle for candle in fetched_candles}
+        by_ts.update({candle["t"]: candle for _, candle in existing})
+        merged = _normalize_closed_chart({**normalized_chart, "candles": list(by_ts.values())}) or normalized_chart
+    except Exception:
+        merged = normalized_chart
+    return _ensure_stop_reference(merged, market, side, lookback)
+
+
 def _normalize_closed_chart(chart: dict | None) -> dict | None:
     """Sort snapshot candles and keep closed charts ending on the close candle."""
 
@@ -380,7 +498,7 @@ def _normalize_closed_chart(chart: dict | None) -> dict | None:
     return {**chart, "candles": pre_close or candles}
 
 
-async def _build_live_chart(position, market: str, *, timeout_seconds: float = TRADE_DETAIL_FEED_TIMEOUT_SECONDS) -> dict | None:
+async def _build_live_chart(position, market: str, *, settings=None, timeout_seconds: float = TRADE_DETAIL_FEED_TIMEOUT_SECONDS) -> dict | None:
     """Candele OHLC dall'apertura della posizione fino ad ora, con stesso payload
     degli snapshot congelati ma marcato live (closed_at non e' una chiusura reale).
 
@@ -399,10 +517,11 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
         stop_reference_time = getattr(position, "stop_reference_time", None)
         if stop_reference_time and stop_reference_time.tzinfo is None:
             stop_reference_time = stop_reference_time.replace(tzinfo=UTC)
+        lookback = _structural_stop_lookback(settings, market) if settings is not None else 20
         chart_start = (
             stop_reference_time - timedelta(minutes=per_min * 10)
             if stop_reference_time is not None
-            else None
+            else opened_at - timedelta(minutes=per_min * (lookback + STOP_REFERENCE_PRE_CANDLES))
         )
         chart_span_min = (
             max(1, int((now - chart_start).total_seconds() / 60))
@@ -428,7 +547,7 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
         tp2 = getattr(position, "take_profit_2", None)
         stop_reference_price = getattr(position, "stop_reference_price", None)
         stop_reference_field = getattr(position, "stop_reference_field", None)
-        return {
+        chart = {
             "interval": interval,
             "market": market,
             "side": position.side if market == "perp" else "long",
@@ -449,7 +568,7 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
                     "t": stop_reference_time.isoformat(),
                     "price": str(stop_reference_price) if stop_reference_price else None,
                     "field": stop_reference_field,
-                    "pre_candles": 10,
+                    "pre_candles": STOP_REFERENCE_PRE_CANDLES,
                 }
                 if stop_reference_time is not None
                 else None
@@ -460,6 +579,7 @@ async def _build_live_chart(position, market: str, *, timeout_seconds: float = T
                 for c in candles
             ],
         }
+        return _ensure_stop_reference(chart, market, chart["side"], lookback)
     except Exception:
         return None
 
@@ -709,9 +829,18 @@ def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tupl
     return opened_at, closed_at
 
 
-def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None, post_close_candles: list[dict] | None = None) -> dict:
+def _spot_trade_detail(
+    trade: SpotTrade,
+    position: SpotPosition | None,
+    decision: AgentDecision | None,
+    snapshot: TradeChartSnapshot | None = None,
+    live_chart: dict | None = None,
+    post_close_candles: list[dict] | None = None,
+    chart_payload: dict | None = None,
+) -> dict:
     # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
-    chart = _normalize_closed_chart(live_chart if live_chart is not None else (json.loads(snapshot.payload) if snapshot else None))
+    raw_chart = live_chart if live_chart is not None else (chart_payload if chart_payload is not None else (json.loads(snapshot.payload) if snapshot else None))
+    chart = _normalize_closed_chart(raw_chart)
     if chart is not None and post_close_candles:
         chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
@@ -774,9 +903,18 @@ def _spot_trade_detail(trade: SpotTrade, position: SpotPosition | None, decision
     }
 
 
-def _perp_trade_detail(trade: PerpTrade, position: PerpPosition | None, decision: AgentDecision | None, snapshot: TradeChartSnapshot | None = None, live_chart: dict | None = None, post_close_candles: list[dict] | None = None) -> dict:
+def _perp_trade_detail(
+    trade: PerpTrade,
+    position: PerpPosition | None,
+    decision: AgentDecision | None,
+    snapshot: TradeChartSnapshot | None = None,
+    live_chart: dict | None = None,
+    post_close_candles: list[dict] | None = None,
+    chart_payload: dict | None = None,
+) -> dict:
     # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
-    chart = _normalize_closed_chart(live_chart if live_chart is not None else (json.loads(snapshot.payload) if snapshot else None))
+    raw_chart = live_chart if live_chart is not None else (chart_payload if chart_payload is not None else (json.loads(snapshot.payload) if snapshot else None))
+    chart = _normalize_closed_chart(raw_chart)
     if chart is not None and post_close_candles:
         chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
