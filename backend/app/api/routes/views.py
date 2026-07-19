@@ -281,7 +281,6 @@ _INTERVAL_MINUTES: dict[str, int] = {
     "1h": 60, "2h": 120, "4h": 240, "6h": 360, "12h": 720, "1d": 1440,
 }
 POST_CLOSE_CANDLES = 10
-STOP_REFERENCE_PRE_CANDLES = 10
 TRADE_DETAIL_CHART_TIMEOUT_SECONDS = 4.0
 TRADE_DETAIL_FEED_TIMEOUT_SECONDS = 1.5
 TRADE_DETAIL_KLINE_CACHE_MAX_AGE_SECONDS = 180
@@ -406,7 +405,7 @@ def _infer_stop_reference_from_chart(chart: dict, market: str, side: str | None,
         "t": selected_ts.isoformat(),
         "price": str(selected.get(price_key)),
         "field": field,
-        "pre_candles": STOP_REFERENCE_PRE_CANDLES,
+        "pre_candles": lookback,
         "inferred": True,
     }
 
@@ -439,8 +438,7 @@ async def _enrich_trade_chart_context(
     interval = str(normalized_chart.get("interval", "5m"))
     interval_min = _INTERVAL_MINUTES.get(interval, 5)
     lookback = _structural_stop_lookback(settings, market)
-    required_pre = lookback + STOP_REFERENCE_PRE_CANDLES
-    target_start = opened_at - timedelta(minutes=interval_min * required_pre)
+    target_start = opened_at - timedelta(minutes=interval_min * lookback)
     existing = _normalize_chart_candles(normalized_chart.get("candles", []))
     has_enough_context = bool(existing and existing[0][0] <= target_start + timedelta(minutes=interval_min))
     if normalized_chart.get("stop_reference") and has_enough_context:
@@ -450,7 +448,7 @@ async def _enrich_trade_chart_context(
         from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 
         closed_at = _parse_chart_datetime(normalized_chart.get("closed_at"))
-        limit = int(min(260, max(required_pre + len(existing) + 5, required_pre + 20)))
+        limit = int(min(260, max(lookback + len(existing) + 5, lookback + 20)))
         fetched = await asyncio.wait_for(
             BinanceKlineFeed(timeout_seconds=TRADE_DETAIL_FEED_TIMEOUT_SECONDS).fetch(
                 symbol=f"{asset}USDT",
@@ -519,9 +517,9 @@ async def _build_live_chart(position, market: str, *, settings=None, timeout_sec
             stop_reference_time = stop_reference_time.replace(tzinfo=UTC)
         lookback = _structural_stop_lookback(settings, market) if settings is not None else 20
         chart_start = (
-            stop_reference_time - timedelta(minutes=per_min * 10)
+            min(opened_at - timedelta(minutes=per_min * lookback), stop_reference_time)
             if stop_reference_time is not None
-            else opened_at - timedelta(minutes=per_min * (lookback + STOP_REFERENCE_PRE_CANDLES))
+            else opened_at - timedelta(minutes=per_min * lookback)
         )
         chart_span_min = (
             max(1, int((now - chart_start).total_seconds() / 60))
@@ -568,7 +566,7 @@ async def _build_live_chart(position, market: str, *, settings=None, timeout_sec
                     "t": stop_reference_time.isoformat(),
                     "price": str(stop_reference_price) if stop_reference_price else None,
                     "field": stop_reference_field,
-                    "pre_candles": STOP_REFERENCE_PRE_CANDLES,
+                    "pre_candles": lookback,
                 }
                 if stop_reference_time is not None
                 else None

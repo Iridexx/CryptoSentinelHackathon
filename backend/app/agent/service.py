@@ -721,8 +721,13 @@ class AgentService:
             stop_reference_time = getattr(pos, "stop_reference_time", None)
             if stop_reference_time and stop_reference_time.tzinfo is None:
                 stop_reference_time = stop_reference_time.replace(tzinfo=UTC)
+            lookback_attr = "perp_structural_stop_lookback_candles" if market == "perp" else "spot_structural_stop_lookback_candles"
+            try:
+                lookback = max(1, int(getattr(self.settings, lookback_attr, 20)))
+            except Exception:
+                lookback = 20
             chart_start = (
-                stop_reference_time - timedelta(minutes=per_min * 10)
+                min(opened_at - timedelta(minutes=per_min * lookback), stop_reference_time)
                 if stop_reference_time is not None
                 else None
             )
@@ -773,7 +778,7 @@ class AgentService:
                         "t": stop_reference_time.isoformat(),
                         "price": str(stop_reference_price) if stop_reference_price else None,
                         "field": stop_reference_field,
-                        "pre_candles": 10,
+                        "pre_candles": lookback,
                     }
                     if stop_reference_time is not None
                     else None

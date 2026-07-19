@@ -716,15 +716,17 @@ async def test_close_chart_snapshot_starts_before_stop_reference(db) -> None:
         perp_registry=SimpleNamespace(),
     )
     now = datetime(2026, 7, 19, 10, 0, tzinfo=UTC)
-    reference_time = now - timedelta(minutes=70)
+    opened_at = now - timedelta(hours=1)
+    reference_time = opened_at - timedelta(minutes=25)
+    expected_start = opened_at - timedelta(minutes=100)
     calls: list[dict] = []
 
     class FakeFeed:
         async def fetch(self, **kwargs):
             calls.append(kwargs)
             return [
-                Candle(timestamp=reference_time - timedelta(minutes=50) + timedelta(minutes=5 * i), open=100, high=101, low=99, close=100.5, volume=1.0)
-                for i in range(20)
+                Candle(timestamp=expected_start + timedelta(minutes=5 * i), open=100, high=101, low=99, close=100.5, volume=1.0)
+                for i in range(35)
             ]
 
     service.price_feed = FakeFeed()
@@ -744,23 +746,23 @@ async def test_close_chart_snapshot_starts_before_stop_reference(db) -> None:
         take_profit_2=Decimal("106"),
         tp1_reached=True,
         status="open",
-        opened_at=now - timedelta(hours=2),
+        opened_at=opened_at,
         updated_at=now,
     )
     async with get_session_factory()() as session:
         await service._close_spot_position(session, pos, Decimal("103"), "take_profit_2", now)
         snap = await TradeChartRepository(session).get_for_position(str(USER_ID), "pos-chart-ref")
 
-    assert calls[0]["start_time"] == reference_time - timedelta(minutes=50)
+    assert calls[0]["start_time"] == expected_start
     assert snap is not None
     payload = json.loads(snap.payload)
     assert payload["stop_reference"] == {
         "t": reference_time.isoformat(),
         "price": "97.5",
         "field": "low",
-        "pre_candles": 10,
+        "pre_candles": 20,
     }
-    assert payload["candles"][0]["t"] == (reference_time - timedelta(minutes=50)).isoformat()
+    assert payload["candles"][0]["t"] == expected_start.isoformat()
 
 
 @pytest.mark.asyncio
@@ -816,7 +818,7 @@ async def test_live_trade_chart_infers_stop_reference_for_legacy_position(monkey
     clear_kline_cache()
     now = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
     opened_at = datetime(2026, 7, 19, 11, 0, tzinfo=UTC)
-    expected_start = opened_at - timedelta(minutes=150)
+    expected_start = opened_at - timedelta(minutes=100)
     reference_time = expected_start + timedelta(minutes=5 * 18)
     calls: list[dict] = []
 
@@ -859,7 +861,7 @@ async def test_live_trade_chart_infers_stop_reference_for_legacy_position(monkey
         "t": reference_time.isoformat(),
         "price": "88.0",
         "field": "low",
-        "pre_candles": 10,
+        "pre_candles": 20,
         "inferred": True,
     }
 
@@ -868,8 +870,8 @@ async def test_live_trade_chart_infers_stop_reference_for_legacy_position(monkey
 async def test_closed_trade_chart_enrichment_prepends_legacy_stop_context(monkeypatch) -> None:
     opened_at = datetime(2026, 7, 19, 10, 0, tzinfo=UTC)
     closed_at = datetime(2026, 7, 19, 10, 30, tzinfo=UTC)
-    expected_start = opened_at - timedelta(minutes=150)
-    reference_time = expected_start + timedelta(minutes=5 * 24)
+    expected_start = opened_at - timedelta(minutes=100)
+    reference_time = expected_start + timedelta(minutes=5 * 18)
     chart = {
         "interval": "5m",
         "market": "spot",
@@ -910,7 +912,7 @@ async def test_closed_trade_chart_enrichment_prepends_legacy_stop_context(monkey
         "t": reference_time.isoformat(),
         "price": "91.0",
         "field": "low",
-        "pre_candles": 10,
+        "pre_candles": 20,
         "inferred": True,
     }
 

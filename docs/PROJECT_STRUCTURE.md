@@ -55,7 +55,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing con breakeven Spot/Perp configurabile e trailing etichettato separatamente dal breakeven, alert drawdown configurabile, snapshot grafici trade con 10 candele pre-reference SL e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing con breakeven Spot/Perp configurabile e trailing etichettato separatamente dal breakeven, alert drawdown configurabile, snapshot grafici trade con finestra completa delle 20 candele strutturali SL e provider execution astratti.
 |   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
