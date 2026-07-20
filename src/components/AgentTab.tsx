@@ -1618,7 +1618,7 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
   const entryIdx = nearest(ts(chart.opened_at), allCandles);
   const exitIdx = atOrBefore(ts(chart.closed_at), allCandles);
   const stopRefIdx = chart.stop_reference?.t ? nearest(ts(chart.stop_reference.t), allCandles) : null;
-  const stopRefPrice = chart.stop_reference?.price != null ? Number(chart.stop_reference.price) : null;
+  const stopRefPrice = sl ?? (chart.stop_reference?.price != null ? Number(chart.stop_reference.price) : null);
   const exitGood = exit >= entry;
 
   // Etichette asse Y (prezzo).

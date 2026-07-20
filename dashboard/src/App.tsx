@@ -123,6 +123,8 @@ const settingFields = [
   'perp_breakeven_mode',
   'spot_sl_mode',
   'perp_sl_mode',
+  'spot_structural_stop_buffer_pct',
+  'perp_structural_stop_buffer_pct',
 ];
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';
@@ -1196,7 +1198,7 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   const entryIdx = nearest(ts(chart.opened_at), allCandles);
   const exitIdx = atOrBefore(ts(chart.closed_at), allCandles);
   const stopRefIdx = chart.stop_reference?.t ? nearest(ts(chart.stop_reference.t), allCandles) : null;
-  const stopRefPrice = chart.stop_reference?.price != null ? Number(chart.stop_reference.price) : null;
+  const stopRefPrice = sl ?? (chart.stop_reference?.price != null ? Number(chart.stop_reference.price) : null);
   const exitGood = exit >= entry;
 
   const levelLine = (price: number | null, color: string, dash: string) =>
