@@ -216,7 +216,7 @@ async def trade_detail(
         if enrich_chart and live is None and snapshot is not None:
             chart_payload = await _enrich_trade_chart_context(chart_payload, spot.asset, "spot", "spot", "long", settings)
             post_close = await _fetch_post_close_candles(chart_payload, spot.asset, "spot", post_close_count)
-        return _spot_trade_detail(spot, position, decision, snapshot, live, post_close, chart_payload)
+        return _spot_trade_detail(spot, position, decision, settings, snapshot, live, post_close, chart_payload)
     position = await _find_trade_position(session, PerpPosition, perp)
     decision = (await session.execute(select(AgentDecision).where(AgentDecision.trade_id == trade_id))).scalar_one_or_none()
     snapshot = await _load_chart_snapshot(chart_repo, user_id, trade_id, position)
@@ -227,7 +227,7 @@ async def trade_detail(
         side = position.side if position is not None else perp.side
         chart_payload = await _enrich_trade_chart_context(chart_payload, perp.asset, "futures", "perp", side, settings)
         post_close = await _fetch_post_close_candles(chart_payload, perp.asset, "futures", post_close_count)
-    return _perp_trade_detail(perp, position, decision, snapshot, live, post_close, chart_payload)
+    return _perp_trade_detail(perp, position, decision, settings, snapshot, live, post_close, chart_payload)
 
 
 async def _find_trade_position(session, model, trade):
@@ -379,6 +379,14 @@ def _structural_stop_lookback(settings, market: str) -> int:
         return 20
 
 
+def _structural_stop_buffer(settings, market: str) -> Decimal:
+    attr = "perp_structural_stop_buffer_pct" if market == "perp" else "spot_structural_stop_buffer_pct"
+    try:
+        return Decimal(str(getattr(settings, attr, 1.10)))
+    except Exception:
+        return Decimal("1.10")
+
+
 def _stop_reference_field(market: str, side: str | None) -> str:
     if market == "perp" and str(side or "").lower() == "short":
         return "high"
@@ -417,6 +425,36 @@ def _ensure_stop_reference(chart: dict | None, market: str, side: str | None, lo
     if inferred is None:
         return chart
     return {**chart, "stop_reference": inferred}
+
+
+def _structural_stop_loss_from_reference(chart: dict, settings, market: str, side: str | None) -> str | None:
+    reference = chart.get("stop_reference") or {}
+    price = reference.get("price")
+    if price is None:
+        return None
+    try:
+        reference_price = Decimal(str(price))
+    except Exception:
+        return None
+    field = str(reference.get("field") or _stop_reference_field(market, side)).lower()
+    buffer_pct = _structural_stop_buffer(settings, market)
+    if field == "high":
+        stop_loss = reference_price * (Decimal("1") + buffer_pct / Decimal("100"))
+    else:
+        stop_loss = reference_price * (Decimal("1") - buffer_pct / Decimal("100"))
+    return _fmt_price(stop_loss)
+
+
+def _apply_display_stop_to_chart(chart: dict | None, position, settings, market: str, side: str | None) -> dict | None:
+    if chart is None:
+        return chart
+    initial_stop_loss = getattr(position, "initial_stop_loss", None) if position is not None else None
+    if initial_stop_loss:
+        return {**chart, "stop_loss": _fmt_price(initial_stop_loss)}
+    structural_stop_loss = _structural_stop_loss_from_reference(chart, settings, market, side)
+    if structural_stop_loss:
+        return {**chart, "stop_loss": structural_stop_loss}
+    return chart
 
 
 async def _enrich_trade_chart_context(
@@ -469,7 +507,8 @@ async def _enrich_trade_chart_context(
         merged = _normalize_closed_chart({**normalized_chart, "candles": list(by_ts.values())}) or normalized_chart
     except Exception:
         merged = normalized_chart
-    return _ensure_stop_reference(merged, market, side, lookback)
+    enriched = _ensure_stop_reference(merged, market, side, lookback)
+    return _apply_display_stop_to_chart(enriched, None, settings, market, side)
 
 
 def _normalize_closed_chart(chart: dict | None) -> dict | None:
@@ -545,13 +584,14 @@ async def _build_live_chart(position, market: str, *, settings=None, timeout_sec
         tp2 = getattr(position, "take_profit_2", None)
         stop_reference_price = getattr(position, "stop_reference_price", None)
         stop_reference_field = getattr(position, "stop_reference_field", None)
+        display_stop_loss = getattr(position, "initial_stop_loss", None) or position.stop_loss
         chart = {
             "interval": interval,
             "market": market,
             "side": position.side if market == "perp" else "long",
             "entry_price": str(position.entry_price),
             "exit_price": str(position.current_price),
-            "stop_loss": str(position.stop_loss) if position.stop_loss else None,
+            "stop_loss": str(display_stop_loss) if display_stop_loss else None,
             "take_profit_1": str(position.take_profit_1) if position.take_profit_1 else None,
             "take_profit_2": str(tp2) if tp2 else None,
             "liquidation_price": (
@@ -577,7 +617,8 @@ async def _build_live_chart(position, market: str, *, settings=None, timeout_sec
                 for c in candles
             ],
         }
-        return _ensure_stop_reference(chart, market, chart["side"], lookback)
+        chart = _ensure_stop_reference(chart, market, chart["side"], lookback)
+        return _apply_display_stop_to_chart(chart, position, settings, market, chart["side"])
     except Exception:
         return None
 
@@ -831,6 +872,7 @@ def _spot_trade_detail(
     trade: SpotTrade,
     position: SpotPosition | None,
     decision: AgentDecision | None,
+    settings=None,
     snapshot: TradeChartSnapshot | None = None,
     live_chart: dict | None = None,
     post_close_candles: list[dict] | None = None,
@@ -839,6 +881,7 @@ def _spot_trade_detail(
     # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
     raw_chart = live_chart if live_chart is not None else (chart_payload if chart_payload is not None else (json.loads(snapshot.payload) if snapshot else None))
     chart = _normalize_closed_chart(raw_chart)
+    chart = _apply_display_stop_to_chart(chart, position, settings, "spot", "long")
     if chart is not None and post_close_candles:
         chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
@@ -905,6 +948,7 @@ def _perp_trade_detail(
     trade: PerpTrade,
     position: PerpPosition | None,
     decision: AgentDecision | None,
+    settings=None,
     snapshot: TradeChartSnapshot | None = None,
     live_chart: dict | None = None,
     post_close_candles: list[dict] | None = None,
@@ -913,6 +957,8 @@ def _perp_trade_detail(
     # Per posizioni ancora aperte il grafico live prevale sullo snapshot parziale (TP1).
     raw_chart = live_chart if live_chart is not None else (chart_payload if chart_payload is not None else (json.loads(snapshot.payload) if snapshot else None))
     chart = _normalize_closed_chart(raw_chart)
+    side = position.side if position is not None else trade.side
+    chart = _apply_display_stop_to_chart(chart, position, settings, "perp", side)
     if chart is not None and post_close_candles:
         chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")

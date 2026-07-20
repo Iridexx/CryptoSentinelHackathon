@@ -737,7 +737,7 @@ async def test_close_chart_snapshot_starts_before_stop_reference(db) -> None:
         size=Decimal("1"),
         entry_price=Decimal("100"),
         current_price=Decimal("103"),
-        stop_loss=Decimal("98"),
+        stop_loss=Decimal("120"),
         initial_stop_loss=Decimal("98"),
         stop_reference_time=reference_time,
         stop_reference_price=Decimal("97.5"),
@@ -756,6 +756,7 @@ async def test_close_chart_snapshot_starts_before_stop_reference(db) -> None:
     assert calls[0]["start_time"] == expected_start
     assert snap is not None
     payload = json.loads(snap.payload)
+    assert payload["stop_loss"] == "98"
     assert payload["stop_reference"] == {
         "t": reference_time.isoformat(),
         "price": "97.5",
@@ -845,7 +846,8 @@ async def test_live_trade_chart_infers_stop_reference_for_legacy_position(monkey
         side="long",
         entry_price=Decimal("100"),
         current_price=Decimal("101"),
-        stop_loss=Decimal("87"),
+        stop_loss=Decimal("120"),
+        initial_stop_loss=Decimal("87"),
         take_profit_1=Decimal("103"),
         take_profit_2=Decimal("106"),
         liquidation_price=None,
@@ -856,6 +858,7 @@ async def test_live_trade_chart_infers_stop_reference_for_legacy_position(monkey
 
     assert calls[0]["start_time"] == expected_start
     assert chart is not None
+    assert chart["stop_loss"] == "87.00"
     assert chart["candles"][0]["t"] == expected_start.isoformat()
     assert chart["stop_reference"] == {
         "t": reference_time.isoformat(),

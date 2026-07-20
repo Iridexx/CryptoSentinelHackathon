@@ -757,13 +757,14 @@ class AgentService:
             tp2 = getattr(pos, "take_profit_2", None)
             stop_reference_price = getattr(pos, "stop_reference_price", None)
             stop_reference_field = getattr(pos, "stop_reference_field", None)
+            display_stop_loss = getattr(pos, "initial_stop_loss", None) or pos.stop_loss
             payload = {
                 "interval": interval,
                 "market": market,
                 "side": pos.side if market == "perp" else "long",
                 "entry_price": str(pos.entry_price),
                 "exit_price": str(exit_price),
-                "stop_loss": str(pos.stop_loss) if pos.stop_loss else None,
+                "stop_loss": str(display_stop_loss) if display_stop_loss else None,
                 "take_profit_1": str(pos.take_profit_1) if pos.take_profit_1 else None,
                 "take_profit_2": str(tp2) if tp2 else None,
                 "liquidation_price": (
