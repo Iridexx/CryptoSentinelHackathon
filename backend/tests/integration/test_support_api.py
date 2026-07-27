@@ -68,6 +68,17 @@ def test_support_ticket_thread_and_admin_status_flow(support_app: FastAPI) -> No
     assert ticket["display_name"] == "Marco S23"
     assert ticket["messages"][0]["diagnostics"] == {"app_version": "1.0.0", "request_id": "req-1"}
 
+    admin_notice = client.get("/api/v1/support/admin/notifications")
+    assert admin_notice.status_code == 200
+    assert admin_notice.json()["unread_count"] == 1
+
+    marked_admin = client.post(f"/api/v1/support/admin/tickets/{ticket_id}/read")
+    assert marked_admin.status_code == 200
+
+    admin_notice_after_read = client.get("/api/v1/support/admin/notifications")
+    assert admin_notice_after_read.status_code == 200
+    assert admin_notice_after_read.json()["unread_count"] == 0
+
     listed = client.get("/api/v1/support/tickets", params={"device_id": "device-a"})
     assert listed.status_code == 200
     assert listed.json()["total"] == 1
@@ -86,6 +97,18 @@ def test_support_ticket_thread_and_admin_status_flow(support_app: FastAPI) -> No
     assert admin_reply.status_code == 200
     assert admin_reply.json()["status"] == "in_progress"
     assert len(admin_reply.json()["messages"]) == 3
+
+    user_notice = client.get("/api/v1/support/notifications")
+    assert user_notice.status_code == 200
+    assert user_notice.json()["unread_count"] == 1
+    assert user_notice.json()["latest_ticket"]["ticket_id"] == ticket_id
+
+    marked_user = client.post(f"/api/v1/support/tickets/{ticket_id}/read", params={"device_id": "device-a"})
+    assert marked_user.status_code == 200
+
+    user_notice_after_read = client.get("/api/v1/support/notifications")
+    assert user_notice_after_read.status_code == 200
+    assert user_notice_after_read.json()["unread_count"] == 0
 
     still_visible_to_user = client.get("/api/v1/support/tickets", params={"device_id": "device-b"})
     assert still_visible_to_user.status_code == 200

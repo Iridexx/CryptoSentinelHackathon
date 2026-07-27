@@ -22,6 +22,7 @@ import type {
   SpotView,
   SupportTicketDetail,
   SupportTicketListResponse,
+  SupportNotificationResponse,
   SupportTicketStatus,
   TradeDetail,
 } from './types';
@@ -196,8 +197,18 @@ export function fetchSupportTickets(session: DashboardSession, params: { archive
   return requestJson<SupportTicketListResponse>(session, `/api/v1/support/admin/tickets${suffix}`, 'admin');
 }
 
+export function fetchSupportNotifications(session: DashboardSession) {
+  return requestJson<SupportNotificationResponse>(session, '/api/v1/support/admin/notifications', 'admin');
+}
+
 export function fetchSupportTicket(session: DashboardSession, ticketId: string) {
   return requestJson<SupportTicketDetail>(session, `/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}`, 'admin');
+}
+
+export function markSupportTicketRead(session: DashboardSession, ticketId: string) {
+  return requestJson<SupportTicketDetail>(session, `/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}/read`, 'admin', {
+    method: 'POST',
+  });
 }
 
 export function replySupportTicket(session: DashboardSession, ticketId: string, message: string) {

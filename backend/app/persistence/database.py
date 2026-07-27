@@ -47,6 +47,8 @@ async def _apply_column_migrations(conn) -> None:
         ("spot_trades", "pnl_usd", "NUMERIC(20,8)"),
         ("perp_trades", "pnl_usd", "NUMERIC(20,8)"),
         ("spot_positions", "tp1_reached", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("support_tickets", "user_last_seen_at", "DATETIME"),
+        ("support_tickets", "admin_last_seen_at", "DATETIME"),
     ]
     for table, column, col_type in new_columns:
         try:

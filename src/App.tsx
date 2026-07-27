@@ -35,6 +35,11 @@ import CoinChartSheet from './components/CoinChartSheet';
 import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
 import AgentTab from './components/AgentTab';
 import { fetchAgentWatchlist, updateAgentWatchlist, fetchSpotView, fetchPerpView, type SpotPositionView, type PerpPositionView } from './services/agentApi';
+import {
+  adminGetSupportNotifications,
+  getSupportNotifications,
+  type SupportTicketSummary,
+} from './services/supportApi';
 import { FALLBACK_ELIGIBLE_SYMBOLS, toEligibleSymbolSet } from './utils/eligibleTokens';
 
 const INTERVAL_KEY = 'cryptosentinel_refresh_interval';
@@ -47,6 +52,14 @@ const ADMIN_TOKEN_KEY = 'cs_agent_admin_token';
 
 type SortBy = 'rank' | 'change' | '7d' | 'volume' | 'price';
 type TimeFrame = '1h' | '24h' | '7d';
+type SupportMode = 'user' | 'admin';
+
+type SupportHomeNotice = {
+  userCount: number;
+  adminCount: number;
+  latestTicket: SupportTicketSummary | null;
+  latestMode: SupportMode;
+};
 
 function sortCoins(coins: Coin[], sortBy: SortBy, sortDesc: boolean): Coin[] {
   const sorted = [...coins];
@@ -244,6 +257,15 @@ export default function App() {
   const eligibleSymbols = useMemo(() => toEligibleSymbolSet(eligibleTokens), [eligibleTokens]);
   const [openSpotPositions, setOpenSpotPositions] = useState<SpotPositionView[]>([]);
   const [openPerpPositions, setOpenPerpPositions] = useState<PerpPositionView[]>([]);
+  const [supportNotice, setSupportNotice] = useState<SupportHomeNotice>({
+    userCount: 0,
+    adminCount: 0,
+    latestTicket: null,
+    latestMode: 'user',
+  });
+  const [supportModeRequest, setSupportModeRequest] = useState<SupportMode>('user');
+  const supportNoticeRef = useRef(supportNotice);
+  supportNoticeRef.current = supportNotice;
 
   // Mappa symbol → aiState: spot (blu) > perp long (verde) > perp short (rosso) > analysis (giallo) > inactive
   const aiStateMap = useMemo<Map<string, 'spot' | 'long' | 'short' | 'analysis' | 'inactive'>>(() => {
@@ -301,6 +323,50 @@ export default function App() {
     const timer = window.setInterval(load, 45_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+
+  const refreshSupportNotice = useCallback(async () => {
+    try {
+      const user = await getSupportNotifications();
+      let adminCount = 0;
+      let adminLatest: SupportTicketSummary | null = null;
+      if (adminToken) {
+        try {
+          const admin = await adminGetSupportNotifications(adminToken);
+          adminCount = admin.unread_count;
+          adminLatest = admin.latest_ticket;
+        } catch {
+          adminCount = 0;
+          adminLatest = null;
+        }
+      }
+      setSupportNotice({
+        userCount: user.unread_count,
+        adminCount,
+        latestTicket: adminLatest ?? user.latest_ticket,
+        latestMode: adminLatest ? 'admin' : 'user',
+      });
+    } catch {
+      setSupportNotice({
+        userCount: 0,
+        adminCount: 0,
+        latestTicket: null,
+        latestMode: 'user',
+      });
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    void refreshSupportNotice();
+    const timer = window.setInterval(() => void refreshSupportNotice(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshSupportNotice();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refreshSupportNotice]);
 
   const handleDismissFavAlert = useCallback((coinId: string) => {
     dismissFavoritePushAlert(coinId);
@@ -701,6 +767,18 @@ export default function App() {
             />
           )}
 
+          {supportNotice.userCount + supportNotice.adminCount > 0 && (
+            <SupportTicketNotification
+              notice={supportNotice}
+              offset={availableUpdate && isUpdateVisible ? 'stacked' : 'normal'}
+              onOpen={() => {
+                const mode = supportNoticeRef.current.latestMode;
+                setSupportModeRequest(mode);
+                setTab('settings');
+              }}
+            />
+          )}
+
           {tab === 'dashboard' && (
             <div>
               {!isSearching && (
@@ -931,6 +1009,8 @@ export default function App() {
               onFavMoveDownPctChange={handleFavMoveDownPctChange}
               rankAnimTopN={rankAnimTopN}
               onRankAnimTopNChange={handleRankAnimTopNChange}
+              supportModeRequest={supportModeRequest}
+              onSupportNotificationsChanged={refreshSupportNotice}
             />
           )}
         </div>
@@ -976,5 +1056,39 @@ export default function App() {
 
     </div>
     </>
+  );
+}
+
+function SupportTicketNotification({
+  notice,
+  offset,
+  onOpen,
+}: {
+  notice: SupportHomeNotice;
+  offset: 'normal' | 'stacked';
+  onOpen: () => void;
+}) {
+  const total = notice.userCount + notice.adminCount;
+  const bottomClass = offset === 'stacked' ? 'bottom-40' : 'bottom-24';
+  const label = notice.adminCount > 0
+    ? `${notice.adminCount} messaggi admin`
+    : `${notice.userCount} messaggi supporto`;
+
+  return (
+    <button
+      onClick={onOpen}
+      className={`fixed ${bottomClass} right-4 z-30 w-12 h-12 flex items-center justify-center`}
+      aria-label="Messaggi supporto"
+      title={notice.latestTicket ? `${label}: ${notice.latestTicket.subject}` : label}
+    >
+      <span className="absolute w-full h-full rounded-full bg-accent-blue/25 animate-ping" />
+      <span className="absolute w-full h-full rounded-full bg-accent-blue/15 border border-accent-blue/40" />
+      <svg className="relative z-10 w-5 h-5 text-accent-blue drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h8M8 14h5m8-2a8 8 0 01-8 8H7l-4 3v-7a8 8 0 1118-4z" />
+      </svg>
+      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent-red text-white text-[10px] font-bold flex items-center justify-center">
+        {total > 99 ? '99+' : total}
+      </span>
+    </button>
   );
 }

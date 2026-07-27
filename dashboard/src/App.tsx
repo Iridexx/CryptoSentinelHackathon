@@ -22,6 +22,8 @@ import {
   fetchSpot,
   fetchSupportTicket,
   fetchSupportTickets,
+  fetchSupportNotifications,
+  markSupportTicketRead,
   fetchTradeDetail,
   replySupportTicket,
   resetDatabase,
@@ -66,6 +68,7 @@ import type {
   SpotView,
   SupportTicketDetail,
   SupportTicketListResponse,
+  SupportNotificationResponse,
   SupportTicketStatus,
   TradeChart,
   TradeDetail,
@@ -179,6 +182,7 @@ export default function App() {
   const [logs, setLogs] = useState<LoadState<LogEntry[]>>(emptyState([]));
   const [supportTickets, setSupportTickets] = useState<LoadState<SupportTicketListResponse>>(emptyState({ items: [], total: 0 }));
   const [supportDetail, setSupportDetail] = useState<LoadState<SupportTicketDetail>>(emptyState());
+  const [supportNotifications, setSupportNotifications] = useState<LoadState<SupportNotificationResponse>>(emptyState());
   const [supportReply, setSupportReply] = useState('');
   const [supportArchived, setSupportArchived] = useState(false);
   const [settings, setSettings] = useState<LoadState<SettingsResponse>>(emptyState());
@@ -256,6 +260,7 @@ export default function App() {
       canRead ? fetch(setExecution, () => fetchExecutionStatus(session)) : Promise.resolve(null),
       canRead ? fetch(setWallets, () => fetchExecutionWallets(session)) : Promise.resolve(null),
       canRead ? fetch(setCoverage, () => fetchDataCoverage(session)) : Promise.resolve(null),
+      canAdmin ? fetch(setSupportNotifications, () => fetchSupportNotifications(session)) : Promise.resolve(null),
     ]);
   }
 
@@ -285,7 +290,10 @@ export default function App() {
       setSupportTickets({ data: { items: [], total: 0 }, loading: false, error: 'Admin token required' });
       return;
     }
-    await load(setSupportTickets, () => fetchSupportTickets(session, { archived: supportArchived }));
+    await Promise.all([
+      load(setSupportTickets, () => fetchSupportTickets(session, { archived: supportArchived })),
+      load(setSupportNotifications, () => fetchSupportNotifications(session)),
+    ]);
   }
 
   async function setSupportArchiveView(archived: boolean) {
@@ -297,7 +305,11 @@ export default function App() {
 
   async function openSupportTicket(ticketId: string) {
     if (!canAdmin) return;
-    await load(setSupportDetail, () => fetchSupportTicket(session, ticketId));
+    const detail = await load(setSupportDetail, () => fetchSupportTicket(session, ticketId));
+    if (detail) {
+      await markSupportTicketRead(session, ticketId);
+      await silentLoad(setSupportNotifications, () => fetchSupportNotifications(session));
+    }
   }
 
   async function submitSupportReply() {
@@ -649,6 +661,7 @@ export default function App() {
           <SupportPanel
             tickets={supportTickets}
             detail={supportDetail}
+            notifications={supportNotifications}
             reply={supportReply}
             onReply={setSupportReply}
             canAdmin={canAdmin}
@@ -2004,6 +2017,7 @@ function KillSwitchPanel({
 function SupportPanel({
   tickets,
   detail,
+  notifications,
   reply,
   onReply,
   canAdmin,
@@ -2016,6 +2030,7 @@ function SupportPanel({
 }: {
   tickets: LoadState<SupportTicketListResponse>;
   detail: LoadState<SupportTicketDetail>;
+  notifications: LoadState<SupportNotificationResponse>;
   reply: string;
   onReply: (value: string) => void;
   canAdmin: boolean;
@@ -2027,9 +2042,16 @@ function SupportPanel({
   onStatus: (status: SupportTicketStatus) => void;
 }) {
   const statuses: SupportTicketStatus[] = ['open', 'in_progress', 'waiting_user', 'resolved', 'closed'];
+  const unread = notifications.data?.unread_count ?? 0;
   return (
     <Panel title="Support Tickets" action={<button onClick={onRefresh}>Load tickets</button>} className="wide">
       {!canAdmin && <Empty title="Admin token required" detail="Support queue management is admin-only in the dashboard." />}
+      {canAdmin && unread > 0 && (
+        <div className="notice warn">
+          {unread} unread support message{unread === 1 ? '' : 's'}
+          {notifications.data?.latest_ticket ? ` · ${notifications.data.latest_ticket.subject}` : ''}
+        </div>
+      )}
       <StateBlock state={tickets} empty="No support tickets loaded" />
       {canAdmin && tickets.data && (
         <div className="support-layout">

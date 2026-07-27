@@ -38,6 +38,11 @@ export type SupportTicketListResponse = {
   total: number;
 };
 
+export type SupportNotificationResponse = {
+  unread_count: number;
+  latest_ticket?: SupportTicketSummary | null;
+};
+
 export type SpotPosition = {
   position_id: string;
   open_trade_id?: string | null;

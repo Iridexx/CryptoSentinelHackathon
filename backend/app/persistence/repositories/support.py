@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,6 +45,8 @@ class SupportRepository:
             created_at=now,
             updated_at=now,
             last_message_at=now,
+            user_last_seen_at=now,
+            admin_last_seen_at=None,
         )
         message = SupportMessage(
             message_id=_id("sm"),
@@ -140,6 +142,54 @@ class SupportRepository:
         await self._session.commit()
         self._session.expire(ticket, ["messages"])
         return await self.get_ticket(ticket.ticket_id, user_id=ticket.user_id, device_id=ticket.device_id, admin=True)  # type: ignore[return-value]
+
+    async def mark_seen(
+        self,
+        ticket: SupportTicket,
+        *,
+        viewer: str,
+    ) -> SupportTicket:
+        now = datetime.now(UTC)
+        if viewer == "admin":
+            ticket.admin_last_seen_at = now
+        else:
+            ticket.user_last_seen_at = now
+        self._session.add(ticket)
+        await self._session.commit()
+        return await self.get_ticket(ticket.ticket_id, user_id=ticket.user_id, device_id=ticket.device_id, admin=True)  # type: ignore[return-value]
+
+    async def unread_count(
+        self,
+        *,
+        user_id: str,
+        viewer: str,
+    ) -> tuple[int, SupportTicket | None]:
+        seen_col = SupportTicket.admin_last_seen_at if viewer == "admin" else SupportTicket.user_last_seen_at
+        sender = "user" if viewer == "admin" else "admin"
+        stmt = (
+            select(func.count(SupportMessage.id))
+            .join(SupportTicket, SupportTicket.ticket_id == SupportMessage.ticket_id)
+            .where(SupportTicket.user_id == user_id)
+            .where(SupportTicket.status != "archived")
+            .where(SupportMessage.sender_type == sender)
+            .where(or_(seen_col.is_(None), SupportMessage.created_at > seen_col))
+        )
+        count = int((await self._session.execute(stmt)).scalar_one() or 0)
+        if count <= 0:
+            return 0, None
+        latest_stmt = (
+            select(SupportTicket)
+            .options(selectinload(SupportTicket.messages))
+            .join(SupportMessage, SupportTicket.ticket_id == SupportMessage.ticket_id)
+            .where(SupportTicket.user_id == user_id)
+            .where(SupportTicket.status != "archived")
+            .where(SupportMessage.sender_type == sender)
+            .where(or_(seen_col.is_(None), SupportMessage.created_at > seen_col))
+            .order_by(SupportMessage.created_at.desc())
+            .limit(1)
+        )
+        latest = (await self._session.execute(latest_stmt)).scalar_one_or_none()
+        return count, latest
 
     async def set_status(
         self,

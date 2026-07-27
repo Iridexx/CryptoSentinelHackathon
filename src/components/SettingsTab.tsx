@@ -15,12 +15,14 @@ import { resetDatabase } from '../services/agentApi';
 import {
   adminListSupportTickets,
   adminGetSupportTicket,
+  adminMarkSupportTicketRead,
   adminReplySupportTicket,
   adminUpdateSupportStatus,
   closeSupportTicket,
   createSupportTicket,
   getSupportTicket,
   listSupportTickets,
+  markSupportTicketRead,
   replySupportTicket,
   syncDeviceProfile,
   type SupportTicketDetail,
@@ -225,6 +227,8 @@ interface Props {
   onFavMoveDownPctChange: (n: number) => void;
   rankAnimTopN: number;
   onRankAnimTopNChange: (n: number) => void;
+  supportModeRequest?: SupportMode;
+  onSupportNotificationsChanged?: () => void;
 }
 
 const SettingsTab: FC<Props> = ({
@@ -251,6 +255,8 @@ const SettingsTab: FC<Props> = ({
   onFavMoveDownPctChange,
   rankAnimTopN,
   onRankAnimTopNChange,
+  supportModeRequest,
+  onSupportNotificationsChanged,
 }) => {
   const [updateState, setUpdateState] = useState<UpdateState>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
@@ -515,6 +521,12 @@ const SettingsTab: FC<Props> = ({
         ? await adminGetSupportTicket(ticket.ticket_id, adminToken)
         : await getSupportTicket(ticket.ticket_id);
       setSupportDetail(detail);
+      if (supportMode === 'admin' && adminToken) {
+        await adminMarkSupportTicketRead(ticket.ticket_id, adminToken);
+      } else {
+        await markSupportTicketRead(ticket.ticket_id);
+      }
+      onSupportNotificationsChanged?.();
       setSupportState('idle');
     } catch (err) {
       setSupportState('error');
@@ -627,6 +639,14 @@ const SettingsTab: FC<Props> = ({
     void loadSupportTickets('user');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!supportModeRequest || supportModeRequest === supportMode) return;
+    if (supportModeRequest === 'admin' && !adminToken) return;
+    setSupportMode(supportModeRequest);
+    void loadSupportTickets(supportModeRequest);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supportModeRequest, adminToken]);
 
   useEffect(() => () => {
     if (supportLongPressTimer.current !== null) {

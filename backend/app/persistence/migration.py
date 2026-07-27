@@ -124,6 +124,17 @@ async def upgrade_schema(session: AsyncSession) -> None:
             )
             logger.info("schema_column_added", table="spot_trades", column=col)
 
+    support_ticket_cols: list[tuple[str, str]] = [
+        ("user_last_seen_at", "DATETIME"),
+        ("admin_last_seen_at", "DATETIME"),
+    ]
+    for col, defn in support_ticket_cols:
+        if not await _has_column("support_tickets", col):
+            await session.execute(
+                text(f"ALTER TABLE support_tickets ADD COLUMN {col} {defn}")
+            )
+            logger.info("schema_column_added", table="support_tickets", column=col)
+
     await session.commit()
 
 

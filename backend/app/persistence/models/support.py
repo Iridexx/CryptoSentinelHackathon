@@ -23,6 +23,8 @@ class SupportTicket(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    user_last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admin_last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_by: Mapped[str | None] = mapped_column(String(16), nullable=True)

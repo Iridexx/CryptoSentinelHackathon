@@ -37,6 +37,11 @@ export interface SupportTicketDetail extends SupportTicketSummary {
   messages: SupportMessage[];
 }
 
+export interface SupportNotificationResponse {
+  unread_count: number;
+  latest_ticket: SupportTicketSummary | null;
+}
+
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
 const READ_TOKEN = import.meta.env.VITE_API_READ_TOKEN as string | undefined;
 
@@ -105,8 +110,18 @@ export function listSupportTickets(): Promise<{ items: SupportTicketSummary[]; t
   return request(`/api/v1/support/tickets?device_id=${encodeURIComponent(getDeviceId())}`);
 }
 
+export function getSupportNotifications(): Promise<SupportNotificationResponse> {
+  return request('/api/v1/support/notifications');
+}
+
 export function getSupportTicket(ticketId: string): Promise<SupportTicketDetail> {
   return request(`/api/v1/support/tickets/${encodeURIComponent(ticketId)}?device_id=${encodeURIComponent(getDeviceId())}`);
+}
+
+export function markSupportTicketRead(ticketId: string): Promise<SupportTicketDetail> {
+  return request(`/api/v1/support/tickets/${encodeURIComponent(ticketId)}/read?device_id=${encodeURIComponent(getDeviceId())}`, {
+    method: 'POST',
+  });
 }
 
 export function createSupportTicket(payload: {
@@ -149,8 +164,19 @@ export function adminListSupportTickets(adminToken: string): Promise<{ items: Su
   return request('/api/v1/support/admin/tickets', { token: adminToken });
 }
 
+export function adminGetSupportNotifications(adminToken: string): Promise<SupportNotificationResponse> {
+  return request('/api/v1/support/admin/notifications', { token: adminToken });
+}
+
 export function adminGetSupportTicket(ticketId: string, adminToken: string): Promise<SupportTicketDetail> {
   return request(`/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}`, { token: adminToken });
+}
+
+export function adminMarkSupportTicketRead(ticketId: string, adminToken: string): Promise<SupportTicketDetail> {
+  return request(`/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}/read`, {
+    method: 'POST',
+    token: adminToken,
+  });
 }
 
 export function adminReplySupportTicket(ticketId: string, message: string, adminToken: string): Promise<SupportTicketDetail> {

@@ -14,6 +14,7 @@ from backend.app.schemas.support import (
     DeviceProfileResponse,
     SupportMessageCreateRequest,
     SupportMessageResponse,
+    SupportNotificationResponse,
     SupportStatusUpdateRequest,
     SupportTicketCreateRequest,
     SupportTicketDetail,
@@ -93,6 +94,13 @@ def _ticket_detail(ticket) -> SupportTicketDetail:
     return SupportTicketDetail(
         **summary.model_dump(),
         messages=[_message_response(message) for message in ticket.messages],
+    )
+
+
+def _notification_response(count: int, latest_ticket) -> SupportNotificationResponse:
+    return SupportNotificationResponse(
+        unread_count=count,
+        latest_ticket=_ticket_summary(latest_ticket) if latest_ticket is not None else None,
     )
 
 
@@ -181,6 +189,18 @@ async def list_user_tickets(
     return SupportTicketListResponse(items=summaries, total=len(summaries))
 
 
+@router.get("/notifications", response_model=SupportNotificationResponse)
+async def user_notifications(
+    session: SessionDep,
+    _: ReadAccessDep,
+) -> SupportNotificationResponse:
+    count, latest = await SupportRepository(session).unread_count(
+        user_id=str(DEFAULT_SINGLE_USER_ID),
+        viewer="user",
+    )
+    return _notification_response(count, latest)
+
+
 @router.get("/tickets/{ticket_id}", response_model=SupportTicketDetail)
 async def get_user_ticket(
     ticket_id: str,
@@ -196,6 +216,24 @@ async def get_user_ticket(
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     return _ticket_detail(ticket)
+
+
+@router.post("/tickets/{ticket_id}/read", response_model=SupportTicketDetail)
+async def mark_user_ticket_read(
+    ticket_id: str,
+    session: SessionDep,
+    _: ReadAccessDep,
+    device_id: str = Query(min_length=1, max_length=128),
+) -> SupportTicketDetail:
+    repo = SupportRepository(session)
+    ticket = await repo.get_ticket(
+        ticket_id,
+        user_id=str(DEFAULT_SINGLE_USER_ID),
+        device_id=device_id,
+    )
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    return _ticket_detail(await repo.mark_seen(ticket, viewer="user"))
 
 
 @router.post("/tickets/{ticket_id}/messages", response_model=SupportTicketDetail)
@@ -261,6 +299,18 @@ async def list_admin_tickets(
     return SupportTicketListResponse(items=summaries, total=len(summaries))
 
 
+@router.get("/admin/notifications", response_model=SupportNotificationResponse)
+async def admin_notifications(
+    session: SessionDep,
+    _: AdminAccessDep,
+) -> SupportNotificationResponse:
+    count, latest = await SupportRepository(session).unread_count(
+        user_id=str(DEFAULT_SINGLE_USER_ID),
+        viewer="admin",
+    )
+    return _notification_response(count, latest)
+
+
 @router.get("/admin/tickets/{ticket_id}", response_model=SupportTicketDetail)
 async def get_admin_ticket(
     ticket_id: str,
@@ -275,6 +325,23 @@ async def get_admin_ticket(
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     return _ticket_detail(ticket)
+
+
+@router.post("/admin/tickets/{ticket_id}/read", response_model=SupportTicketDetail)
+async def mark_admin_ticket_read(
+    ticket_id: str,
+    session: SessionDep,
+    _: AdminAccessDep,
+) -> SupportTicketDetail:
+    repo = SupportRepository(session)
+    ticket = await repo.get_ticket(
+        ticket_id,
+        user_id=str(DEFAULT_SINGLE_USER_ID),
+        admin=True,
+    )
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    return _ticket_detail(await repo.mark_seen(ticket, viewer="admin"))
 
 
 @router.post("/admin/tickets/{ticket_id}/messages", response_model=SupportTicketDetail)

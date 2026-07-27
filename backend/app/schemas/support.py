@@ -92,3 +92,8 @@ class SupportTicketDetail(SupportTicketSummary):
 class SupportTicketListResponse(BaseModel):
     items: list[SupportTicketSummary]
     total: int
+
+
+class SupportNotificationResponse(BaseModel):
+    unread_count: int
+    latest_ticket: SupportTicketSummary | None = None

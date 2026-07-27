@@ -45,7 +45,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
-|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi visibili per user_id anche se cambia device_id, gestione admin con risposta/risoluzione/chiusura/archiviazione.
+|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi visibili per user_id anche se cambia device_id, gestione admin con risposta/risoluzione/chiusura/archiviazione e badge messaggi non letti separato user/admin.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
@@ -269,7 +269,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
 |   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, grafici trade con candele pre-entry/post-close attenuate e marker SL ref sul prezzo stop effettivo, setup con stop loss ATR o Min/Max 20 con buffer per Spot/Perp, filtro inversione mercato, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
-|   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket, reply utente, modalita' admin opzionale per risposta/chiusura e uso dello stesso admin token persistito dell'AgentTab.
+|   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket con mark-read, reply utente, modalita' admin opzionale per risposta/chiusura e uso dello stesso admin token persistito dell'AgentTab.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.
 |   |-- services/agentApi.ts - client Step 7 per viste agente, settings mobile, onboarding, wallet e kill switch.
@@ -278,7 +278,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
 |   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
 |   |   `-- notifications.ts - registrazione token FCM con build number/display name e rendering locale push in foreground.
-|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati e monta la tab agente additiva Step 7.
+|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati, monta la tab agente additiva Step 7 e mostra in Home il badge flottante dei messaggi supporto non letti user/admin.
 |   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti con fetch dedicato di tutti gli ID salvati, retry rapido e righe temporanee per tutti gli ID salvati.
 |   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.
 |   |-- index.css - CSS globale/Tailwind.
