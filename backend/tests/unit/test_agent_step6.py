@@ -27,6 +27,7 @@ from backend.app.persistence.repositories.positions import SpotPositionRepositor
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
+from backend.app.persistence.models.trades import PerpTrade
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.sync_database import (
     create_all_sync,
@@ -593,6 +594,43 @@ async def test_agent_service_dry_run_persists_perp_decision_and_trade(db) -> Non
     assert decisions[0].market == "perp"
     assert len(trades) == 1
     assert trades[0].status == "prepared"
+
+
+def test_perp_trade_detail_exposure_uses_notional_once() -> None:
+    now = datetime(2026, 7, 27, tzinfo=UTC)
+    trade = PerpTrade(
+        trade_id="dry_trx_test",
+        user_id=str(USER_ID),
+        asset="TRX",
+        side="long",
+        direction="open",
+        size=Decimal("669.8183789575523"),
+        price=Decimal("0.33076"),
+        leverage=25,
+        status="prepared",
+        timestamp_utc=now,
+        venue="dry_run",
+    )
+    position = PerpPosition(
+        position_id="pos_trx_test",
+        user_id=str(USER_ID),
+        asset="TRX",
+        side="long",
+        size=Decimal("669.8183789575523"),
+        entry_price=Decimal("0.33076"),
+        current_price=Decimal("0.33076"),
+        leverage=25,
+        pnl_unrealized=Decimal("0"),
+        status="open",
+        margin_usd=Decimal("8.86196508096"),
+        opened_at=now,
+        updated_at=now,
+    )
+
+    detail = view_routes._perp_trade_detail(trade, position, None, settings())
+
+    assert detail["margin_usd"] == "8.86"
+    assert detail["exposure_usd"] == "221.55"
 
 
 @pytest.mark.asyncio

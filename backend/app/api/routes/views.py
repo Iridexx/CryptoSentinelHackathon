@@ -1001,7 +1001,7 @@ def _perp_trade_detail(
         "breakeven_price": _breakeven_price(position, (position.side == "long") if position else True),
         "size": _fmt_price(size),
         "leverage": leverage,
-        "exposure_usd": _q2(size * entry * (leverage or 1)),
+        "exposure_usd": _q2(size * entry),
         "fee_mode": position.fee_mode if position else trade.fee_mode,
         "margin_usd": _q2(position.margin_usd) if position and position.margin_usd is not None else None,
         "opening_fee_usd": _fee_opt(position.opening_fee_usd) if position and position.opening_fee_usd is not None else None,
