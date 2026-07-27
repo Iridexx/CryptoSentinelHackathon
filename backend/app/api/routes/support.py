@@ -15,6 +15,7 @@ from backend.app.schemas.support import (
     SupportMessageCreateRequest,
     SupportMessageResponse,
     SupportNotificationResponse,
+    SupportReadAllResponse,
     SupportStatusUpdateRequest,
     SupportTicketCreateRequest,
     SupportTicketDetail,
@@ -236,6 +237,18 @@ async def mark_user_ticket_read(
     return _ticket_detail(await repo.mark_seen(ticket, viewer="user"))
 
 
+@router.post("/tickets/read-all", response_model=SupportReadAllResponse)
+async def mark_user_tickets_read(
+    session: SessionDep,
+    _: ReadAccessDep,
+) -> SupportReadAllResponse:
+    updated = await SupportRepository(session).mark_all_seen(
+        user_id=str(DEFAULT_SINGLE_USER_ID),
+        viewer="user",
+    )
+    return SupportReadAllResponse(updated=updated)
+
+
 @router.post("/tickets/{ticket_id}/messages", response_model=SupportTicketDetail)
 async def add_user_message(
     ticket_id: str,
@@ -342,6 +355,18 @@ async def mark_admin_ticket_read(
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     return _ticket_detail(await repo.mark_seen(ticket, viewer="admin"))
+
+
+@router.post("/admin/tickets/read-all", response_model=SupportReadAllResponse)
+async def mark_admin_tickets_read(
+    session: SessionDep,
+    _: AdminAccessDep,
+) -> SupportReadAllResponse:
+    updated = await SupportRepository(session).mark_all_seen(
+        user_id=str(DEFAULT_SINGLE_USER_ID),
+        viewer="admin",
+    )
+    return SupportReadAllResponse(updated=updated)
 
 
 @router.post("/admin/tickets/{ticket_id}/messages", response_model=SupportTicketDetail)

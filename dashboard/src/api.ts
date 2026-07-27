@@ -211,6 +211,12 @@ export function markSupportTicketRead(session: DashboardSession, ticketId: strin
   });
 }
 
+export function markAllSupportTicketsRead(session: DashboardSession) {
+  return requestJson<{ updated: number }>(session, '/api/v1/support/admin/tickets/read-all', 'admin', {
+    method: 'POST',
+  });
+}
+
 export function replySupportTicket(session: DashboardSession, ticketId: string, message: string) {
   return requestJson<SupportTicketDetail>(session, `/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}/messages`, 'admin', {
     method: 'POST',

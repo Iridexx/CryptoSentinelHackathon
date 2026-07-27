@@ -158,6 +158,23 @@ class SupportRepository:
         await self._session.commit()
         return await self.get_ticket(ticket.ticket_id, user_id=ticket.user_id, device_id=ticket.device_id, admin=True)  # type: ignore[return-value]
 
+    async def mark_all_seen(
+        self,
+        *,
+        user_id: str,
+        viewer: str,
+    ) -> int:
+        now = datetime.now(UTC)
+        tickets = await self.list_tickets(user_id=user_id, admin=(viewer == "admin"))
+        for ticket in tickets:
+            if viewer == "admin":
+                ticket.admin_last_seen_at = now
+            else:
+                ticket.user_last_seen_at = now
+            self._session.add(ticket)
+        await self._session.commit()
+        return len(tickets)
+
     async def unread_count(
         self,
         *,

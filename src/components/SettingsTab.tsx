@@ -15,6 +15,7 @@ import { resetDatabase } from '../services/agentApi';
 import {
   adminListSupportTickets,
   adminGetSupportTicket,
+  adminMarkAllSupportTicketsRead,
   adminMarkSupportTicketRead,
   adminReplySupportTicket,
   adminUpdateSupportStatus,
@@ -22,6 +23,7 @@ import {
   createSupportTicket,
   getSupportTicket,
   listSupportTickets,
+  markAllSupportTicketsRead,
   markSupportTicketRead,
   replySupportTicket,
   syncDeviceProfile,
@@ -468,6 +470,12 @@ const SettingsTab: FC<Props> = ({
         ? await adminListSupportTickets(adminToken)
         : await listSupportTickets();
       setSupportTickets(response.items);
+      if (mode === 'admin' && adminToken) {
+        await adminMarkAllSupportTicketsRead(adminToken);
+      } else {
+        await markAllSupportTicketsRead();
+      }
+      onSupportNotificationsChanged?.();
       setSupportState('idle');
     } catch (err) {
       setSupportState('error');

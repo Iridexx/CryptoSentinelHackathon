@@ -97,3 +97,7 @@ class SupportTicketListResponse(BaseModel):
 class SupportNotificationResponse(BaseModel):
     unread_count: int
     latest_ticket: SupportTicketSummary | None = None
+
+
+class SupportReadAllResponse(BaseModel):
+    updated: int

@@ -110,20 +110,38 @@ def test_support_ticket_thread_and_admin_status_flow(support_app: FastAPI) -> No
     assert user_notice_after_read.status_code == 200
     assert user_notice_after_read.json()["unread_count"] == 0
 
+    second_admin_reply = client.post(
+        f"/api/v1/support/admin/tickets/{ticket_id}/messages",
+        json={"message": "Seconda risposta."},
+    )
+    assert second_admin_reply.status_code == 200
+    assert client.get("/api/v1/support/notifications").json()["unread_count"] == 1
+
+    marked_user_all = client.post("/api/v1/support/tickets/read-all")
+    assert marked_user_all.status_code == 200
+    assert marked_user_all.json()["updated"] == 1
+    assert client.get("/api/v1/support/notifications").json()["unread_count"] == 0
+
     still_visible_to_user = client.get("/api/v1/support/tickets", params={"device_id": "device-b"})
     assert still_visible_to_user.status_code == 200
     assert still_visible_to_user.json()["total"] == 1
 
     visible_detail = client.get(f"/api/v1/support/tickets/{ticket_id}", params={"device_id": "device-b"})
     assert visible_detail.status_code == 200
-    assert len(visible_detail.json()["messages"]) == 3
+    assert len(visible_detail.json()["messages"]) == 4
 
     user_reply_from_current_device = client.post(
         f"/api/v1/support/tickets/{ticket_id}/messages",
         json={"device_id": "device-b", "message": "Ora lo vedo di nuovo."},
     )
     assert user_reply_from_current_device.status_code == 200
-    assert len(user_reply_from_current_device.json()["messages"]) == 4
+    assert len(user_reply_from_current_device.json()["messages"]) == 5
+    assert client.get("/api/v1/support/admin/notifications").json()["unread_count"] == 2
+
+    marked_admin_all = client.post("/api/v1/support/admin/tickets/read-all")
+    assert marked_admin_all.status_code == 200
+    assert marked_admin_all.json()["updated"] == 1
+    assert client.get("/api/v1/support/admin/notifications").json()["unread_count"] == 0
 
     resolved = client.patch(
         f"/api/v1/support/admin/tickets/{ticket_id}/status",

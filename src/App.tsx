@@ -1077,7 +1077,7 @@ function SupportTicketNotification({
   return (
     <button
       onClick={onOpen}
-      className={`fixed ${bottomClass} right-4 z-30 w-12 h-12 flex items-center justify-center`}
+      className={`fixed ${bottomClass} left-4 z-30 w-12 h-12 flex items-center justify-center`}
       aria-label="Messaggi supporto"
       title={notice.latestTicket ? `${label}: ${notice.latestTicket.subject}` : label}
     >

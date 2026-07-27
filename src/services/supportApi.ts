@@ -124,6 +124,12 @@ export function markSupportTicketRead(ticketId: string): Promise<SupportTicketDe
   });
 }
 
+export function markAllSupportTicketsRead(): Promise<{ updated: number }> {
+  return request('/api/v1/support/tickets/read-all', {
+    method: 'POST',
+  });
+}
+
 export function createSupportTicket(payload: {
   displayName: string;
   category: TicketCategory;
@@ -174,6 +180,13 @@ export function adminGetSupportTicket(ticketId: string, adminToken: string): Pro
 
 export function adminMarkSupportTicketRead(ticketId: string, adminToken: string): Promise<SupportTicketDetail> {
   return request(`/api/v1/support/admin/tickets/${encodeURIComponent(ticketId)}/read`, {
+    method: 'POST',
+    token: adminToken,
+  });
+}
+
+export function adminMarkAllSupportTicketsRead(adminToken: string): Promise<{ updated: number }> {
+  return request('/api/v1/support/admin/tickets/read-all', {
     method: 'POST',
     token: adminToken,
   });

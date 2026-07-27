@@ -24,6 +24,7 @@ import {
   fetchSupportTickets,
   fetchSupportNotifications,
   markSupportTicketRead,
+  markAllSupportTicketsRead,
   fetchTradeDetail,
   replySupportTicket,
   resetDatabase,
@@ -290,10 +291,11 @@ export default function App() {
       setSupportTickets({ data: { items: [], total: 0 }, loading: false, error: 'Admin token required' });
       return;
     }
-    await Promise.all([
-      load(setSupportTickets, () => fetchSupportTickets(session, { archived: supportArchived })),
-      load(setSupportNotifications, () => fetchSupportNotifications(session)),
-    ]);
+    const response = await load(setSupportTickets, () => fetchSupportTickets(session, { archived: supportArchived }));
+    if (response && !supportArchived) {
+      await markAllSupportTicketsRead(session);
+    }
+    await load(setSupportNotifications, () => fetchSupportNotifications(session));
   }
 
   async function setSupportArchiveView(archived: boolean) {

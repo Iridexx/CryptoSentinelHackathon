@@ -45,7 +45,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
 |   |   |       |-- notifications.py - registrazione token device (DB-backed da Step 5), status FCM e invio admin push.
-|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi visibili per user_id anche se cambia device_id, gestione admin con risposta/risoluzione/chiusura/archiviazione e badge messaggi non letti separato user/admin.
+|   |   |       |-- support.py - ticket in-app: profilo device/display name, apertura ticket utente, thread messaggi visibili per user_id anche se cambia device_id, gestione admin con risposta/risoluzione/chiusura/archiviazione, badge messaggi non letti separato user/admin e mark-read singolo/globale.
 |   |   |       |-- market_data.py - endpoint normalizzati markets/prices/search/OHLCV e selettore globale UI/market admin-only persistito.
 |   |   |       |-- execution.py - readiness esecuzione, selettori provider spot/perp, wallet execution read-only, override wallet/BSC chain/RPC admin-only e verifica registrazione competizione on-chain.
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
@@ -278,7 +278,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- alertSync.ts - sincronizzazione alert attivi verso il backend.
 |   |   |-- marketDataDiagnostics.ts - buffer locale degli ultimi eventi market-data senza token.
 |   |   `-- notifications.ts - registrazione token FCM con build number/display name e rendering locale push in foreground.
-|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati, monta la tab agente additiva Step 7 e mostra in Home il badge flottante dei messaggi supporto non letti user/admin.
+|   |-- App.tsx - root app mobile/web; sincronizza sempre l'intero insieme dei preferiti salvati, monta la tab agente additiva Step 7 e mostra in Home a sinistra il badge flottante dei messaggi supporto non letti user/admin.
 |   |-- hooks/useFavoriteCoinsData.ts - recupero preferiti con fetch dedicato di tutti gli ID salvati, retry rapido e righe temporanee per tutti gli ID salvati.
 |   |-- hooks/useSearch.ts - ricerca debounced tramite endpoint backend e provider globale selezionato.
 |   |-- index.css - CSS globale/Tailwind.
