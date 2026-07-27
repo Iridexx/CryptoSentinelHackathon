@@ -142,6 +142,8 @@ class RiskManager:
             stop_distance_pct = abs(intent.price - intent.stop_loss) / intent.price
             if stop_distance_pct > 0:
                 risk_size = min(nominal_size, risk_amount / stop_distance_pct)
+        if is_perp and ms is not None and ms.perp_fixed_margin_enabled:
+            risk_size = Decimal(str(ms.perp_fixed_margin_usd))
 
         # Esposizione calcolata per-mercato: spot = nozionale, perp = margine (nozionale/leva)
         if equity > Decimal("0"):

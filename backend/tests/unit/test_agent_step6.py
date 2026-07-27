@@ -13,7 +13,7 @@ import pytest
 
 from backend.app.agent.brain import ClaudeMetaController
 from backend.app.agent.ohlcv_warmup import warmup_selected_watchlist
-from backend.app.agent.risk import KillSwitchState, RiskManager, SignalIntent
+from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
 from backend.app.agent.service import AgentService
 from backend.app.agent.signals.common.indicators import Candle
 from backend.app.agent.signals.perp import binance_klines
@@ -23,12 +23,14 @@ from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.agent.watchlist import set_selected_watchlist
 from backend.app.api.routes import views as view_routes
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
-from backend.app.persistence.repositories.positions import SpotPositionRepository
+from backend.app.persistence.repositories.positions import PerpPositionRepository, SpotPositionRepository
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
 from backend.app.persistence.models.trades import PerpTrade
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
+from backend.app.persistence.runtime_state import set_runtime_value
+from backend.app.schemas.mobile_agent import AgentMobileSettings
 from backend.app.persistence.sync_database import (
     create_all_sync,
     init_sync_db,
@@ -450,6 +452,24 @@ def test_risk_engine_uses_200_dry_run_capital_for_natural_size() -> None:
     assert decision.size_quote == Decimal("8.00")
 
 
+def test_risk_engine_perp_fixed_margin_overrides_dynamic_size() -> None:
+    mobile_settings = AgentMobileSettings(
+        perp_fixed_margin_enabled=True,
+        perp_fixed_margin_usd=50,
+        perp_max_exposure_pct=100,
+    )
+    decision = RiskManager(settings()).evaluate(
+        _intent(market="perp", quote_equity=Decimal("1000"), price=Decimal("100"), stop_loss=Decimal("95")),
+        portfolio=_portfolio(total_equity_usd=Decimal("1000")),
+        open_spot_positions=[],
+        open_perp_positions=[],
+        ms=mobile_settings,
+    )
+
+    assert decision.allowed is True
+    assert decision.size_quote == Decimal("50.0")
+
+
 def test_risk_engine_blocks_below_minimum_trade_size() -> None:
     decision = RiskManager(settings()).evaluate(
         _intent(quote_equity=Decimal("100"), price=Decimal("100"), stop_loss=Decimal("95")),
@@ -631,6 +651,43 @@ def test_perp_trade_detail_exposure_uses_notional_once() -> None:
 
     assert detail["margin_usd"] == "8.86"
     assert detail["exposure_usd"] == "221.55"
+
+
+@pytest.mark.asyncio
+async def test_perp_fixed_margin_remains_final_margin_when_brain_reduces(db) -> None:
+    mobile_settings = AgentMobileSettings(
+        perp_fixed_margin_enabled=True,
+        perp_fixed_margin_usd=50,
+        perp_fee_mode="none",
+    )
+    set_runtime_value(str(USER_ID), "mobile_agent_settings", mobile_settings.model_dump_json())
+    service = AgentService(
+        settings(),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    signal = {
+        "signal_id": "fixed-margin",
+        "market": "perp",
+        "asset": "BTC",
+        "action": "enter_long",
+        "side": "long",
+        "quality": 0.7,
+        "confidence": 0.7,
+        "price": 100,
+        "stop_loss": 95,
+        "leverage": 10,
+        "size_factor": 0.5,
+    }
+    risk_decision = RiskDecision(True, "risk_approved", size_quote=Decimal("50"))
+    brain_decision = SimpleNamespace(size_multiplier=Decimal("0.5"))
+
+    async with get_session_factory()() as session:
+        result = await service._execute_or_simulate(session, signal, risk_decision, brain_decision)
+        positions = await PerpPositionRepository(session).open_for_user(str(USER_ID))
+
+    assert result["status"] == "prepared"
+    assert positions[0].margin_usd == Decimal("50")
 
 
 @pytest.mark.asyncio

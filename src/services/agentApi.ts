@@ -324,6 +324,8 @@ export interface AgentMobileSettings {
   perp_max_exposure_pct: number;
   perp_cooldown_minutes: number;
   perp_max_slippage_pct: number;
+  perp_fixed_margin_enabled: boolean;
+  perp_fixed_margin_usd: number;
   // Legacy (backward compat)
   capital_per_trade_pct: number;
   per_trade_pct: number;

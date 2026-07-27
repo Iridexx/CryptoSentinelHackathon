@@ -113,6 +113,8 @@ const settingFields = [
   'perp_max_exposure_pct',
   'perp_cooldown_minutes',
   'perp_max_slippage_pct',
+  'perp_fixed_margin_enabled',
+  'perp_fixed_margin_usd',
   'spot_confidence_threshold',
   'spot_trailing_distance_pct',
   'perp_min_leverage',
@@ -2162,10 +2164,18 @@ function SettingsPanel({
         {settingFields.map((field) => (
           <label key={field}>
             <span>{field.replaceAll('_', ' ')}</span>
-            <input
-              value={String(draft[field] ?? '')}
-              onChange={(event) => setDraft({ ...draft, [field]: coerceSetting(event.target.value, draft[field]) })}
-            />
+            {typeof draft[field] === 'boolean' ? (
+              <input
+                type="checkbox"
+                checked={Boolean(draft[field])}
+                onChange={(event) => setDraft({ ...draft, [field]: event.target.checked })}
+              />
+            ) : (
+              <input
+                value={String(draft[field] ?? '')}
+                onChange={(event) => setDraft({ ...draft, [field]: coerceSetting(event.target.value, draft[field]) })}
+              />
+            )}
           </label>
         ))}
       </div>

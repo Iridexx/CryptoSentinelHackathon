@@ -46,6 +46,8 @@ class AgentMobileSettings(BaseModel):
     perp_max_exposure_pct: float = Field(default=20.0, gt=0.0, le=100.0)
     perp_cooldown_minutes: int = Field(default=15, ge=0, le=1440)
     perp_max_slippage_pct: float = Field(default=0.5, gt=0.0, le=20.0)
+    perp_fixed_margin_enabled: bool = False
+    perp_fixed_margin_usd: float = Field(default=50.0, gt=0.0, le=100000.0)
 
     # --- Campi legacy (mantenuti per backward-compat con settings salvati prima del refactor) ---
     capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

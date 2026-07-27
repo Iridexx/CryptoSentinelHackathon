@@ -154,6 +154,8 @@ class AgentService:
             perp_max_exposure_pct=exposure,
             perp_cooldown_minutes=cooldown,
             perp_max_slippage_pct=slippage,
+            perp_fixed_margin_enabled=False,
+            perp_fixed_margin_usd=50.0,
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -1565,9 +1567,12 @@ class AgentService:
 
     async def _execute_or_simulate(self, session: AsyncSession, signal: dict, risk_decision, brain_decision) -> dict:
         # H (v3): size_factor dal segnale (anti-spike reduce_size); default 1.0.
-        size_factor = Decimal(str(signal.get("size_factor", 1) or 1))
-        size_quote = risk_decision.size_quote * brain_decision.size_multiplier * size_factor
-        if self._ms.execution_mode == "dry_run":
+        ms = self._ms
+        fixed_perp_margin = signal.get("market") == "perp" and ms.perp_fixed_margin_enabled
+        size_factor = Decimal("1") if fixed_perp_margin else Decimal(str(signal.get("size_factor", 1) or 1))
+        size_multiplier = Decimal("1") if fixed_perp_margin else brain_decision.size_multiplier
+        size_quote = risk_decision.size_quote * size_multiplier * size_factor
+        if ms.execution_mode == "dry_run":
             execution = await self._simulate_trade(session, signal, size_quote)
         elif signal.get("market") == "spot":
             # In live i parametri on-chain (token + amount) sono assenti dal segnale:

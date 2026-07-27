@@ -125,6 +125,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_max_exposure_pct: 20,
   perp_cooldown_minutes: 15,
   perp_max_slippage_pct: 0.5,
+  perp_fixed_margin_enabled: false,
+  perp_fixed_margin_usd: 50,
   capital_per_trade_pct: 6,
   per_trade_pct: 1.5,
   max_open_positions: 3,
@@ -1530,6 +1532,8 @@ const SetupPane: FC<{
           <NumberInput label="Exposure %" value={settings.perp_max_exposure_pct} onChange={(perp_max_exposure_pct) => patch({ perp_max_exposure_pct })} />
           <NumberInput label="Slippage %" value={settings.perp_max_slippage_pct} step={0.1} onChange={(perp_max_slippage_pct) => patch({ perp_max_slippage_pct })} />
           <NumberInput label="Cooldown min" value={settings.perp_cooldown_minutes} onChange={(perp_cooldown_minutes) => patch({ perp_cooldown_minutes })} />
+          <ToggleInput label="Margine fisso Perp" checked={settings.perp_fixed_margin_enabled} onChange={(perp_fixed_margin_enabled) => patch({ perp_fixed_margin_enabled })} />
+          <NumberInput label="Margine fisso $" value={settings.perp_fixed_margin_usd} onChange={(perp_fixed_margin_usd) => patch({ perp_fixed_margin_usd })} />
         </div>
       </section>
 

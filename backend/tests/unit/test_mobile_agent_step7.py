@@ -144,6 +144,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert initial.settings.market_reversal_filter_enabled is True
     assert initial.settings.spot_breakeven_enabled is True
     assert initial.settings.perp_breakeven_enabled is True
+    assert initial.settings.perp_fixed_margin_enabled is False
+    assert initial.settings.perp_fixed_margin_usd == 50.0
 
     payload = AgentMobileSettings(
         mode="semi_autonomous",
@@ -157,6 +159,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
         perp_sl_mode="lowest",
         spot_structural_stop_buffer_pct=1.25,
         perp_structural_stop_buffer_pct=1.35,
+        perp_fixed_margin_enabled=True,
+        perp_fixed_margin_usd=75,
     )
     live_settings = settings()
     updated = await update_mobile_agent_settings(payload, live_settings, AuthScope.ADMIN)
@@ -179,6 +183,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert loaded.settings.perp_sl_mode == "lowest"
     assert loaded.settings.spot_structural_stop_buffer_pct == 1.25
     assert loaded.settings.perp_structural_stop_buffer_pct == 1.35
+    assert loaded.settings.perp_fixed_margin_enabled is True
+    assert loaded.settings.perp_fixed_margin_usd == 75.0
 
 
 @pytest.mark.asyncio

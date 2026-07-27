@@ -125,6 +125,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_max_exposure_pct=exposure,
         perp_cooldown_minutes=cooldown,
         perp_max_slippage_pct=slippage,
+        perp_fixed_margin_enabled=False,
+        perp_fixed_margin_usd=50.0,
         # Legacy
         capital_per_trade_pct=cap,
         per_trade_pct=per_trade,
