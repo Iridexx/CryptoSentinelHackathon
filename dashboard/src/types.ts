@@ -247,6 +247,8 @@ export type TradeDetail = {
   leverage?: number | null;
   exposure_usd: string;
   margin_usd?: string | null;
+  stop_reference_price?: string | null;
+  stop_reference_field?: string | null;
   opened_at: string;
   closed_at?: string | null;
   duration_seconds?: number | null;

@@ -268,6 +268,8 @@ export interface TradeDetail {
   fee_mode?: string | null;
   // perp-specific
   margin_usd?: string | null;
+  stop_reference_price?: string | null;
+  stop_reference_field?: string | null;
   opening_fee_usd?: string | null;
   taker_fee_usd?: string | null;
   maker_fee_usd?: string | null;

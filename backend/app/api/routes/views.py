@@ -845,6 +845,20 @@ def _breakeven_price(position, is_long: bool) -> str | None:
     return _fmt_price(stop) if active else None
 
 
+def _stop_reference_price(position, chart: dict | None) -> str | None:
+    value = getattr(position, "stop_reference_price", None) if position is not None else None
+    if value is None and chart:
+        value = (chart.get("stop_reference") or {}).get("price")
+    return _fmt_price(value) if value is not None else None
+
+
+def _trade_stop_reference_field(position, chart: dict | None) -> str | None:
+    value = getattr(position, "stop_reference_field", None) if position is not None else None
+    if value is None and chart:
+        value = (chart.get("stop_reference") or {}).get("field")
+    return str(value) if value else None
+
+
 def _trade_timeline(trade, position, chart: dict | None, is_close: bool) -> tuple[str, str | None]:
     """(opened_at, closed_at) coerenti: lo snapshot e la posizione sono piu' affidabili
     del timestamp del trade (che per un cls_ e' il momento della chiusura, non dell'apertura)."""
@@ -997,6 +1011,8 @@ def _perp_trade_detail(
         "take_profit_1": _level(position, "take_profit_1", chart, "take_profit_1"),
         "take_profit_2": _level(position, "take_profit_2", chart, "take_profit_2"),
         "liquidation_price": _level(position, "liquidation_price", chart, "liquidation_price"),
+        "stop_reference_price": _stop_reference_price(position, chart),
+        "stop_reference_field": _trade_stop_reference_field(position, chart),
         "trailing_stop": _fmt_price(position.trailing_stop) if position and position.trailing_stop else None,
         "breakeven_price": _breakeven_price(position, (position.side == "long") if position else True),
         "size": _fmt_price(size),

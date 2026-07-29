@@ -1793,6 +1793,10 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <h3 className="text-sm font-semibold text-white">Risk levels</h3>
       {[
         ['Stop loss', detail.stop_loss],
+        ...(detail.market === 'perp' ? [[
+          detail.stop_reference_field === 'high' ? 'Max candela ref SL' : 'Min candela ref SL',
+          detail.stop_reference_price,
+        ] as [string, string | null | undefined]] : []),
         ...(detail.market === 'perp' ? [['Liquidation', detail.liquidation_price] as [string, string | null | undefined]] : []),
         ['Breakeven', detail.breakeven_price],
         ['Take profit 1', detail.take_profit_1],

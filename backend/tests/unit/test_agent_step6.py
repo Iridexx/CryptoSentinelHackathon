@@ -643,6 +643,8 @@ def test_perp_trade_detail_exposure_uses_notional_once() -> None:
         pnl_unrealized=Decimal("0"),
         status="open",
         margin_usd=Decimal("8.86196508096"),
+        stop_reference_price=Decimal("0.3299"),
+        stop_reference_field="low",
         opened_at=now,
         updated_at=now,
     )
@@ -651,6 +653,8 @@ def test_perp_trade_detail_exposure_uses_notional_once() -> None:
 
     assert detail["margin_usd"] == "8.86"
     assert detail["exposure_usd"] == "221.55"
+    assert detail["stop_reference_price"] == "0.3299"
+    assert detail["stop_reference_field"] == "low"
 
 
 @pytest.mark.asyncio

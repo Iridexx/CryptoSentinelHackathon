@@ -1335,6 +1335,12 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
           </div>
           <div className="metric-grid">
             <Metric label="Stop loss" value={detail.stop_loss ? fmtPrice(detail.stop_loss) : '—'} />
+            {detail.market === 'perp' && (
+              <Metric
+                label={detail.stop_reference_field === 'high' ? 'Max candela ref SL' : 'Min candela ref SL'}
+                value={detail.stop_reference_price ? fmtPrice(detail.stop_reference_price) : '---'}
+              />
+            )}
             {detail.market === 'perp' && <Metric label="Liquidation" value={detail.liquidation_price ? fmtPrice(detail.liquidation_price) : '---'} />}
             <Metric label="Breakeven" value={detail.breakeven_price ? fmtPrice(detail.breakeven_price) : '---'} />
             <Metric label="Take profit 1" value={detail.take_profit_1 ? fmtPrice(detail.take_profit_1) : '—'} />
