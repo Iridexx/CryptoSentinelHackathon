@@ -45,14 +45,19 @@ const fmtUsd = (value: string | number | null | undefined) => {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const fmtMicroPrice = (value: number, maxDecimals = 18): string => {
+  const sign = value < 0 ? '-' : '';
+  const fixed = Math.abs(value).toFixed(maxDecimals).replace(/0+$/, '').replace(/\.$/, '');
+  return fixed === '0' ? '$0' : `${sign}$${fixed}`;
+};
+
 const fmtPrice = (value: string | number | null | undefined): string => {
   const n = Number(value);
   if (!Number.isFinite(n) || value == null || value === '') return '$--';
   if (n === 0) return '$0';
   if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
-  const sig = parseFloat(n.toPrecision(8));
-  return `$${sig.toString()}`;
+  return fmtMicroPrice(n);
 };
 
 const fmtPriceFull = (value: string | number | null | undefined): string => {
@@ -60,6 +65,7 @@ const fmtPriceFull = (value: string | number | null | undefined): string => {
   const n = Number(value);
   if (!Number.isFinite(n)) return '-';
   if (n === 0) return '$0';
+  if (Math.abs(n) < 1) return fmtMicroPrice(n);
   const s = String(value);
   const dotIdx = s.indexOf('.');
   const intStr = Math.trunc(Math.abs(n)).toLocaleString('en-US');

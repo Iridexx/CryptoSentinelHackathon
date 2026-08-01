@@ -2757,15 +2757,19 @@ function money(value: string | number) {
   }).format(numeric);
 }
 
+function fmtMicroPrice(value: number, maxDecimals = 18): string {
+  const sign = value < 0 ? '-' : '';
+  const fixed = Math.abs(value).toFixed(maxDecimals).replace(/0+$/, '').replace(/\.$/, '');
+  return fixed === '0' ? '$0' : `${sign}$${fixed}`;
+}
+
 function fmtPrice(value: string | number | null | undefined): string {
   const n = Number(value);
   if (!Number.isFinite(n) || value == null || value === '') return '$--';
   if (n === 0) return '$0';
   if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
-  // Sub-$1: massimo 8 decimali, zeri finali rimossi.
-  const capped = parseFloat(n.toFixed(8));
-  return capped === 0 ? '$0' : `$${capped.toString()}`;
+  return fmtMicroPrice(n);
 }
 
 function trimDecimals(value: string | number | null | undefined, max = 8): string {

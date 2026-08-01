@@ -27,7 +27,7 @@ from backend.app.persistence.repositories.positions import PerpPositionRepositor
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.models.pnl import PortfolioState
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
-from backend.app.persistence.models.trades import PerpTrade
+from backend.app.persistence.models.trades import PerpTrade, SpotTrade
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
 from backend.app.persistence.runtime_state import set_runtime_value
 from backend.app.schemas.mobile_agent import AgentMobileSettings
@@ -655,6 +655,85 @@ def test_perp_trade_detail_exposure_uses_notional_once() -> None:
     assert detail["exposure_usd"] == "221.55"
     assert detail["stop_reference_price"] == "0.3299"
     assert detail["stop_reference_field"] == "low"
+
+
+def test_spot_trade_detail_preserves_micro_token_prices() -> None:
+    now = datetime(2026, 8, 1, tzinfo=UTC)
+    entry = Decimal("0.000000001234")
+    size = Decimal("32585089141.00486223662884927")
+    trade = SpotTrade(
+        trade_id="dry_babydoge_test",
+        user_id=str(USER_ID),
+        asset="BABYDOGE",
+        side="buy",
+        amount=size,
+        price=entry,
+        amount_quote=Decimal("40.21"),
+        status="prepared",
+        timestamp_utc=now,
+        provider="dry_run",
+    )
+    position = SpotPosition(
+        position_id="pos_babydoge_test",
+        user_id=str(USER_ID),
+        asset="BABYDOGE",
+        size=size,
+        entry_price=entry,
+        current_price=entry,
+        pnl_unrealized=Decimal("0"),
+        status="open",
+        stop_loss=Decimal("0.000000001100"),
+        initial_stop_loss=Decimal("0.000000001100"),
+        take_profit_1=Decimal("0.000000001400"),
+        take_profit_2=Decimal("0.000000001600"),
+        opened_at=now,
+        updated_at=now,
+    )
+
+    detail = view_routes._spot_trade_detail(trade, position, None, settings())
+
+    assert detail["entry_price"] == "0.000000001234"
+    assert detail["current_or_exit_price"] == "0.000000001234"
+    assert detail["stop_loss"] == "0.0000000011"
+    assert detail["take_profit_1"] == "0.0000000014"
+    assert detail["take_profit_2"] == "0.0000000016"
+    assert detail["exposure_usd"] == "40.21"
+
+
+def test_spot_trade_detail_recovers_zero_entry_from_trade_notional() -> None:
+    now = datetime(2026, 8, 1, tzinfo=UTC)
+    size = Decimal("32585089141.00486223662884927")
+    trade = SpotTrade(
+        trade_id="dry_babydoge_recover",
+        user_id=str(USER_ID),
+        asset="BABYDOGE",
+        side="buy",
+        amount=size,
+        price=Decimal("0"),
+        amount_quote=Decimal("40.21"),
+        status="prepared",
+        timestamp_utc=now,
+        provider="dry_run",
+    )
+    position = SpotPosition(
+        position_id="pos_babydoge_recover",
+        user_id=str(USER_ID),
+        asset="BABYDOGE",
+        size=size,
+        entry_price=Decimal("0"),
+        current_price=Decimal("0"),
+        pnl_unrealized=Decimal("0"),
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+
+    detail = view_routes._spot_trade_detail(trade, position, None, settings())
+
+    assert detail["entry_price"] == "0.000000001234"
+    assert detail["current_or_exit_price"] == "0.000000001234"
+    assert detail["exposure_usd"] == "40.21"
+    assert detail["pnl_pct"] == "+0.00"
 
 
 @pytest.mark.asyncio

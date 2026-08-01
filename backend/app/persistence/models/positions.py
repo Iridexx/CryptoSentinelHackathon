@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
 
+PRICE_NUMERIC = Numeric(30, 18)
+
 
 class SpotPosition(Base):
     """Active spot holding with live stop/TP levels."""
@@ -19,20 +21,20 @@ class SpotPosition(Base):
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     asset: Mapped[str] = mapped_column(String(32), nullable=False)
     size: Mapped[Decimal] = mapped_column(Numeric(30, 18), nullable=False)
-    entry_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
-    current_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(PRICE_NUMERIC, nullable=False)
+    current_price: Mapped[Decimal] = mapped_column(PRICE_NUMERIC, nullable=False)
     pnl_unrealized: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False, default=Decimal("0"))
-    stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
-    initial_stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # SL originale, mai sovrascritto
-    take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
-    take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
-    trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    stop_loss: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
+    initial_stop_loss: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)  # SL originale, mai sovrascritto
+    take_profit_1: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
+    take_profit_2: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
+    trailing_stop: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
     # ── Gestione uscite v3 (ATR-based) ────────────────────────────────────────
-    entry_atr: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # ATR congelato all'ingresso
+    entry_atr: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)   # ATR congelato all'ingresso
     stop_reference_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    stop_reference_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    stop_reference_price: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
     stop_reference_field: Mapped[str | None] = mapped_column(String(8), nullable=True)
-    max_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # massimo dall'ingresso (per trailing)
+    max_price: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)   # massimo dall'ingresso (per trailing)
     scale_in_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)    # n. aggiunte a favore (E)
     # ── Costi posizione (fee + slippage, solo dry-run) ────────────────────────
     fee_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)          # all|none
@@ -56,22 +58,22 @@ class PerpPosition(Base):
     asset: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)  # long / short
     size: Mapped[Decimal] = mapped_column(Numeric(30, 18), nullable=False)
-    entry_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
-    current_price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(PRICE_NUMERIC, nullable=False)
+    current_price: Mapped[Decimal] = mapped_column(PRICE_NUMERIC, nullable=False)
     leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     pnl_unrealized: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False, default=Decimal("0"))
-    stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
-    initial_stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # SL originale, mai sovrascritto
-    take_profit_1: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # bordo value area (50%)
-    take_profit_2: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # POC (25%)
-    trailing_stop: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)  # null finché non attivo
+    stop_loss: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
+    initial_stop_loss: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)  # SL originale, mai sovrascritto
+    take_profit_1: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)  # bordo value area (50%)
+    take_profit_2: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)  # POC (25%)
+    trailing_stop: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)  # null finché non attivo
     # ── Protezione posizione (breakeven + trailing dinamico ATR) ──────────────
-    entry_atr: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # ATR congelato all'ingresso
+    entry_atr: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)   # ATR congelato all'ingresso
     stop_reference_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    stop_reference_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    stop_reference_price: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
     stop_reference_field: Mapped[str | None] = mapped_column(String(8), nullable=True)
-    max_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)   # estremo favorevole dall'ingresso
-    liquidation_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 8), nullable=True)
+    max_price: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)   # estremo favorevole dall'ingresso
+    liquidation_price: Mapped[Decimal | None] = mapped_column(PRICE_NUMERIC, nullable=True)
     funding_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
     # ── Costi posizione (fee + slippage + funding) ────────────────────────────
     fee_mode: Mapped[str | None] = mapped_column(String(8), nullable=True)          # taker|maker|none

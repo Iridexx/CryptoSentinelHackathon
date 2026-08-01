@@ -3,7 +3,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
@@ -775,13 +775,16 @@ def _fee_opt(value) -> str | None:
 
 def _fmt_price(value) -> str:
     """Prezzo come stringa a virgola fissa: niente notazione scientifica,
-    minimo 2 decimali, massimo 8, senza zeri finali superflui.
+    minimo 2 decimali, massimo 18, senza zeri finali superflui.
 
     Es: 100 → "100.00", 0.000123 → "0.000123", 0.0001234567 → "0.00012346".
     Evita il problema di Decimal.normalize() che per i numeri tondi produce
     notazione scientifica ("1E+2").
     """
-    quantized = Decimal(str(value)).quantize(Decimal("0.00000001"))
+    decimal = Decimal(str(value))
+    with localcontext() as ctx:
+        ctx.prec = max(28, len(decimal.as_tuple().digits) + 18)
+        quantized = decimal.quantize(Decimal("0.000000000000000001"))
     text = format(quantized, "f")
     if "." in text:
         int_part, frac = text.split(".")
@@ -790,6 +793,27 @@ def _fmt_price(value) -> str:
             frac = frac.ljust(2, "0")
         return f"{int_part}.{frac}"
     return f"{text}.00"
+
+
+def _positive_decimal(value) -> Decimal | None:
+    if value is None:
+        return None
+    decimal = Decimal(str(value))
+    return decimal if decimal > 0 else None
+
+
+def _spot_entry_fallback(trade: SpotTrade, size: Decimal, chart: dict | None) -> Decimal | None:
+    if chart:
+        chart_entry = _positive_decimal(chart.get("entry_price"))
+        if chart_entry is not None:
+            return chart_entry
+    trade_price = _positive_decimal(trade.price)
+    if trade_price is not None:
+        return trade_price
+    amount_quote = _positive_decimal(trade.amount_quote)
+    if amount_quote is not None and size > 0:
+        return amount_quote / size
+    return None
 
 
 def _signed(value: str) -> str:
@@ -899,11 +923,14 @@ def _spot_trade_detail(
     if chart is not None and post_close_candles:
         chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
+    size = Decimal(trade.amount) if (is_close or position is None) else Decimal(position.size)
     entry = (
         Decimal(position.entry_price) if position is not None
         else Decimal(str(chart["entry_price"])) if chart
         else Decimal(trade.price)
     )
+    if entry <= 0:
+        entry = _spot_entry_fallback(trade, size, chart) or entry
     if is_close:
         current = Decimal(trade.price)
     elif position is not None:
@@ -912,7 +939,8 @@ def _spot_trade_detail(
         current = Decimal(str(chart["exit_price"]))
     else:
         current = Decimal(trade.price)
-    size = Decimal(trade.amount) if (is_close or position is None) else Decimal(position.size)
+    if current <= 0:
+        current = _positive_decimal(chart.get("exit_price") if chart else None) or entry
     if trade.pnl_usd is not None:
         pnl = Decimal(trade.pnl_usd)
     elif position is not None:

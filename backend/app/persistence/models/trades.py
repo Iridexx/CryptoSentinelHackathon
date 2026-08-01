@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
 
+PRICE_NUMERIC = Numeric(30, 18)
+
 
 class SpotTrade(Base):
     """One completed or attempted spot swap execution."""
@@ -20,7 +22,7 @@ class SpotTrade(Base):
     asset: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)  # buy / sell
     amount: Mapped[Decimal] = mapped_column(Numeric(30, 18), nullable=False)
-    price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    price: Mapped[Decimal] = mapped_column(PRICE_NUMERIC, nullable=False)
     amount_quote: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
     tx_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="prepared")
@@ -52,7 +54,7 @@ class PerpTrade(Base):
     side: Mapped[str] = mapped_column(String(8), nullable=False)  # long / short
     direction: Mapped[str] = mapped_column(String(8), nullable=False)  # open / close
     size: Mapped[Decimal] = mapped_column(Numeric(30, 18), nullable=False)
-    price: Mapped[Decimal] = mapped_column(Numeric(30, 8), nullable=False)
+    price: Mapped[Decimal] = mapped_column(PRICE_NUMERIC, nullable=False)
     leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     tx_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="prepared")
