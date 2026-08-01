@@ -1663,6 +1663,25 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       <line x1={padX} x2={plotR} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
     );
 
+  const stopRefLine = (idx: number) => {
+    const candle = allCandles[idx];
+    if (!candle) return null;
+    const gap = 3;
+    const x = cx(idx);
+    const topEnd = Math.max(padTop, y(candle.h) - gap);
+    const bottomStart = Math.min(plotB, y(candle.l) + gap);
+    return (
+      <>
+        {topEnd > padTop && (
+          <line x1={x} x2={x} y1={padTop} y2={topEnd} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+        )}
+        {bottomStart < plotB && (
+          <line x1={x} x2={x} y1={bottomStart} y2={plotB} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+        )}
+      </>
+    );
+  };
+
   // Linea verticale tratteggiata subito dopo la candela di chiusura.
   const closeLineX = postClose.length > 0 ? cx(exitIdx + 0.5) : null;
 
@@ -1719,7 +1738,7 @@ const TradeCandleChart: FC<{ chart: NonNullable<TradeDetail['chart']> }> = ({ ch
       )}
       {stopRefIdx != null && (
         <>
-          <line x1={cx(stopRefIdx)} x2={cx(stopRefIdx)} y1={padTop} y2={plotB} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+          {stopRefLine(stopRefIdx)}
           <text x={Math.min(plotR - 4, cx(stopRefIdx) + 4)} y={padTop + 8} fontSize="8" fill="#c084fc">SL ref</text>
           {stopRefPrice != null && !Number.isNaN(stopRefPrice) && (
             <circle cx={cx(stopRefIdx)} cy={y(stopRefPrice)} r="3" fill="#a855f7" stroke="#0b0e11" strokeWidth="1" />

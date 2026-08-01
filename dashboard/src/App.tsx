@@ -1223,6 +1223,25 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
       <line x1={padL} x2={W - padR} y1={y(price)} y2={y(price)} stroke={color} strokeWidth="1" strokeDasharray={dash} opacity="0.7" />
     );
 
+  const stopRefLine = (idx: number) => {
+    const candle = allCandles[idx];
+    if (!candle) return null;
+    const gap = 3;
+    const x = cx(idx);
+    const topEnd = Math.max(padT, y(candle.h) - gap);
+    const bottomStart = Math.min(padT + plotH, y(candle.l) + gap);
+    return (
+      <>
+        {topEnd > padT && (
+          <line x1={x} x2={x} y1={padT} y2={topEnd} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+        )}
+        {bottomStart < padT + plotH && (
+          <line x1={x} x2={x} y1={bottomStart} y2={padT + plotH} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+        )}
+      </>
+    );
+  };
+
   const axisPrice = (v: number) => {
     const a = Math.abs(v);
     if (a >= 1000) return v.toFixed(0);
@@ -1276,7 +1295,7 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
       )}
       {stopRefIdx != null && (
         <>
-          <line x1={cx(stopRefIdx)} x2={cx(stopRefIdx)} y1={padT} y2={padT + plotH} stroke="#a855f7" strokeWidth="1" strokeDasharray="2 2" opacity="0.9" />
+          {stopRefLine(stopRefIdx)}
           <text x={Math.min(W - padR - 4, cx(stopRefIdx) + 4)} y={padT + 8} fontSize="8" fill="#c084fc">SL ref</text>
           {stopRefPrice != null && !Number.isNaN(stopRefPrice) && (
             <circle cx={cx(stopRefIdx)} cy={y(stopRefPrice)} r="3" fill="#a855f7" stroke="#0b0e11" strokeWidth="1" />
