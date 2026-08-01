@@ -40,6 +40,8 @@ import { hapticLight } from '../utils/haptics';
 
 type AgentPane = 'spot' | 'perp' | 'global' | 'coins' | 'wallet' | 'setup';
 
+const MICRO_PRICE_FULL_THRESHOLD = 0.000001;
+
 const fmtUsd = (value: string | number | null | undefined) => {
   const n = Number(value ?? 0);
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -51,13 +53,18 @@ const fmtMicroPrice = (value: number, maxDecimals = 18): string => {
   return fixed === '0' ? '$0' : `${sign}$${fixed}`;
 };
 
+const fmtSubDollarPrice = (value: number): string => {
+  const decimals = Math.abs(value) < MICRO_PRICE_FULL_THRESHOLD ? 18 : 8;
+  return fmtMicroPrice(value, decimals);
+};
+
 const fmtPrice = (value: string | number | null | undefined): string => {
   const n = Number(value);
   if (!Number.isFinite(n) || value == null || value === '') return '$--';
   if (n === 0) return '$0';
   if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
-  return fmtMicroPrice(n);
+  return fmtSubDollarPrice(n);
 };
 
 const fmtPriceFull = (value: string | number | null | undefined): string => {
@@ -65,7 +72,7 @@ const fmtPriceFull = (value: string | number | null | undefined): string => {
   const n = Number(value);
   if (!Number.isFinite(n)) return '-';
   if (n === 0) return '$0';
-  if (Math.abs(n) < 1) return fmtMicroPrice(n);
+  if (Math.abs(n) < 1) return fmtSubDollarPrice(n);
   const s = String(value);
   const dotIdx = s.indexOf('.');
   const intStr = Math.trunc(Math.abs(n)).toLocaleString('en-US');

@@ -2757,10 +2757,17 @@ function money(value: string | number) {
   }).format(numeric);
 }
 
+const MICRO_PRICE_FULL_THRESHOLD = 0.000001;
+
 function fmtMicroPrice(value: number, maxDecimals = 18): string {
   const sign = value < 0 ? '-' : '';
   const fixed = Math.abs(value).toFixed(maxDecimals).replace(/0+$/, '').replace(/\.$/, '');
   return fixed === '0' ? '$0' : `${sign}$${fixed}`;
+}
+
+function fmtSubDollarPrice(value: number): string {
+  const decimals = Math.abs(value) < MICRO_PRICE_FULL_THRESHOLD ? 18 : 8;
+  return fmtMicroPrice(value, decimals);
 }
 
 function fmtPrice(value: string | number | null | undefined): string {
@@ -2769,7 +2776,7 @@ function fmtPrice(value: string | number | null | undefined): string {
   if (n === 0) return '$0';
   if (n >= 1000) return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   if (n >= 1)    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
-  return fmtMicroPrice(n);
+  return fmtSubDollarPrice(n);
 }
 
 function trimDecimals(value: string | number | null | undefined, max = 8): string {

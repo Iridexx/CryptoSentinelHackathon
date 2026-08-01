@@ -4,6 +4,7 @@
 
 - Corretto il dettaglio trade spot per asset con prezzo inferiore a 0.00000001, come BABYDOGE.
 - Estesa la formattazione prezzi backend, app e dashboard fino a 18 decimali.
+- Rifinita la UI: app e dashboard restano a massimo 8 decimali sopra 0.000001 e mostrano piu' decimali solo sotto quella soglia.
 - Aumentata la precisione ORM dei campi prezzo Spot/Perp da 8 a 18 decimali dove rappresentano prezzi o livelli.
 - Aggiunto fallback nel dettaglio spot: se una posizione storica ha entry salvata a zero, l'entry viene ricostruita da amount_quote / size quando possibile.
 
@@ -13,7 +14,7 @@
 - `backend/app/persistence/models/positions.py` usa precisione a 18 decimali per entry, current, SL, TP, trailing, ATR, stop reference, max price e liquidation price.
 - `backend/app/persistence/models/trades.py` usa precisione a 18 decimali per il prezzo unitario spot/perp.
 - `backend/app/persistence/migration.py` crea le colonne prezzo aggiunte in futuro con precisione a 18 decimali.
-- `src/components/AgentTab.tsx` e `dashboard/src/App.tsx` mostrano i prezzi sub-1 USD senza tagliarli a 8 decimali.
+- `src/components/AgentTab.tsx` e `dashboard/src/App.tsx` mostrano i prezzi sub-1 USD in modo compatto: 8 decimali fino a 0.000001, full-decimal solo sotto 0.000001.
 
 ## 3. COSA E STATO VERIFICATO
 
@@ -26,6 +27,7 @@
 - Compile backend: `backend/.venv/Scripts/python.exe -m compileall backend/app -q`.
 - Typecheck app: `npx tsc --noEmit -p tsconfig.app.json`.
 - Typecheck dashboard: `npx tsc --noEmit -p dashboard/tsconfig.json`.
+- Dopo il refinement UI, ripetuti i typecheck app e dashboard.
 
 ## 4. SCOSTAMENTI DAL PIANO
 
