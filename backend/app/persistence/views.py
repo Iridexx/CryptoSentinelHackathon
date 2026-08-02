@@ -67,8 +67,7 @@ class ViewService:
         pos_repo = SpotPositionRepository(self._session)
         trade_repo = SpotTradeRepository(self._session)
         positions = await pos_repo.open_for_user(user_id)
-        trades = await trade_repo.list_for_user(user_id, limit=100)
-        history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
+        history_trades = await trade_repo.list_closed_for_user(user_id)
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
@@ -130,11 +129,10 @@ class ViewService:
         pos_repo = PerpPositionRepository(self._session)
         trade_repo = PerpTradeRepository(self._session)
         positions = await pos_repo.open_for_user(user_id)
-        trades = await trade_repo.list_for_user(user_id, limit=100)
+        history_trades = await trade_repo.list_closed_for_user(user_id)
         win = await trade_repo.win_rate(user_id)
         unrealized = sum((p.pnl_unrealized for p in positions), Decimal("0"))
         realized = await trade_repo.sum_realized_pnl(user_id)
-        history_trades = [t for t in trades if t.status not in {"prepared", "pending"}]
         history_positions = await pos_repo.history_for_user(user_id, limit=200)
         entry_by_position_id = {p.position_id: p.entry_price for p in history_positions}
         from datetime import UTC, datetime as _dt
@@ -419,13 +417,17 @@ def _perp_trade_entry_price(t, entry_by_position_id: dict[str, Decimal] | None =
     if t.direction == "close" and entry_by_position_id:
         position_id = _position_id_from_close_trade(t.trade_id)
         if position_id and position_id in entry_by_position_id:
-            return entry_by_position_id[position_id]
+            return _clean_decimal(entry_by_position_id[position_id])
     if t.direction == "close" and t.pnl_usd is not None and t.size > Decimal("0"):
         if t.side == "long":
-            return t.price - t.pnl_usd / t.size
+            return _clean_decimal(t.price - t.pnl_usd / t.size)
         else:
-            return t.price + t.pnl_usd / t.size
-    return t.price
+            return _clean_decimal(t.price + t.pnl_usd / t.size)
+    return _clean_decimal(t.price)
+
+
+def _clean_decimal(value: Decimal) -> Decimal:
+    return Decimal(str(value)).quantize(Decimal("0.00000001")).normalize()
 
 
 def _position_id_from_close_trade(trade_id: str) -> str | None:

@@ -128,7 +128,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing, funding e reference stop loss con precisione prezzo micro-token.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, history Spot/Perp allineata ai trade chiusi con PnL, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
@@ -252,6 +252,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_trade_chart_stop_ref_gap_2026-08-01.md - report linea riferimento SL che lascia visibile la candela nel grafico trade.
 |       |-- report_strategy_docs_v4_2026-08-02.md - report aggiornamento documenti strategia Spot/Perp alla V4.
 |       |-- report_time_stop_toggle_2026-08-02.md - report toggle time stop app/dashboard e backend.
+|       |-- report_dashboard_trade_history_page_size_2026-08-02.md - report filtro 20/50/100/Tutti history Spot/Perp dashboard.
+|       |-- report_trade_history_count_alignment_2026-08-02.md - report fix allineamento conteggi/history Spot/Perp.
 |       `-- report_perp_fixed_margin_toggle_2026-07-27.md - report toggle margine fisso Perp app/dashboard.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
 |   |-- index.html - entrypoint HTML dashboard.
@@ -259,10 +261,10 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
-|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export, formatter micro-prezzi con soglia full-decimal sotto 0.000001 e dettaglio trade con grafico/fee/margine/riferimento SL Perp; nei grafici trade le candele fuori dalla finestra di posizione sono attenuate, il marker SL ref cade sul prezzo SL effettivo e la linea ref evita la candela, mentre il Settings espone i buffer Min/Max20 Spot/Perp, il toggle margine fisso Perp e i toggle Time Stop Spot/Perp con durata in ore.
+|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export, formatter micro-prezzi con soglia full-decimal sotto 0.000001 e dettaglio trade con grafico/fee/margine/riferimento SL Perp; nei grafici trade le candele fuori dalla finestra di posizione sono attenuate, il marker SL ref cade sul prezzo SL effettivo e la linea ref evita la candela; le history Spot/Perp hanno filtri e selettore 20/50/100/Tutti per pagina, mentre il Settings espone i buffer Min/Max20 Spot/Perp, il toggle margine fisso Perp e i toggle Time Stop Spot/Perp con durata in ore.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati, inclusa gestione ticket supporto admin.
 |       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp, trade detail e support ticket.
-|       `-- styles.css - layout desktop-first e stati UI.
+|       `-- styles.css - layout desktop-first, stati UI e controlli history/paginazione.
 |-- plans/ - piani operativi.
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
 |-- public/ - asset statici frontend/PWA.

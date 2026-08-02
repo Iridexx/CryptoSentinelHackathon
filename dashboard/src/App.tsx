@@ -2354,7 +2354,8 @@ function Metric({ label, value, tone = '' }: { label: string; value: string; ton
   );
 }
 
-const HISTORY_PAGE = 10;
+const HISTORY_PAGE_OPTIONS = [20, 50, 100, 'all'] as const;
+type HistoryPageSize = (typeof HISTORY_PAGE_OPTIONS)[number];
 
 type SpotHistoryItem = SpotView['history'][number];
 type PerpHistoryItem = PerpView['history'][number];
@@ -2387,6 +2388,7 @@ function TradeHistoryTable({
   const [filterDir, setFilterDir] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterReason, setFilterReason] = useState('all');
+  const [pageSize, setPageSize] = useState<HistoryPageSize>(20);
   const [page, setPage] = useState(0);
   const [openTrade, setOpenTrade] = useState<string | null>(null);
 
@@ -2412,9 +2414,10 @@ function TradeHistoryTable({
     });
   }, [trades, search, filterSide, filterDir, filterStatus, filterReason, market]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE));
+  const effectivePageSize = pageSize === 'all' ? Math.max(filtered.length, 1) : pageSize;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize));
   const pg = Math.min(page, totalPages - 1);
-  const pageItems = filtered.slice(pg * HISTORY_PAGE, (pg + 1) * HISTORY_PAGE);
+  const pageItems = pageSize === 'all' ? filtered : filtered.slice(pg * effectivePageSize, (pg + 1) * effectivePageSize);
   const resetPage = () => setPage(0);
 
   if (trades.length === 0)
@@ -2451,6 +2454,20 @@ function TradeHistoryTable({
           )}
         </div>
         <div className="trade-history-pager">
+          <select
+            className="trade-history-page-size"
+            value={String(pageSize)}
+            onChange={(e) => {
+              const nextSize = e.target.value === 'all' ? 'all' : Number(e.target.value);
+              setPageSize(nextSize as HistoryPageSize);
+              resetPage();
+            }}
+          >
+            <option value="20">20 trade</option>
+            <option value="50">50 trade</option>
+            <option value="100">100 trade</option>
+            <option value="all">Tutti</option>
+          </select>
           <button className="pager-btn" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={pg === 0}>‹</button>
           <span className="pager-info">{pg + 1}/{totalPages} <span className="pager-total">({filtered.length})</span></span>
           <button className="pager-btn" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={pg >= totalPages - 1}>›</button>

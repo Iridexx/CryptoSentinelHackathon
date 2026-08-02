@@ -41,6 +41,18 @@ class SpotTradeRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_closed_for_user(self, user_id: str, *, limit: int | None = None) -> list[SpotTrade]:
+        stmt = (
+            select(SpotTrade)
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.pnl_usd.is_not(None))
+            .order_by(SpotTrade.timestamp_utc.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
     async def win_rate(self, user_id: str) -> dict:
         """Win rate sui trade di chiusura (quelli con pnl_usd registrato)."""
         trades = await self.list_for_user(user_id, limit=10_000)
@@ -159,6 +171,18 @@ class PerpTradeRepository:
         if status:
             stmt = stmt.where(PerpTrade.status == status)
         stmt = stmt.order_by(PerpTrade.timestamp_utc.desc()).limit(limit)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_closed_for_user(self, user_id: str, *, limit: int | None = None) -> list[PerpTrade]:
+        stmt = (
+            select(PerpTrade)
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.pnl_usd.is_not(None))
+            .order_by(PerpTrade.timestamp_utc.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
