@@ -156,6 +156,8 @@ class AgentService:
             perp_max_slippage_pct=slippage,
             perp_fixed_margin_enabled=False,
             perp_fixed_margin_usd=50.0,
+            spot_time_stop_enabled=getattr(self.settings, "spot_time_stop_enabled", False),
+            perp_time_stop_enabled=getattr(self.settings, "perp_time_stop_enabled", False),
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -1130,7 +1132,7 @@ class AgentService:
                 reason = "take_profit_1"
                 partial = True
             # G (v3): stop temporale ATR-aware — chiude solo i trade davvero fermi.
-            if reason is None:
+            if reason is None and self._ms.spot_time_stop_enabled:
                 reason = await self._spot_time_stop_reason(pos, price, atr_v, now)
             if reason:
                 exit_price = _level_fill_price(pos, reason, price)
@@ -1267,7 +1269,7 @@ class AgentService:
                     reason = "take_profit_1"
                     partial = True
 
-            if reason is None and ms.perp_time_stop_hours > 0:
+            if reason is None and ms.perp_time_stop_enabled and ms.perp_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
                 if age_hours >= ms.perp_time_stop_hours:
                     reason = "time_stop"

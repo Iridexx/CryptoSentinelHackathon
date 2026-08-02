@@ -22,6 +22,8 @@ class AgentMobileSettings(BaseModel):
     perp_breakeven_enabled: bool = True
     spot_trailing_enabled: bool = True
     perp_trailing_enabled: bool = True
+    spot_time_stop_enabled: bool = False
+    perp_time_stop_enabled: bool = False
     spot_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
     perp_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
     spot_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")

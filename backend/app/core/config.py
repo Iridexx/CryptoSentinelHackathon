@@ -201,6 +201,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "scale_in_require_new_hh": "spot_scale_in_require_new_hh",
         "scale_in_require_be_stop": "spot_scale_in_require_be_stop",
         "scale_in_max_adds": "spot_scale_in_max_adds",
+        "time_stop_enabled": "spot_time_stop_enabled",
         "time_stop_mode": "spot_time_stop_mode",
         "time_stop_lookback_candles": "spot_time_stop_lookback_candles",
         "time_stop_min_move_atr": "spot_time_stop_min_move_atr",
@@ -249,6 +250,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "trailing_base_atr_stretto": "perp_trailing_base_atr_stretto",
         "trailing_floor_atr_stretto": "perp_trailing_floor_atr_stretto",
         "trailing_mode": "perp_trailing_mode",
+        "time_stop_enabled": "perp_time_stop_enabled",
         "time_stop_hours": "perp_time_stop_hours",
         "dynamic_leverage_enabled": "perp_dynamic_leverage_enabled",
         "min_volume_profile_liquidity_usd": "perp_min_volume_profile_liquidity_usd",
@@ -551,6 +553,7 @@ class Settings(BaseSettings):
     spot_scale_in_require_new_hh: bool = Field(default=True, alias="SPOT_SCALE_IN_REQUIRE_NEW_HH")
     spot_scale_in_require_be_stop: bool = Field(default=True, alias="SPOT_SCALE_IN_REQUIRE_BE_STOP")
     spot_scale_in_max_adds: int = Field(default=1, alias="SPOT_SCALE_IN_MAX_ADDS")
+    spot_time_stop_enabled: bool = Field(default=False, alias="SPOT_TIME_STOP_ENABLED")
     spot_time_stop_mode: str = Field(default="atr", alias="SPOT_TIME_STOP_MODE")  # atr | hours
     spot_time_stop_lookback_candles: int = Field(default=8, alias="SPOT_TIME_STOP_LOOKBACK_CANDLES")
     spot_time_stop_min_move_atr: float = Field(default=0.5, alias="SPOT_TIME_STOP_MIN_MOVE_ATR")
@@ -614,6 +617,7 @@ class Settings(BaseSettings):
     perp_trailing_base_atr_stretto: float = Field(default=2.5, alias="PERP_TRAILING_BASE_ATR_STRETTO")
     perp_trailing_floor_atr_stretto: float = Field(default=1.5, alias="PERP_TRAILING_FLOOR_ATR_STRETTO")
     perp_trailing_mode: str = Field(default="largo", alias="PERP_TRAILING_MODE")  # largo|stretto
+    perp_time_stop_enabled: bool = Field(default=False, alias="PERP_TIME_STOP_ENABLED")
     perp_time_stop_hours: int = Field(default=8, alias="PERP_TIME_STOP_HOURS")
     perp_dynamic_leverage_enabled: bool = Field(default=True, alias="PERP_DYNAMIC_LEVERAGE_ENABLED")
     perp_min_volume_profile_liquidity_usd: float = Field(

@@ -270,8 +270,11 @@ La nuova entry viene ricalcolata come media ponderata, ma lo stop non viene abba
 
 ## 10. Time Stop
 
-Il time stop Spot e' ATR-aware:
+Il time stop Spot e' opzionale e di default e' disattivato da app/dashboard.
 
+Quando `spot_time_stop_enabled = true`, il time stop Spot e' ATR-aware:
+
+- default `spot_time_stop_enabled = false`;
 - default `spot_time_stop_mode = atr`;
 - lookback default: 8 candele 5m;
 - chiude solo se il movimento nelle ultime N candele e' inferiore a `0.5 * ATR`;

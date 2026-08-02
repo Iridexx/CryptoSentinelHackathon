@@ -118,6 +118,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_breakeven_enabled: true,
   spot_trailing_enabled: true,
   perp_trailing_enabled: true,
+  spot_time_stop_enabled: false,
+  perp_time_stop_enabled: false,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
   spot_sl_mode: 'atr' as const,
@@ -1486,6 +1488,16 @@ const SetupPane: FC<{
           checked={settings.perp_trailing_enabled}
           onChange={(perp_trailing_enabled) => patch({ perp_trailing_enabled })}
         />
+        <ToggleInput
+          label="Time Stop Spot"
+          checked={settings.spot_time_stop_enabled}
+          onChange={(spot_time_stop_enabled) => patch({ spot_time_stop_enabled })}
+        />
+        <ToggleInput
+          label="Time Stop Perp"
+          checked={settings.perp_time_stop_enabled}
+          onChange={(perp_time_stop_enabled) => patch({ perp_time_stop_enabled })}
+        />
       </section>
 
       <section className="space-y-3">
@@ -1529,6 +1541,7 @@ const SetupPane: FC<{
           <NumberInput label="ATR stop" value={settings.spot_atr_stop_multiplier} step={0.1} onChange={(spot_atr_stop_multiplier) => patch({ spot_atr_stop_multiplier })} />
           <NumberInput label="Buffer Min20 %" value={settings.spot_structural_stop_buffer_pct} step={0.1} onChange={(spot_structural_stop_buffer_pct) => patch({ spot_structural_stop_buffer_pct })} />
           <NumberInput label="Chiudi a TP1 %" value={settings.spot_tp1_close_pct} step={5} onChange={(spot_tp1_close_pct) => patch({ spot_tp1_close_pct })} />
+          <NumberInput label="Time Stop ore" value={settings.spot_time_stop_hours} step={1} onChange={(spot_time_stop_hours) => patch({ spot_time_stop_hours: Math.round(spot_time_stop_hours) })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.spot_fee_mode} onChange={(v) => patch({ spot_fee_mode: v as 'all' | 'none' })} options={[
             { value: 'all', label: 'Swap fee + Slippage — 0.15%' },
             { value: 'none', label: 'Nessuna (strategia lorda)' },
@@ -1569,6 +1582,7 @@ const SetupPane: FC<{
           ]} />
           <NumberInput label="Trailing dist. % (0=solo ATR)" value={settings.perp_trailing_pnl_pct} step={0.1} onChange={(perp_trailing_pnl_pct) => patch({ perp_trailing_pnl_pct })} />
           <NumberInput label="Chiudi a TP1 %" value={settings.perp_tp1_close_pct} step={5} onChange={(perp_tp1_close_pct) => patch({ perp_tp1_close_pct })} />
+          <NumberInput label="Time Stop ore" value={settings.perp_time_stop_hours} step={1} onChange={(perp_time_stop_hours) => patch({ perp_time_stop_hours: Math.round(perp_time_stop_hours) })} />
           <SelectInput label="Fee mode (dry-run)" value={settings.perp_fee_mode} onChange={(v) => patch({ perp_fee_mode: v as 'taker' | 'maker' | 'none' })} options={[
             { value: 'taker', label: 'Taker (market) — 0.06%' },
             { value: 'maker', label: 'Maker (limit) — 0.02%' },

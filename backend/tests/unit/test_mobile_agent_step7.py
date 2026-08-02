@@ -81,6 +81,7 @@ def settings(**overrides):
         spot_scale_in_max_adds=1,
         spot_trailing_distance_pct=2.0,
         spot_partial_take_profit_pct=50.0,
+        spot_time_stop_enabled=False,
         spot_time_stop_hours=6,
         spot_time_stop_mode="atr",
         spot_time_stop_lookback_candles=8,
@@ -115,6 +116,7 @@ def settings(**overrides):
         perp_sl_mode="atr",
         perp_structural_stop_lookback_candles=20,
         perp_structural_stop_buffer_pct=1.10,
+        perp_time_stop_enabled=False,
         perp_time_stop_hours=8,
         cmc_api_key="configured",
         twak_access_id="configured",
@@ -144,6 +146,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert initial.settings.market_reversal_filter_enabled is True
     assert initial.settings.spot_breakeven_enabled is True
     assert initial.settings.perp_breakeven_enabled is True
+    assert initial.settings.spot_time_stop_enabled is False
+    assert initial.settings.perp_time_stop_enabled is False
     assert initial.settings.perp_fixed_margin_enabled is False
     assert initial.settings.perp_fixed_margin_usd == 50.0
 
@@ -155,6 +159,10 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
         market_reversal_filter_enabled=False,
         spot_breakeven_enabled=False,
         perp_breakeven_enabled=True,
+        spot_time_stop_enabled=True,
+        perp_time_stop_enabled=True,
+        spot_time_stop_hours=12,
+        perp_time_stop_hours=10,
         spot_sl_mode="lowest",
         perp_sl_mode="lowest",
         spot_structural_stop_buffer_pct=1.25,
@@ -169,6 +177,10 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert live_settings.perp_sl_mode == "lowest"
     assert live_settings.spot_structural_stop_buffer_pct == 1.25
     assert live_settings.perp_structural_stop_buffer_pct == 1.35
+    assert live_settings.spot_time_stop_enabled is True
+    assert live_settings.perp_time_stop_enabled is True
+    assert live_settings.spot_time_stop_hours_fallback == 12
+    assert live_settings.perp_time_stop_hours == 10
 
     loaded = await mobile_agent_settings(settings(), AuthScope.READ)
     assert loaded.source == "runtime"
@@ -178,6 +190,8 @@ async def test_mobile_agent_settings_are_persisted(sync_db) -> None:
     assert loaded.settings.drawdown_alert_enabled is False
     assert loaded.settings.market_reversal_filter_enabled is False
     assert loaded.settings.spot_breakeven_enabled is False
+    assert loaded.settings.spot_time_stop_enabled is True
+    assert loaded.settings.perp_time_stop_enabled is True
     assert loaded.settings.perp_breakeven_enabled is True
     assert loaded.settings.spot_sl_mode == "lowest"
     assert loaded.settings.perp_sl_mode == "lowest"

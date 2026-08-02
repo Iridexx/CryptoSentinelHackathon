@@ -55,14 +55,14 @@ Lo spot puo' aggiungere size solo a favore: `scale_in_enabled` permette al massi
 
 ## 5. Time stop
 
-Il time stop corrente e' ATR-aware:
+Il time stop corrente e' opzionale e disattivato di default. Quando `time_stop_enabled` e' attivo, la modalita' primaria e' ATR-aware:
 
 | Modalita' | Regola |
 |---|---|
 | `time_stop_mode: atr` | dopo `time_stop_lookback_candles` da 5m, chiude solo se il movimento e' inferiore a `time_stop_min_move_atr * ATR` |
 | fallback orario | se `time_stop_mode: hours`, chiude oltre `time_stop_hours_fallback` |
 
-Con i default attuali, la modalita' primaria e' `atr`: il trade viene chiuso solo se e' davvero fermo rispetto alla sua volatilita'.
+Con il toggle attivo, la modalita' primaria e' `atr`: il trade viene chiuso solo se e' davvero fermo rispetto alla sua volatilita'.
 
 ## 6. Motivi di chiusura
 
@@ -87,6 +87,7 @@ Con i default attuali, la modalita' primaria e' `atr`: il trade viene chiuso sol
 | `breakeven_buffer_pct` | `0.1` |
 | `trailing_atr_multiplier` | `2.5` |
 | `scale_in_max_adds` | `1` |
+| `time_stop_enabled` | `false` |
 | `time_stop_mode` | `atr` |
 | `time_stop_lookback_candles` | `8` |
 | `time_stop_min_move_atr` | `0.5` |

@@ -475,13 +475,14 @@ In live:
 
 ## 18. Time Stop
 
-Il Perp usa un time stop orario:
+Il Perp usa un time stop orario opzionale, disattivato di default da app/dashboard:
 
 | Parametro | Default |
 |---|---:|
+| `perp_time_stop_enabled` | false |
 | `perp_time_stop_hours` | 8 |
 
-Se la posizione resta aperta oltre la soglia, viene chiusa con `time_stop`, salvo che prima scattino trailing, stop o target.
+Se `perp_time_stop_enabled = true` e la posizione resta aperta oltre la soglia, viene chiusa con `time_stop`, salvo che prima scattino trailing, stop o target.
 
 ---
 

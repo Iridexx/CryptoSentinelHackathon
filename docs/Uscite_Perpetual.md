@@ -85,7 +85,7 @@ Non e' prevista media in perdita. La leva dinamica, la liquidazione stimata e i 
 
 ## 7. Time stop
 
-Il time stop perp resta orario: con `time_stop_hours: 8`, una posizione aperta oltre 8 ore viene chiusa se non ha gia' toccato SL, trailing o target. Serve a limitare esposizione con leva e funding.
+Il time stop perp resta orario ma e' opzionale e disattivato di default: con `time_stop_enabled: true` e `time_stop_hours: 8`, una posizione aperta oltre 8 ore viene chiusa se non ha gia' toccato SL, trailing o target. Serve a limitare esposizione con leva e funding.
 
 ## 8. Motivi di chiusura
 
@@ -108,6 +108,7 @@ Il time stop perp resta orario: con `time_stop_hours: 8`, una posizione aperta o
 | `breakeven_trigger_atr` | `1.0` |
 | `breakeven_buffer_pct` | `0.1` |
 | `trailing_mode` | `largo` |
+| `time_stop_enabled` | `false` |
 | `time_stop_hours` | `8` |
 | `default_leverage` | `2` |
 | `min_leverage` / `max_leverage` | `4` / `40` |

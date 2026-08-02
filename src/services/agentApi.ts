@@ -304,6 +304,8 @@ export interface AgentMobileSettings {
   perp_breakeven_enabled: boolean;
   spot_trailing_enabled: boolean;
   perp_trailing_enabled: boolean;
+  spot_time_stop_enabled: boolean;
+  perp_time_stop_enabled: boolean;
   spot_breakeven_mode: string;
   perp_breakeven_mode: string;
   spot_sl_mode: string;

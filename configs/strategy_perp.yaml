@@ -23,6 +23,7 @@ perp:
   trailing_base_atr_stretto: 2.5   # Stretto: leva minima
   trailing_floor_atr_stretto: 1.5  # Stretto: leva massima
   trailing_mode: largo             # default; override da setup mobile (largo|stretto)
+  time_stop_enabled: false        # toggle UI/app-dashboard; default off
   time_stop_hours: 8
   dynamic_leverage_enabled: true
   min_volume_profile_liquidity_usd: 50000.0

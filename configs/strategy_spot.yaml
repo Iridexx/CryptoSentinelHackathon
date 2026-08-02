@@ -24,6 +24,7 @@ spot:
   scale_in_require_be_stop: true  # solo se lo stop è già a breakeven
   scale_in_max_adds: 1            # massimo 1 aggiunta per posizione
   # G (v3): stop temporale ATR-aware — chiude solo i trade davvero fermi
+  time_stop_enabled: false        # toggle UI/app-dashboard; default off
   time_stop_mode: atr             # "atr" | "hours"
   time_stop_lookback_candles: 8   # finestra di valutazione (candele 5m)
   time_stop_min_move_atr: 0.5     # se in N candele il movimento < 0.5*ATR -> chiudi
