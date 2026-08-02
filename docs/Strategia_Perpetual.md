@@ -1,487 +1,574 @@
-# Strategia di Trading Perpetual — Agente AI Autonomo (v3)
+# Strategia di Trading Perpetual - Agente AI Autonomo (V4)
 
-> **Contesto del documento**
-> Strategia di trading sui **contratti perpetual** per un agente AI autonomo su **BNB Smart Chain (BSC)**, tramite **PancakeSwap Perpetuals**.
-> L'agente opera in autonomia: costruisce una mappa dei prezzi, individua i livelli operativi, e un modello AI (LLM) decide se e come agire entro regole di rischio rigide.
->
-> **Versione 3** — aggiornata dopo seconda revisione professionale. Modifiche rispetto alla v2:
-> - Stop loss: anticipato da V2 a V1 lo stop strutturale (estremo candela pre-segnale + ATR×coeff), con cap di rischio % capitale per trade come guardrail obbligatorio.
-> - Take profit: sostituito il TP binario (TP1/TP2 + trailing) con schema a tre livelli 50/25/25 e spostamento stop a breakeven+ dopo TP1.
-> - Aggiunto guardrail di rischio per trade (perdita massima a stop colpito ≤ X% del capitale).
-> - VWAP confermato come filtro di trend; medie mobili classiche escluse (conferma da revisori indipendenti).
-> - Entrata singola confermata (no scaglionamento in V1).
->
-> **Nota:** la strategia Spot (più semplice) resta invariata come fondamenta. Questo documento riguarda **solo il Perpetual**. Il sistema è diviso in **V1 (fondamenta)** e **V2 (struttura definitiva)**.
+> Documento aggiornato al codice corrente del repository.
+> Riferimenti implementativi principali: `backend/app/agent/signals/perp/volume_profile.py`, `backend/app/agent/service.py`, `backend/app/agent/risk/manager.py`, `configs/strategy_perp.yaml`, `configs/risk.yaml`, `backend/app/schemas/mobile_agent.py`.
 
 ---
 
-## 1. Filosofia di fondo
+## 1. Sintesi V4
 
-Due principi guidano l'intera strategia.
+La strategia Perpetual V4 e' un motore long/short basato su Volume Profile rolling e rientro in value, con gestione del rischio separata dal mercato Spot.
 
-**Principio 1 — L'AI valuta, non genera il segnale.**
-Un motore meccanico individua i livelli e le condizioni; l'LLM interviene come **meta-controller** che valuta qualità, contesto e rischio, e decide l'esecuzione. L'AI non "legge il grafico e compra".
+Il flusso reale e':
 
-**Principio 2 — Il Volume Profile è la mappa, non un indicatore.**
-Il difetto dei bot retail è non sapere *dove* entrare e *perché proprio lì*. Il Volume Profile risponde a questa domanda: indica i livelli di prezzo dove il mercato ha scambiato più volume (dove ha "accettato valore"), e quindi dove ha senso operare. Non dice "compra o vendi" — dice **dove il trade ha senso**.
+1. scanner su watchlist Perp selezionata;
+2. fetch OHLCV 5m futures via Binance klines;
+3. costruzione Volume Profile 24h;
+4. rilevazione setup di rientro in value;
+5. filtro direzionale e filtro BTC inversione;
+6. leva dinamica su ATR;
+7. risk manager fail-closed con sizing separato Perp;
+8. meta-controller AI con poteri limitati;
+9. esecuzione dry-run o provider Perp live;
+10. gestione posizione nel fast loop con breakeven, trailing, TP, time stop e funding.
 
-> **Il punto chiave: il Volume Profile individua il livello. Poi conferma di pressione, filtri di regime e agent decidono se vale la pena eseguire.**
-
----
-
-## 2. Il Volume Profile (la mappa dei prezzi)
-
-### Come viene costruito (V1)
-
-```
-ROLLING VOLUME PROFILE 24h
-├── Timeframe operativo: candele 5 minuti
-├── Finestra del profilo: 288 candele da 5m (= 24h rolling)
-├── Aggiornamento: ad ogni nuova candela 5m (mai intra-candela)
-└── Tipo: Volume Profile REALE (volume scambiato per livello di prezzo)
-    NON TPO/Market Profile (che misura il tempo, non il volume)
-```
-
-Perché volume reale e non TPO: ci interessa **dove è entrato capitale**, non solo dove il prezzo è rimasto più a lungo.
-
-Perché finestra rolling e non sessione giornaliera: il crypto gira 24/7 senza chiusure naturali, quindi una finestra mobile è più adatta di una "sessione" rigida ereditata dai futures tradizionali.
-
-Perché ricalcolo a chiusura candela e non intra-candela: decidere a candela chiusa evita l'overtrading su dati incompleti. Il loop lento si attiva alla chiusura della candela 5m, non su ogni tick.
-
-### Livelli operativi (V1)
-
-| Livello | Cosa rappresenta | Uso operativo |
-|---|---|---|
-| **POC** (Point of Control) | Il prezzo con più volume scambiato | Il livello più importante. Target naturale (magnete), zona di valore accettato |
-| **VAH** (Value Area High) | Bordo superiore della Value Area | Sopra di esso si cercano eccessi long → possibili short |
-| **VAL** (Value Area Low) | Bordo inferiore della Value Area | Sotto di esso si cercano eccessi short → possibili long |
-
-**Value Area = 68% del volume** (leggermente più selettiva del classico 70%, più coerente con una deviazione standard). Da testare 68% vs 70% — conta la robustezza, non la precisione teorica.
-
-### Livelli aggiuntivi (V2)
-
-- **HVN** (High Volume Node): zone di accettazione, rallentamento del prezzo, target intermedi
-- **LVN** (Low Volume Node): zone di passaggio rapido, possibili breakout/accelerazioni, livelli di invalidazione
+Il Perp non cerca momentum puro: cerca eccessi rispetto alla value area e rientri confermati.
 
 ---
 
-## 3. Strategia di ingresso (V1): rientro in value dopo eccesso
+## 2. Universo Operativo
 
-La logica principale **non è breakout**, ma **mean reversion**: il prezzo esce dalla Value Area (eccesso), non viene accettato fuori, e rientra. Si entra sul rientro.
+- Opera solo su asset inclusi nell'universo eligible configurato.
+- Usa la watchlist Perp selezionata dall'utente/app.
+- Una sola posizione aperta per asset, anche se l'asset e' gia' aperto sullo Spot.
+- Direzione configurabile:
+  - `long_short`;
+  - `long`;
+  - `short`.
 
-### Setup LONG
-
-```
-1. Il prezzo scende sotto VAL di almeno X%
-2. Pressione di vendita forte (in V1: price action; in V2: delta negativo)
-3. MA il prezzo non continua a scendere con efficienza (non fa nuovi minimi rilevanti)
-4. Compare un trigger di rientro (es. candela che chiude sopra il massimo precedente)
-5. → ENTRO LONG
-6. TP1 = VAL (50% della posizione)
-7. TP2 = POC (25% della posizione)
-8. TP3 = trailing sul 25% residuo
-```
-
-**Esempio:**
-```
-VAL = 100.000  |  POC = 101.200
-Il prezzo scende a 99.600 (sotto VAL)
-La pressione recente è molto negativa
-MA il prezzo non fa nuovi minimi rilevanti
-Una candela chiude sopra il massimo precedente → trigger
-=> LONG
-TP1 = 100.000 (VAL)   → chiude 50% posizione, sposta stop a breakeven+
-TP2 = 101.200 (POC)   → chiude 25% posizione
-TP3 = trailing        → sul 25% residuo
-```
-
-### Setup SHORT (speculare)
-
-```
-1. Il prezzo sale sopra VAH di almeno X%
-2. Pressione di acquisto forte (in V1: price action; in V2: delta positivo)
-3. MA il prezzo non continua a salire con efficienza
-4. Compare un trigger di rientro
-5. → ENTRO SHORT
-6. TP1 = VAH (50% della posizione)
-7. TP2 = POC (25% della posizione)
-8. TP3 = trailing sul 25% residuo
-```
+Se il segnale produce una direzione non consentita, viene annullato.
 
 ---
 
-## 4. Gerarchia dei segnali (non pesi, ma ruoli)
+## 3. Dati Di Mercato
 
-I segnali non hanno pesi percentuali sullo stesso piano. Hanno **ruoli gerarchici**:
+Il Volume Profile usa candele futures Binance:
 
-```
-1. VOLUME PROFILE  → la MAPPA
-   Individua il livello: dove ha senso operare (VAH/VAL/POC)
+| Parametro | Default |
+|---|---:|
+| `perp_volume_profile_window_hours` | 24 |
+| `perp_volume_profile_candle_minutes` | 5 |
+| Candele teoriche | 288 |
+| Minimo dati accettato | max(24, finestra / 4) |
 
-2. DELTA  → la CONFERMA   [price action in V1, delta reale in V2]
-   Dice se la pressione è coerente o inefficiente
-   (l'eccesso si sta esaurendo?)
+Se i dati sono insufficienti, il segnale salta con `insufficient_binance_klines`.
 
-3. TREND / REGIME  → il FILTRO   [calcolato con VWAP, non medie mobili classiche]
-   Evita la mean reversion contro un impulso troppo forte
-   (non si compra un coltello che cade in un trend violento)
+Filtro liquidita' Volume Profile:
 
-4. FUNDING / OI  → il CONTESTO
-   Modulano o bloccano il trade
-   (il mercato è sbilanciato? troppi long/short da una parte?)
-
-5. AGENT (LLM)  → l'ESECUZIONE
-   Decide size, rischio, e se eseguire
+```text
+total_quote_volume = somma(close * volume)
 ```
 
-Questo risolve il problema del "trend troppo pesante": il trend non è più un peso del 35%, è un **filtro di sicurezza** che impedisce di fare mean reversion contro impulsi forti.
+Default `perp_min_volume_profile_liquidity_usd = 50000`.
 
-### Il calcolo del trend: VWAP, non medie mobili classiche
-
-> **Confermato da revisioni di tre trader indipendenti:** il filtro di trend NON si calcola con medie mobili classiche (SMA, EMA, MACD).
-
-Motivo: le medie mobili classiche sono **lagging** (ritardate) per costruzione — sono medie sul prezzo *passato*, quindi descrivono dove il mercato *è stato*, non dove *sta andando*. Un agente che le usa per il trend rischia di **entrare a fine movimento** (quando il trend è ormai evidente ma il grosso è già avvenuto), abbattendo il win rate ed entrando in ritardo rispetto all'ATR del singolo asset.
-
-Si usa invece il **VWAP** (Volume Weighted Average Price): è una media ponderata sul **volume in entrata**, quindi segue il movimento *in costruzione* invece di uno *già costruito*. Più attendibile nel breve-medio.
-
-```
-FILTRO TREND/REGIME via VWAP
-├── Prezzo sopra / sotto VWAP → bias direzionale "presente" (non ritardato)
-├── Pendenza del VWAP → forza del movimento in costruzione
-├── Distanza prezzo-VWAP → estensione (evita ingressi tardivi)
-└── Finestra VWAP: rolling, coerente con il Volume Profile 24h
-```
-
-**Sinergia:** il VWAP è volume-based esattamente come il Volume Profile (volume per livello di prezzo). I due strumenti "parlano la stessa lingua" — il volume — e si integrano in modo naturale, molto più di una media mobile classica sovrapposta. L'ATR resta in uso, ma per misurare volatilità/estensione, non per il trend.
-
-> **Nota sul filtro multi-timeframe (V2):** un terzo revisore ha suggerito di affiancare al VWAP 5m un filtro di regime su timeframe superiore (es. bias VWAP su finestra più ampia). Il principio è valido; viene rinviato a V2 per non appesantire l'implementazione V1.
-
-### Il ruolo del Delta
-
-- **V1**: la conferma di inefficienza si basa su **price action** (il prezzo non fa nuovi minimi/massimi rilevanti, candela di rientro), eventualmente affiancata da VWAP e ATR. **Nessun order flow reale** in V1 — la strategia V1 è onestamente un *"Volume Profile Mean Reversion senza order flow reale"*: testabile e solida, anche se più debole della versione completa.
-- **V2**: si aggiunge il **Delta reale** (vedi sotto). L'architettura V1 è già predisposta per accoglierlo come "conferma" nella gerarchia, così l'inserimento in V2 è pulito e non richiede riscrittura.
-
-### Delta reale — predisposizione per V2
-
-Il Delta vero non si può ricavare dalle candele OHLCV: richiede il **trade data con aggressor side**. La fonte corretta è **Binance aggregate trades**, usando gli endpoint **futures** (non spot, perché il delta di spot e perpetual diverge).
-
-```
-MODULO DEDICATO (V2): orderflow_delta.py
-├── Live:     WebSocket  btcusdt@aggTrade (futures stream)
-├── Backtest: REST       /fapi/v1/aggTrades (storico)
-├── Classificazione aggressor side:
-│     if isBuyerMaker == false → aggressive_buy_volume += quantity
-│     else                     → aggressive_sell_volume += quantity
-│     delta = aggressive_buy_volume − aggressive_sell_volume
-├── Aggregazione su barre 5m → delta_bar
-├── cum_delta_5, percentile / z-score del delta
-└── Salvataggio delta_bar + cumulative_delta nel dataset
-
-⚠️ Endpoint futures (/fapi) per i perpetual — MAI mischiare con spot (/api).
-⚠️ Binance è una fonte ESTERNA allo stack ufficiale (CMC/TWAK/BNB SDK):
-   da gestire come dipendenza aggiuntiva, con la sua resilienza.
-⚠️ Nota: il delta di Binance Futures è un PROXY dell'order flow
-   (l'agente esegue su PancakeSwap, non su Binance) — valido per asset
-   molto liquidi e arbitraggiati (BTC/ETH), da valutare sui minori.
-```
+Se il volume e' sotto soglia, il segnale salta con `volume_profile_liquidity_filter`.
 
 ---
 
-## 5. Il meta-controller (LLM) — poteri limitati
+## 4. Volume Profile
 
-L'LLM riceve la situazione (livelli, conferma, filtri, contesto, stato portafoglio) e decide l'esecuzione. **Ma con poteri deliberatamente limitati**, per sicurezza:
+Il profilo viene costruito su bucket di prezzo:
 
-```
-L'LLM PUÒ:
-├── Segnalare situazioni anomale ("regime irregolare, meglio non operare")
-├── Ridurre la size
-├── Bloccare un trade
-└── Decidere se eseguire o restare fuori
-
-L'LLM NON PUÒ:
-├── Aumentare la leva
-├── Invertire un trade
-├── Cambiare parametri live
-└── Generare segnali da zero
+```text
+tick = max((high - low) / 80, high * 0.0005)
+bucket = round(round(typical_price / tick) * tick, 8)
+typical_price = (high + low + close) / 3
 ```
 
-Questa restrizione è una scelta di sicurezza: un modello probabilistico non deve avere il potere di azioni ad alto rischio. L'LLM è un **filtro di giudizio prudente**, non un trader libero.
+Per ogni bucket viene sommato il volume.
+
+Livelli:
+
+- `POC`: bucket con volume massimo;
+- `VAH`: massimo prezzo dentro la value area;
+- `VAL`: minimo prezzo dentro la value area;
+- value area default: 68%.
+
+Questa e' una mappa operativa, non un segnale automatico.
 
 ---
 
-## 6. Direzione delle operazioni
+## 5. Setup Di Entrata
 
-| Modalità | Comportamento | Quando |
-|---|---|---|
-| **Solo Long** | Solo posizioni rialziste | Fase rialzista / accumulo |
-| **Solo Short** | Solo posizioni ribassiste | Fase ribassista dichiarata |
-| **Long e Short** | L'agente sceglie secondo il setup | Mercato neutro |
+La strategia cerca rientro in value dopo un eccesso.
+
+### Long
+
+Condizione implementata:
+
+```text
+previous.close < VAL
+current.close > previous.high
+```
+
+Interpretazione:
+
+- candela precedente sotto value area;
+- candela corrente rompe sopra il massimo precedente;
+- il rientro suggerisce che l'eccesso ribassista non e' stato accettato.
+
+### Short
+
+Condizione implementata:
+
+```text
+previous.close > VAH
+current.close < previous.low
+```
+
+Interpretazione:
+
+- candela precedente sopra value area;
+- candela corrente rompe sotto il minimo precedente;
+- il rientro suggerisce che l'eccesso rialzista non e' stato accettato.
 
 ---
 
-## 7. Gestione della leva
+## 6. Filtri Di Trend E Direzione
 
-| Parametro | Valore |
+Il filtro VWAP impedisce mean reversion contro un impulso troppo estremo:
+
+- long annullato se il prezzo e' sotto `VWAP * 0.97`;
+- short annullato se il prezzo e' sopra `VWAP * 1.03`.
+
+Il filtro direzionale applica `perp_direction_mode`:
+
+- se modalita' `long`, gli short vengono annullati;
+- se modalita' `short`, i long vengono annullati.
+
+---
+
+## 7. Market Reversal Filter BTC
+
+Il filtro inversione BTC e' condiviso con lo Spot:
+
+- timeframe: BTCUSDT 15m;
+- EMA: 10;
+- conferme: 2 candele;
+- stato persistito: `neutral`, `bullish`, `bearish`.
+
+Nel Perp:
+
+- se BTC e' bullish/risk-on, gli short vengono bloccati con `market_reversal_short_blocked`;
+- se BTC e' bearish/risk-off, i long vengono bloccati con `market_reversal_long_blocked`.
+
+Il filtro e' simmetrico e non sblocca mai altri guardrail.
+
+---
+
+## 8. Qualita' Del Segnale
+
+Il quality score combina:
+
+| Componente | Peso interno | Descrizione |
+|---|---:|---|
+| Map score | 35% | distanza dal POC |
+| Trend score | 25% | coerenza con VWAP |
+| ATR score | 15% | presenza ATR valido |
+| Value edge | 25% | posizione relativa rispetto al POC |
+
+Il segnale diventa operativo solo se:
+
+```text
+side != null
+quality >= 0.6
+```
+
+Altrimenti viene restituito `skip`.
+
+---
+
+## 9. Stop Loss V4
+
+Il Perp supporta due modalita' di stop loss.
+
+### Modalita' ATR
+
+Default:
+
+```text
+long:  stop_loss = entry - ATR * perp_atr_stop_multiplier
+short: stop_loss = entry + ATR * perp_atr_stop_multiplier
+```
+
+Default `perp_atr_stop_multiplier = 0.8`.
+
+Se ATR non e' disponibile:
+
+- long: fallback a `previous.low`;
+- short: fallback a `previous.high`.
+
+### Modalita' Lowest/Highest 20
+
+Quando `perp_sl_mode = lowest`, il nome e' legacy ma la logica e' strutturale:
+
+```text
+long:
+  reference = minimo low nelle ultime N candele
+  stop_loss = reference * (1 - buffer_pct / 100)
+
+short:
+  reference = massimo high nelle ultime N candele
+  stop_loss = reference * (1 + buffer_pct / 100)
+```
+
+Default:
+
+| Parametro | Default |
+|---|---:|
+| `perp_structural_stop_lookback_candles` | 20 |
+| `perp_structural_stop_buffer_pct` | 1.10 |
+
+Il segnale salva `stop_reference` con:
+
+- modalita';
+- campo (`low` o `high`);
+- timestamp candela;
+- prezzo riferimento;
+- lookback;
+- buffer.
+
+Questo alimenta risk levels e grafico dettaglio trade.
+
+---
+
+## 10. Take Profit
+
+I target principali sono ATR-based.
+
+### Long
+
+```text
+TP1 = entry + ATR * perp_tp1_atr_multiplier
+TP2_ATR = entry + ATR * perp_tp2_atr_multiplier
+TP2 = POC se POC > TP2_ATR e use_poc_for_tp2, altrimenti TP2_ATR
+```
+
+### Short
+
+```text
+TP1 = entry - ATR * perp_tp1_atr_multiplier
+TP2_ATR = entry - ATR * perp_tp2_atr_multiplier
+TP2 = POC se POC < TP2_ATR e use_poc_for_tp2, altrimenti TP2_ATR
+```
+
+Default:
+
+| Parametro | Default |
+|---|---:|
+| `perp_tp1_atr_multiplier` | 2.5 |
+| `perp_tp2_atr_multiplier` | 4.0 |
+| `perp_use_poc_for_tp2` | true |
+
+Se ATR non e' disponibile:
+
+- long: TP1 = VAL, TP2 = POC;
+- short: TP1 = VAH, TP2 = POC.
+
+---
+
+## 11. Chiusura Parziale E Sequenza Uscite
+
+Al raggiungimento di TP1:
+
+- chiusura parziale;
+- default mobile `perp_tp1_close_pct = 70%`;
+- `tp1_reached = true`;
+- fee/funding residui vengono scalati sulla posizione restante.
+
+Dopo TP1:
+
+- TP2 diventa uscita finale;
+- breakeven e trailing possono continuare a proteggere il residuo.
+
+Priorita' uscite nel fast loop:
+
+1. trailing se piu' protettivo dello stop;
+2. stop loss o breakeven;
+3. TP2 dopo TP1;
+4. TP1 parziale;
+5. time stop.
+
+Le chiusure per SL/TP/trailing usano il livello specifico di uscita, non il mark corrente generico.
+
+---
+
+## 12. Breakeven
+
+Breakeven Perp:
+
+- default: attivo;
+- trigger default: `1.0 * ATR` a favore dell'entry;
+- modalita': `atr` oppure `tp1`;
+- se `tp1`, il BE puo' scattare solo dopo TP1;
+- con `perp_breakeven_offset_costs = true`, lo stop copre fee andata/ritorno;
+- con `perp_breakeven_buffer_pct = 0.1`, se il prezzo lo permette, aggiunge buffer extra:
+  - long: entry + 0.1%;
+  - short: entry - 0.1%.
+
+Lo stop si muove solo verso il sicuro:
+
+- long: solo verso l'alto;
+- short: solo verso il basso.
+
+---
+
+## 13. Trailing Dinamico
+
+Il trailing Perp e' gestito dal service, non seminato dal segnale.
+
+Input:
+
+- ATR congelato all'ingresso;
+- estremo favorevole dalla posizione:
+  - long: massimo raggiunto;
+  - short: minimo raggiunto;
+- leva del trade;
+- modalita' trailing `largo` o `stretto`.
+
+Il moltiplicatore ATR viene interpolato sulla leva:
+
+```text
+leva minima -> moltiplicatore base
+leva massima -> moltiplicatore floor
+```
+
+Default:
+
+| Modalita' | Base | Floor |
+|---|---:|---:|
+| Largo | 4.0 ATR | 2.5 ATR |
+| Stretto | 2.5 ATR | 1.5 ATR |
+
+Il moltiplicatore viene cappato a `perp_tp1_atr_multiplier`, cosi' il trailing non si attiva dopo TP1.
+
+Formula:
+
+```text
+long:  trailing_atr = max_price - ATR * multiplier
+short: trailing_atr = min_price + ATR * multiplier
+```
+
+Opzionale:
+
+- `perp_trailing_pnl_pct > 0` aggiunge anche un trailing percentuale dall'estremo favorevole;
+- vince il livello piu' protettivo.
+
+Il trailing si attiva solo se e' gia' in profitto rispetto all'entry.
+
+---
+
+## 14. Leva Dinamica ATR
+
+La leva viene calcolata in apertura confrontando ATR corrente con una baseline storica:
+
+- ATR periodo: 72 candele;
+- baseline default: 120 ore;
+- limite fetch: max 1500 candele;
+- bassa volatilita' -> leva massima;
+- alta volatilita' -> leva minima;
+- ATR oltre massimo storico -> leva minima;
+- dati insufficienti -> leva minima.
+
+Default mobile/config:
+
+| Parametro | Default |
+|---|---:|
+| `perp_min_leverage` | 4 |
+| `perp_max_leverage` | 40 |
+| `perp_leverage_atr_period` | 72 |
+| `perp_leverage_atr_baseline_hours` | 120 |
+
+Il segnale calcola una leva preliminare, ma `AgentService.evaluate_perp` la sovrascrive con i mobile settings correnti.
+
+---
+
+## 15. Margine, Size E Fixed Margin
+
+Nel Perp, il risk manager tratta `size_quote` come margine impegnato.
+
+Sizing dinamico:
+
+```text
+nominal_size = equity * perp_capital_per_trade_pct / 100
+risk_amount = equity * perp_per_trade_pct / 100
+risk_size = min(nominal_size, risk_amount / stop_distance_pct)
+```
+
+Se `perp_fixed_margin_enabled = true`:
+
+```text
+risk_size = perp_fixed_margin_usd
+```
+
+In questo caso:
+
+- il margine e' fisso;
+- `size_factor` del segnale non riduce il margine;
+- il moltiplicatore size del brain non riduce il margine;
+- il notional reale e' `margin * leverage`.
+
+Default mobile:
+
+| Parametro | Default |
+|---|---:|
+| `perp_capital_per_trade_pct` | 4.0 |
+| `perp_per_trade_pct` | 1.5 |
+| `perp_max_open_positions` | 5 |
+| `perp_max_exposure_pct` | 20.0 |
+| `perp_cooldown_minutes` | 15 |
+| `perp_max_slippage_pct` | 0.5 |
+| `perp_fixed_margin_enabled` | false |
+| `perp_fixed_margin_usd` | 50.0 |
+
+---
+
+## 16. Risk Management Perp
+
+Il risk manager e' comune a Spot e Perp, ma usa limiti separati quando arrivano i mobile settings.
+
+Guardrail:
+
+- kill switch hard/soft/degraded;
+- eligible universe;
+- portfolio floor;
+- drawdown cap;
+- daily loss limit;
+- liquidita' minima;
+- dedup per asset;
+- max posizioni Perp;
+- max esposizione Perp;
+- cooldown;
+- min trade size.
+
+Esposizione Perp:
+
+```text
+exposure = entry_price * size / leverage
+```
+
+Quindi nelle viste Global la exposure Perp rappresenta il margine impegnato, non il nozionale.
+
+Nel dettaglio trade, invece, `exposure_usd` rappresenta il nozionale controllato e `margin_usd` e' separato.
+
+---
+
+## 17. Costi, Funding E Liquidazione
+
+In dry-run Perp:
+
+- fetch fee/funding da PancakeSwap Perps v2, con fallback se offline;
+- calcolo taker fee, maker fee, slippage e funding rate;
+- se `perp_fee_mode = taker`, lo slippage peggiora l'entry:
+  - long: entry piu' alta;
+  - short: entry piu' bassa;
+- funding accrued viene aggiornato nel fast loop;
+- PnL unrealized sottrae fee pure e aggiunge funding accrued;
+- liquidation price viene stimato da entry e leva.
+
+In live:
+
+- il provider attivo Perp riceve `PerpOrder`;
+- se il provider non e' pronto, deve fallire chiuso.
+
+---
+
+## 18. Time Stop
+
+Il Perp usa un time stop orario:
+
+| Parametro | Default |
+|---|---:|
+| `perp_time_stop_hours` | 8 |
+
+Se la posizione resta aperta oltre la soglia, viene chiusa con `time_stop`, salvo che prima scattino trailing, stop o target.
+
+---
+
+## 19. Meta-Controller AI
+
+L'AI riceve segnale e risk decision.
+
+Azioni ammesse:
+
+- `approve`;
+- `reduce`;
+- `block`;
+- `skip`.
+
+Vincoli hard nel prompt:
+
+- non aumenta leva;
+- non inverte direzione;
+- non cambia parametri strategici;
+- restituisce JSON strict.
+
+In fallback locale dry-run:
+
+- quality >= 0.85 -> approve;
+- quality >= 0.65 -> reduce size 50%;
+- sotto soglia -> skip.
+
+Se Claude non e' disponibile, il sistema marca degraded e blocca nuove entrate.
+
+---
+
+## 20. Osservabilita'
+
+Le viste app/dashboard espongono:
+
+- posizioni long/short;
+- leva;
+- margine;
+- nozionale nel dettaglio;
+- liquidation price;
+- funding rate;
+- funding accrued;
+- fee taker/maker;
+- slippage;
+- SL/TP/trailing;
+- stop reference price e field;
+- grafico trade con candela di riferimento e linea `SL ref` che non copre la candela.
+
+---
+
+## 21. Stato V4 E Debiti Futuri
+
+Implementato:
+
+- Volume Profile 24h su 5m futures;
+- rientro in value long/short;
+- filtro VWAP;
+- filtro BTC inversione simmetrico;
+- stop ATR o Lowest/Highest20;
+- TP ATR con POC opzionale;
+- breakeven e trailing dinamico su leva;
+- leva dinamica ATR con baseline storica;
+- margine fisso opzionale;
+- risk separato Perp;
+- funding/fee/slippage dry-run;
+- dettaglio trade con livelli e grafico.
+
+Debiti futuri:
+
+- delta reale da Binance aggregate trades futures;
+- HVN/LVN espliciti;
+- profili multipli;
+- filtro funding/OI piu' strutturato;
+- backtest dei parametri V4;
+- integrazione live completa su venue Perp definitiva.
+
+---
+
+## 22. Storico Versioni
+
+| Versione | Sintesi |
 |---|---|
-| Preset conservativo | 2x |
-| Preset medio | 3x |
-| Preset aggressivo | 5x |
-| Personalizzata | Fino al massimo del DEX |
-
-**Leva dinamica via ATR:** più alta è la volatilità (ATR), più la leva viene ridotta, per allontanare il prezzo di liquidazione.
-```
-ATR basso  → leva piena (impostata)
-ATR medio  → leva ridotta (~30%)
-ATR alto   → leva ridotta (~50%)
-```
-
-> **Nota:** un revisore ha indicato incertezza sulla leva dinamica. La scelta di mantenerla è prudenziale: ridurre la leva in volatilità alta allontana la liquidazione e riduce il drawdown, che è il criterio di scoring della gara. Il comportamento è conservativo per default e configurabile.
+| V1 | Volume Profile mean reversion iniziale. |
+| V2 | Gerarchia segnali, VWAP per trend, conferme price action. |
+| V3 | Stop strutturale, cap rischio, TP parziale e breakeven. |
+| V4 | Allineamento al codice corrente: stop ATR/Lowest20, filtro BTC simmetrico, leva ATR 4x-40x, trailing dinamico su leva, fixed margin opzionale e osservabilita' completa. |
 
 ---
 
-## 8. Gestione dell'entrata — una sola entrata in V1
-
-> **Confermato in v3:** l'entrata è singola. Il DCA e lo scaglionamento di entrate sono stati valutati e rimandati a V2.
-
-Motivo: mediare una perdita all'inizio è uno dei modi classici in cui i sistemi muoiono. Lo scaglionamento di entrate verso l'invalidamento del segnale, pur più disciplinato del DCA classico, moltiplica gli stati da gestire (size parziali, stop su media ponderata) in modo incompatibile con la deadline V1.
-
-```
-V1: UNA SOLA ENTRATA
-└── Nessuna media al ribasso
-
-EVENTUALE AGGIUNTA (solo se in profitto)
-└── Si può aggiungere alla posizione SOLO se è già in profitto
-    (piramidare i vincitori, mai mediare i perdenti)
-```
-
-> **V2:** valutare entrate scaglionate con invalidamento esplicito del segnale, dopo backtest che dimostri miglioramento del risk/reward rispetto all'entrata singola.
-
----
-
-## 9. Stop loss e target
-
-### Stop loss — "dove l'idea è sbagliata"
-
-Lo stop non risponde a "dove l'exchange mi liquida", ma a **"dove la mia idea di trade è invalidata"**.
-
-Per la mean reversion:
-- **Long sotto VAL**: l'idea è "il prezzo non viene accettato più in basso e rientra". L'idea è falsa se il prezzo rompe il minimo della candela che ha preceduto il segnale di ingresso.
-- **Short sopra VAH**: speculare — stop sopra il massimo della candela pre-segnale.
-
-```
-V1 (strutturale, anticipato da V2):
-├── stop long  = minimo candela pre-segnale − (ATR(14) × coefficiente)
-├── stop short = massimo candela pre-segnale + (ATR(14) × coefficiente)
-├── coefficiente ATR: configurabile (default 0.8 — buffer oltre la struttura)
-│
-├── GUARDRAIL RISCHIO PER TRADE (nuovo in v3):
-│   La distanza entry→stop non deve implicare una perdita > MAX_RISK_PER_TRADE_PCT
-│   del capitale totale. Se lo stop strutturale è troppo lontano:
-│   → riduci la size per restare nel limite, OPPURE
-│   → salta il trade (skip se la size risultante è sotto il minimo operativo)
-│   Formula: size = (capitale × MAX_RISK_PCT) / (entry − stop) × leva
-│
-└── VINCOLO DI SICUREZZA ASSOLUTO: lo stop deve SEMPRE stare prima
-    del prezzo di liquidazione (sui perp con leva è obbligatorio).
-    Stop logico prima, liquidazione come tetto invalicabile — mai il contrario.
-```
-
-> **Perché stop strutturale e non solo ATR puro:** lo stop sull'estremo della candela pre-segnale ha un significato logico preciso — il prezzo non deve tornare *dove era prima che il segnale scattasse*. L'ATR aggiunge un buffer per il rumore di mercato. Insieme, descrivono "dove l'idea è sbagliata" in modo più robusto dello stop ATR puro (che era arbitrario rispetto alla struttura).
-
-| Parametro | Default | Configurabile |
-|---|---|---|
-| `PERP_ATR_STOP_MULTIPLIER` | 0.8 | Sì |
-| `RISK_MAX_RISK_PER_TRADE_PCT` | 1.5% | Sì |
-
-### Take Profit — schema a tre livelli (nuovo in v3)
-
-> **Modifica v3:** sostituisce il TP binario precedente (TP1/TP2 + trailing configurabile).
-
-```
-TP1 = bordo della Value Area (VAL per long, VAH per short)
-      → chiude il 50% della posizione
-      → SPOSTA LO STOP A BREAKEVEN+ (entry + piccolo buffer)
-      → da questo momento il trade non può più chiudersi in perdita
-
-TP2 = POC
-      → chiude il 25% della posizione
-
-TP3 = trailing stop dinamico sul 25% residuo
-      → lascia correre i vincitori oltre il POC
-      → distanza trailing configurabile
-```
-
-**Perché questo schema riduce il drawdown:**
-- Il 50% chiuso a TP1 assicura profitto immediato su ogni trade che raggiunge il bordo della value area.
-- Il breakeven+ dopo TP1 elimina il rischio di perdere un trade che era già in profitto su metà posizione.
-- Il trailing sul residuo 25% cattura movimenti estesi senza rinunciare al profitto già assicurato.
-
-| Percentuale | Target | Azione stop |
-|---|---|---|
-| 50% | TP1 = bordo value | Sposta stop a breakeven+ |
-| 25% | TP2 = POC | Nessuna modifica |
-| 25% | Trailing | Segue il prezzo |
-
-### Stop temporale e cooldown
-
-- **Stop temporale**: i perp pagano funding (~ogni 8h); una posizione che non si muove viene chiusa dopo un tempo definito (default configurabile).
-- **Cooldown**: timer dopo la chiusura prima di riaprire sullo stesso asset (default 30 min).
-
----
-
-## 10. Reattività e velocità di reazione
-
-> **Il drawdown è in gran parte funzione del tempo di reazione. Reazione più rapida → drawdown più piccolo.**
-
-La velocità di reazione è una variabile di rischio. Architettura a **due velocità**:
-
-```
-LOOP VELOCE (secondi)
-├── Sorveglia le posizioni APERTE
-├── Stop loss / trailing / breakeven in near real-time
-├── Rileva inversioni di regime rapide
-└── Esegue uscite IMMEDIATE
-
-LOOP LENTO (a chiusura candela 5m)
-├── Costruzione/aggiornamento Volume Profile
-├── Analisi completa + gerarchia segnali
-└── Decisione del meta-controller (nuovi ingressi)
-```
-
-**Principio anti-overtrading:** le nuove decisioni di ingresso avvengono **solo a candela chiusa**, mai intra-candela. Questo filtra il rumore, evita segnali su dati incompleti e riduce il numero di decisioni LLM (costo e latenza). Il loop veloce è esclusivamente per la gestione del rischio sulle posizioni aperte.
-
----
-
-## 11. Gestione del rischio (Risk Management)
-
-| Parametro | Default suggerito | Funzione |
-|---|---|---|
-| Capitale per trade (size) | 6% | Capitale allocato per singola operazione |
-| **Rischio massimo per trade** | **1.5%** | **Max perdita a stop colpito (% capitale) — nuovo v3** |
-| Max posizioni aperte | 3 | Posizioni simultanee |
-| Esposizione massima totale | 30% | Tetto all'esposizione complessiva |
-| Daily Loss Limit | −8% | Stop giornaliero se superato |
-| Drawdown cap massimo | −15% (prudenziale) | Limite di drawdown complessivo |
-| Liquidità minima del pool | $50.000 | Sotto la soglia, asset escluso |
-| Slippage massimo | 1% | Oltre, trade annullato |
-| Correlation check | 0.8 | Evita posizioni troppo correlate |
-
-> **Nota sul rischio per trade:** "6% di capitale per trade" è la *size nominale*. Con leva, una size del 6% può rischiare molto di più se lo stop è lontano. Il cap di 1.5% è la perdita **effettiva massima** a stop colpito — se lo stop strutturale implica di più, la size viene ridotta o il trade saltato. I due parametri operano insieme: la size del 6% è il massimo, il rischio dell'1.5% è il vincolo.
-
-**Controlli aggiuntivi:** check di liquidità in uscita (poter uscire, non solo entrare), riserva gas dinamica in % del BNB, skip se costo gas > profitto atteso, filtro di liquidità minima per attivazione Volume Profile.
-
----
-
-## 12. Applicabilità: il Volume Profile richiede liquidità
-
-Il Volume Profile è affidabile solo su asset con **volume sufficiente e ben distribuito**. Su token poco liquidi (molti dei 149 eligible) il profilo è "vuoto" e rumoroso, quindi inaffidabile.
-
-```
-Token liquidi (BNB, ETH, BTC, major) → Volume Profile pienamente attivo
-Token poco liquidi                    → VP inaffidabile
-                                        → fallback ad altra logica / esclusione
-```
-
-Si collega al filtro di liquidità minima già previsto: il VP si attiva solo sopra una certa soglia di liquidità/volume.
-
----
-
-## 13. Filosofia di ottimizzazione
-
-> **Obiettivo: massimo profitto con il minimo drawdown.**
-
-La mean reversion su livelli precisi (VAH/VAL/POC) con stop strutturali, cap di rischio per trade e TP scaglionato 50/25/25 è costruita attorno a questo obiettivo: ogni trade che raggiunge TP1 non può più chiudersi in perdita, il rischio massimo per trade è esplicito e controllato, e la consistenza (curva di equity liscia) è privilegiata rispetto all'aggressività.
-
----
-
-## 14. Riepilogo: V1 vs V2
-
-### V1 — Fondamenta (obiettivo: sistema solido e testabile)
-```
-├── Rolling Volume Profile 24h su candele 5m
-├── Ricalcolo a chiusura candela (anti-overtrading)
-├── Value Area 68%, livelli POC / VAH / VAL
-├── Strategia: rientro in value dopo eccesso (mean reversion)
-├── Conferma: price action (nessun nuovo estremo + candela di rientro)
-├── Trend/regime: VWAP (non medie mobili classiche) — filtro
-├── Funding / OI: filtri di contesto (gerarchia)
-├── Stop: strutturale (estremo candela pre-segnale + ATR×coeff)
-│         con cap rischio per trade (max 1.5% capitale a stop colpito)
-│         con vincolo pre-liquidazione
-├── Target: TP1 50% (bordo value) → breakeven+
-│           TP2 25% (POC)
-│           TP3 25% trailing
-├── Una sola entrata (no DCA, no scaglionamento)
-├── LLM a poteri limitati (valuta/riduce/blocca, non aumenta/inverte)
-├── Doppio loop veloce/lento
-└── Solo su token sufficientemente liquidi
-```
-
-### V2 — Struttura definitiva (dopo i test)
-```
-├── Delta reale via modulo orderflow_delta.py
-│     (Binance aggTrades FUTURES /fapi, classificazione isBuyerMaker,
-│      aggregazione 5m, cum_delta, z-score) — come conferma di pressione
-├── HVN / LVN aggiunti alla mappa
-├── VWAP multi-finestra / filtro regime su timeframe superiore
-├── Profili multipli (24h + weekly rolling)
-├── Filtro Funding/OI più raffinato
-├── Valutazione entrate scaglionate con backtest (su invalidamento esplicito)
-└── Eventuale whale flow / liquidity flow (se si trovano fonti precise)
-```
-
----
-
-## 15. Flusso operativo (V1)
-
-```
-1. AGGIORNAMENTO MAPPA (a chiusura candela 5m, loop lento)
-   Costruisce il Volume Profile 24h → POC, VAH, VAL
-
-2. RILEVAMENTO ECCESSO
-   Il prezzo esce dalla Value Area (sotto VAL o sopra VAH) di almeno X%
-
-3. CONFERMA DI INEFFICIENZA (price action in V1)
-   L'eccesso si esaurisce? (niente nuovi estremi + candela di rientro)
-
-4. FILTRI
-   Trend via VWAP (non contro impulso forte) · Funding/OI (contesto) ·
-   liquidità · slippage · correlazione · esposizione · drawdown · filtro
-   inversione mercato opzionale: se BTC 15m conferma bullish con due candele
-   verdi sopra EMA10, gli short contro la risalita vengono bloccati; se BTC
-   conferma bearish con due candele rosse sotto EMA10, i long contro il selloff
-   vengono bloccati.
-
-5. META-CONTROLLER (LLM)
-   Valuta coerenza, rileva anomalie, decide size nel rispetto del cap
-   rischio per trade, può bloccare
-
-6. CALCOLO SIZE E LEVA
-   Size = min(6% capitale, size da cap rischio 1.5%)
-   Leva ridotta dinamicamente via ATR
-
-7. ENTRATA (una sola)
-   Long sotto VAL / Short sopra VAH, sul trigger di rientro
-
-8. GESTIONE (loop veloce per stop/uscite)
-   Stop strutturale (pre-liquidazione) ·
-   TP1 50% → breakeven+ · TP2 25% · TP3 25% trailing ·
-   stop temporale (funding) · monitoraggio reattivo
-
-9. USCITA + COOLDOWN
-   Chiusura secondo le regole, poi cooldown prima di riaprire
-```
-
----
-
-## 16. Note dalle revisioni professionali (storico modifiche)
-
-| Versione | Modifica principale | Fonte |
-|---|---|---|
-| v1 | Score composito con RSI al 40% | Baseline interna |
-| v2 | Volume Profile come mappa, gerarchia segnali, VWAP per trend, stop ATR, entrata singola | Revisione trader 1 + trader 2 |
-| v3 | Stop strutturale (candela pre-segnale + ATR), cap rischio 1.5% per trade, TP 50/25/25 + breakeven+ | Revisione trader 3 |
-
----
-
-*Documento v3 — aggiornato dopo tre revisioni professionali. Tutti i valori numerici sono default proposti e configurabili (salvo i guardrail di qualificazione hardcoded nel piano). Il Volume Profile non genera segnali di acquisto/vendita: individua dove il trade ha senso; conferma, filtri e agent decidono l'esecuzione.*
+*Fine documento Perpetual V4.*

@@ -221,8 +221,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- CURRENT_STRUCTURE.md - baseline pre-integrazione backend.
 |   |-- PROJECT_STRUCTURE.md - questo documento aggiornato a ogni step.
 |   |-- RUNBOOK_DEPLOY_VPS.md - runbook Step 10 per installazione VPS, segreti fuori repo, nginx/TLS, TWAK headless, backup e ripristino.
-|   |-- Strategia_Spot.md - strategia Spot.
-|   |-- Strategia_Perpetual.md - strategia Perpetual.
+|   |-- Strategia_Spot.md - strategia Spot V4 allineata al codice corrente.
+|   |-- Strategia_Perpetual.md - strategia Perpetual V4 allineata al codice corrente.
 |   |-- Uscite_Spot.md - regole operative aggiornate per chiusure spot ATR, breakeven, trailing, TP e time stop.
 |   |-- Uscite_Perpetual.md - regole operative aggiornate per chiusure perp ATR, breakeven, trailing dinamico, TP, funding e liquidazione stimata.
 |   |-- index.html - pagina documentale/statica.
@@ -250,6 +250,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_config_refactor.md - report task intermedio ambiente/config.
 |       |-- report_spot_micro_price_detail_2026-08-01.md - report fix prezzi micro-token nel dettaglio spot BABYDOGE.
 |       |-- report_trade_chart_stop_ref_gap_2026-08-01.md - report linea riferimento SL che lascia visibile la candela nel grafico trade.
+|       |-- report_strategy_docs_v4_2026-08-02.md - report aggiornamento documenti strategia Spot/Perp alla V4.
 |       `-- report_perp_fixed_margin_toggle_2026-07-27.md - report toggle margine fisso Perp app/dashboard.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
 |   |-- index.html - entrypoint HTML dashboard.

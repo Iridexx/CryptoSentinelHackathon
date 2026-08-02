@@ -1,344 +1,426 @@
-# Strategia di Trading Spot — Agente AI Autonomo (v2)
+# Strategia di Trading Spot - Agente AI Autonomo (V4)
 
-> **Contesto del documento**
-> Strategia di trading sul mercato **spot** per un agente AI autonomo su **BNB Smart Chain (BSC)**, tramite **PancakeSwap**.
-> L'agente opera in autonomia: rileva eventi di mercato, valuta la qualità dell'opportunità con strumenti di struttura e momentum, e un modello AI (LLM) decide l'esecuzione entro regole di rischio definite.
->
-> **Versione 2** — aggiornata dopo revisione di un trader professionista. Il cambiamento principale: lo Spot passa da *score + conferma* (basato su RSI) a un motore **momentum + struttura di prezzo**, con l'RSI declassato a semplice filtro e l'introduzione di **VWAP, regime EMA, relative volume** e (in V2) **relative strength**.
->
-> **Questa è la strategia SPOT** — le fondamenta del sistema, costruite per prime. È un motore **diverso** da quello Perpetual (documento separato), e deve esserlo: Spot e Perp non sono lo stesso gioco.
->
-> Il sistema è diviso in **V1 (fondamenta)** e **V2 (struttura definitiva)**.
+> Documento aggiornato al codice corrente del repository.
+> Riferimenti implementativi principali: `backend/app/agent/signals/spot/momentum.py`, `backend/app/agent/service.py`, `backend/app/agent/risk/manager.py`, `configs/strategy_spot.yaml`, `configs/risk.yaml`, `backend/app/schemas/mobile_agent.py`.
 
 ---
 
-## 1. Filosofia di fondo
+## 1. Sintesi V4
 
-Tre principi guidano la strategia.
+La strategia Spot V4 e' un motore long-only di momentum controllato, costruito per cercare asset che stanno iniziando a muoversi con struttura, volume e contesto coerenti, senza inseguire spike estremi.
 
-**Principio 1 — Due giochi diversi: Spot ≠ Perp.**
-- **Perp** = precisione e microstruttura (mean reversion su livelli di Volume Profile)
-- **Spot** = trovare i cavalli migliori e cavalcare il momentum
+Il flusso reale e':
 
-Lo Spot non insegue la precisione del singolo livello, ma la **selezione del miglior candidato** tra molti token e il momentum che lo accompagna.
+1. scanner su watchlist Spot selezionata;
+2. warmup OHLCV 5m via Binance klines spot, con cache breve;
+3. calcolo segnale momentum/struttura;
+4. filtri BTC di regime e inversione;
+5. risk manager fail-closed;
+6. meta-controller AI con poteri limitati;
+7. esecuzione dry-run o preparazione live;
+8. gestione posizione nel fast loop con stop, breakeven, trailing, TP e time stop.
 
-**Principio 2 — Event-driven, non polling continuo.**
-L'agente non monitora 149 token ogni secondo. Si attiva su eventi: espansione di volatilità, volume spike. Riduce rumore, overtrading e costi. Nasce dal contesto del progetto (app di monitoraggio con alert) — gli alert diventano il trigger.
-
-**Principio 3 — L'AI valuta, non genera il segnale.**
-Un motore meccanico individua l'opportunità e ne misura la qualità; l'LLM interviene come **meta-controller** che approva, riduce o blocca. L'AI non "legge il grafico e compra".
-
----
-
-## 2. Il trigger: evento di mercato
-
-L'agente entra in azione su un **evento**, non a caso e non in continuo.
-
-```
-TRIGGER (arricchito rispetto alla v1)
-├── Espansione di volatilità su una coin monitorata
-├── + Volume spike (relative volume elevato — vedi §4)
-├── + Conferma di struttura (non solo "si muove", ma "si muove bene")
-├── Solo coin nei preferiti con flag AI attiva
-└── Parametri configurabili
-```
-
-> **Correzione chiave rispetto alla v1:** il solo trigger di volatilità è pericoloso — rischia di far comprare il **pump quando è già finito** (si entra sulla candela finale, mentre chi era dentro prima vende). Per questo il trigger non è più solo "volatilità anomala", ma **volatilità + volume spike + qualità di struttura**, per distinguere l'**inizio** di un movimento dalla sua **fine**.
+Lo Spot resta diverso dal Perp: non usa Volume Profile come motore primario, ma una combinazione di trend/struttura, volume relativo, RSI, BTC context e sentiment.
 
 ---
 
-## 3. Il motore del segnale: regime + struttura + momentum
+## 2. Universo Operativo
 
-Quando il trigger scatta, l'agente non calcola un semplice "score di indicatori", ma valuta l'opportunità attraverso una sequenza logica.
-
-### Pesi ribilanciati
-
-| Componente | Peso v1 (vecchio) | Peso v2 (nuovo) | Ruolo |
-|---|---|---|---|
-| **Trend / struttura** | — | **30%** | Regime e qualità della struttura di prezzo |
-| **Volume relativo** | 35% (24h assoluto) | **30%** | Volume attuale vs media recente |
-| **BTC context** | 15% | **15%** | Contesto di mercato (rotazione BTC/alt) |
-| **RSI** | 40% | **15%** | Declassato a filtro, non più cuore |
-| **Sentiment (Fear & Greed)** | 10% | **10%** | Solo filtro macro leggero |
-
-> **La correzione più importante:** l'RSI scende da 40% a 15%. Motivo: l'RSI misura *quanto velocemente* ci si è mossi, non il *valore*. Una coin a +100% può restare RSI 80 per giorni (e un bot RSI-centrico la venderebbe troppo presto); una coin "morta" crollata può avere RSI 20 (e verrebbe comprata a torto). L'RSI resta utile come filtro, non come motore.
-
-### Dettaglio delle componenti
-
-**Trend / struttura (30%)**
-Il regime in cui si trova la coin. Il riferimento **primario** è il **VWAP** (volume-based, "presente"), affiancato dalla struttura di prezzo:
-- **VWAP** → riferimento primario del trend: prezzo sopra/sotto VWAP (bias), pendenza del VWAP (forza del movimento in costruzione). Preferito alle medie mobili classiche perché non è ritardato (vedi nota sotto).
-- **Market structure** → higher high / higher low, breakout di livelli precedenti
-- **EMA 20/50** → uso secondario/di conferma per inquadrare la fase (trend/accumulazione/downtrend), NON come riferimento primario
-La domanda di fondo: *"in che fase è questa coin?"* — non si compra un pump già esteso né un coltello che cade.
-
-> **Nota (da revisione di due trader indipendenti):** le medie mobili classiche (SMA/EMA/MACD) sono **ritardate** per costruzione — descrivono il passato, non il movimento in costruzione. Usarle come riferimento primario del trend porta a entrare a fine movimento, abbattendo il win rate. Per questo il **VWAP è il riferimento primario** del trend (volume-based, più attendibile nel breve-medio), e le EMA restano solo come supporto secondario per inquadrare la fase. Il VWAP è già usato anche come filtro anti-pump nella sezione 4 — qui assume anche il ruolo di riferimento di trend, in piena coerenza con l'impianto volume-based.
-
-**Volume relativo (30%)**
-Non il volume 24h assoluto, ma il **relative volume**: il volume attuale rispetto alla media recente.
-```
-Esempio: volume candela 15m = 5× la media delle ultime 100 candele → interessante
-```
-Misura se *adesso* sta succedendo qualcosa di anomalo, non se la coin ha tanto volume in generale.
-
-**BTC context (15%)**
-Contesto, non trigger. BTC dominante → spesso le alt soffrono. Dominance in calo → possibile rotazione verso le alt.
-
-**RSI (15%)**
-Filtro di supporto. RSI 15min + 1h come conferma (in V2 si aggiunge il 4h per il trend). Utile per evitare estremi, non per decidere l'ingresso.
-
-**Sentiment / Fear & Greed (10%)**
-Solo filtro macro. Cambia su scala giornaliera, troppo lento per i segnali brevi del bot. Non guida le decisioni, le contestualizza.
+- Opera solo su asset inclusi nell'universo eligible configurato.
+- Usa la watchlist Spot selezionata dall'utente/app.
+- Esclude stablecoin operative dallo scanner Spot.
+- Una sola posizione aperta per asset, anche se l'asset e' gia' aperto sull'altro mercato.
+- Il mercato Spot e' long-only: il segnale valido e' `enter_long`.
 
 ---
 
-## 4. Entry quality: il "DOVE" (VWAP + struttura)
+## 3. Dati Di Mercato
 
-> **Correzione chiave:** mancava la risposta a *"a quale prezzo entro?"*. Un punteggio alto non basta — bisogna sapere **dove** l'ingresso è favorevole. Per lo Spot non serve il Volume Profile (troppo pesante e poco affidabile su 149 token): bastano **VWAP + market structure**, più robusti.
+Lo scanner Spot lavora su candele 5m:
 
-### VWAP — il filtro anti-pump (centrale)
+- minimo operativo: 50 candele;
+- warmup: 100 candele;
+- feed: Binance klines spot tramite `BinanceKlineFeed`;
+- cache warmup: 240 secondi per ridurre chiamate HTTP.
 
-Il **VWAP** (prezzo medio ponderato per volume) evita di comprare troppo sopra il prezzo medio:
-
-```
-Regola: NO long se prezzo > VWAP + (X × ATR)
-```
-Cioè: non si insegue una coin già troppo estesa sopra il suo prezzo medio. È la protezione principale contro il "comprare la candela finale".
-
-### Market structure
-
-- Ingresso favorito su **breakout + retest** di un livello, non sull'estensione
-- Distanza dai massimi/minimi recenti
-- Candle exhaustion (segnali di esaurimento del movimento) — pieno in V2
-
-### Estensione ATR
-
-L'ATR misura quanto la coin è "tirata": un movimento troppo esteso oltre N×ATR dal VWAP è un segnale di ingresso tardivo → si evita o si riduce.
+Se il payload non contiene abbastanza candele e il warmup non riesce, il segnale salta con `insufficient_ohlcv_history`.
 
 ---
 
-## 5. Il meta-controller (LLM) — poteri limitati
+## 4. Motore Del Segnale
 
-L'LLM riceve regime, qualità d'ingresso e contesto, e decide:
-- Approva l'ingresso
-- Riduce la size (opportunità valida ma contesto incerto)
-- Blocca (situazione anomala)
+Il modulo `SpotMomentumSignal` calcola:
 
-Come sui Perp, poteri **deliberatamente limitati**: l'LLM valuta, riduce, blocca — **non** genera segnali da zero né stravolge i parametri. Produce una motivazione testuale registrata per trasparenza.
+- VWAP sulle ultime 100 candele;
+- ATR;
+- EMA20 ed EMA50;
+- RSI;
+- relative volume;
+- variazione percentuale tra ultima e penultima candela;
+- estensione rispetto al VWAP in multipli di ATR.
 
----
+### Score Di Qualita'
 
-## 6. Gestione dell'entrata — niente media in perdita
+I pesi default sono:
 
-> **Correzione (coerente con i Perp):** il DCA 60/40 con media al ribasso è stato rimosso.
+| Componente | Peso default | Implementazione |
+|---|---:|---|
+| Trend/struttura | 30% | prezzo sopra VWAP, EMA20 > EMA50, breakout sopra massimo recente |
+| Volume relativo | 30% | volume corrente rispetto alla media recente |
+| BTC context | 15% | valore passato nel payload, default neutro 0.5 |
+| RSI | 15% | fascia ottimale 45-72, penalita' fuori range |
+| Sentiment | 10% | valore passato nel payload, default neutro 0.5 |
 
-```
-V1: PRIMA ENTRATA
-└── Una entrata sull'opportunità validata
+La qualita' finale e' normalizzata sui pesi configurati.
 
-EVENTUALE AGGIUNTA — solo a favore
-└── Si aggiunge SOLO se:
-    - la posizione è già in profitto, E
-    - c'è conferma (breakout confermato / nuovo massimo)
-└── MAI aggiungere perché "scende ma credo ancora nel segnale"
-```
+### Condizioni Di Trigger
 
-Piramidare i vincitori, mai mediare i perdenti.
+Lo Spot entra solo se tutte le condizioni sono vere:
 
----
+- volatilita' candela >= `spot_volatility_trigger_pct`;
+- relative volume >= `spot_relative_volume_threshold`;
+- trend score >= 0.45;
+- estensione VWAP/ATR <= `spot_vwap_atr_extension_limit`;
+- quality >= `spot_confidence_threshold`.
 
-## 7. Gestione della posizione e uscite
+Default attuali da YAML:
 
-### Stop Loss — ATR da subito
-
-> **Correzione:** niente stop fisso in %. Si usa **ATR fin dalla V1**.
-
-Motivo: BNB e una microcap hanno volatilità completamente diverse; uno stop fisso al 5% è troppo largo per una e troppo stretto per l'altra. Lo stop ATR si adatta automaticamente alla volatilità dell'asset.
-```
-stop = entry − (ATR(14) × moltiplicatore)   [moltiplicatore configurabile]
-```
-
-### Take Profit — parziale + trailing
-
-> Combinazione consigliata dal revisore:
-```
-TP parziale → chiude una parte della posizione a un primo obiettivo
-Trailing stop → segue il prezzo sul resto, lascia correre i vincitori
-```
-(Take profit parziale configurabile; default impostabile.)
-
-### Stop temporale e cooldown
-- **Stop temporale**: chiusura se la posizione non si muove entro N ore (default 4–6h).
-- **Cooldown**: timer dopo la chiusura prima di riaprire sulla stessa coin (default 30 min).
+| Parametro | Default |
+|---|---:|
+| `spot_confidence_threshold` | 0.55 |
+| `spot_volatility_trigger_pct` | 0.4 |
+| `spot_relative_volume_threshold` | 1.3 |
+| `spot_vwap_atr_extension_limit` | 1.2 |
 
 ---
 
-## 8. Reattività e velocità di reazione
+## 5. Filtro Anti-Spike
 
-> **Il drawdown è in gran parte funzione del tempo di reazione. Reazione più rapida → drawdown più piccolo.**
+Prima dell'esecuzione, il segnale controlla se l'ATR corrente e' anomalo rispetto alla media ATR recente:
 
-Architettura a **due velocità**:
+```text
+atr_ratio = ATR_now / ATR_average
 ```
-LOOP VELOCE (secondi) → posizioni aperte, stop, trailing, uscite immediate
-LOOP LENTO (minuti)   → scansione, regime, entry quality, decisione LLM
-```
-Bilanciato con anti-overtrading (cooldown, conferme di struttura).
+
+Default:
+
+| Parametro | Default |
+|---|---:|
+| `spot_spike_filter_enabled` | true |
+| `spot_spike_atr_ratio_max` | 3.0 |
+| `spot_spike_atr_avg_period` | 50 |
+| `spot_spike_action` | skip |
+| `spot_spike_reduced_size_fraction` | 0.5 |
+
+Se `spot_spike_action = skip`, un segnale valido viene annullato con reason `volatility_spike`. Se e' `reduce_size`, viene passato un `size_factor` ridotto, salvo margine Perp fisso che riguarda solo il Perp.
 
 ---
 
-## 9. Gestione del rischio (Risk Management)
+## 6. Filtri BTC Di Mercato
 
-| Parametro | Default suggerito | Funzione |
-|---|---|---|
-| Capitale per trade (size) | 6% | Capitale allocato per singola operazione |
-| **Rischio massimo per trade** | **1.5%** | **Max perdita a stop colpito (% capitale) — coerente con Perp** |
-| Max posizioni aperte | 3 | Posizioni simultanee |
-| Esposizione massima totale | 30% | Tetto all'esposizione |
-| Daily Loss Limit | −8% | Stop giornaliero |
-| Drawdown cap massimo | −15% (prudenziale) | Limite di drawdown complessivo |
-| Liquidità minima del pool | $50.000 | Sotto la soglia, coin esclusa |
-| Slippage massimo | 1% | Oltre, trade annullato |
-| Stop loss | ATR(14) × moltiplicatore | Adattivo alla volatilità |
-| Take profit | Parziale + trailing | — |
-| Correlation check | 0.8 | Evita posizioni correlate |
-| Cooldown timer | 30 min | Attesa prima di riaprire |
+### Regime Spot Risk-Off
 
-> **Nota rischio per trade:** "6% capitale per trade" è la size massima nominale. "1.5% rischio per trade" è la perdita effettiva massima a stop colpito — se lo stop ATR è largo (token molto volatile), la size viene ridotta automaticamente per restare nel limite, oppure il trade viene saltato se la size risultante è sotto il minimo operativo. I due parametri operano insieme in entrambe le strategie (Spot e Perp) con la stessa logica: size del 6% è il tetto, rischio dell'1.5% è il vincolo.
+Il filtro `spot_market_regime` blocca nuovi buy Spot quando BTC e' in downtrend forte:
 
-**Controlli aggiuntivi:** check di liquidità in uscita, riserva gas dinamica in % del BNB, skip se gas stimato > profitto atteso.
+- timeframe: BTCUSDT 15m;
+- EMA: 50;
+- lookback nuovi minimi: 12 candele;
+- entra in risk-off se BTC e' sotto EMA50 e fa nuovo minimo;
+- esce dal risk-off solo quando BTC richiude sopra EMA50.
 
----
+Lo stato e' persistito in `RuntimeState` per evitare flip-flop.
 
-## 10. Filosofia di ottimizzazione
+### Market Reversal Filter
 
-> **Obiettivo: massimo profitto con il minimo drawdown.**
+Il filtro inversione BTC e' un secondo gate:
 
-Lo Spot punta a **selezionare i candidati migliori** (non quelli che salgono a caso, ma quelli con struttura e volume di qualità) ed entrare a **prezzi favorevoli** (filtro VWAP), con stop adattivi (ATR). Consistenza sopra aggressività.
+- timeframe: BTCUSDT 15m;
+- EMA: 10;
+- conferma default: 2 candele;
+- bullish se ci sono 2 candele verdi consecutive sopra EMA10 e EMA10 sale;
+- bearish se ci sono 2 candele rosse consecutive sotto EMA10.
 
----
+Per lo Spot, dopo un segnale long valido:
 
-## 11. Applicabilità sui 149 token
+- se il regime BTC e' risk-off, il segnale diventa `market_risk_off`;
+- altrimenti, se il reversal filter non e' risk-on, il segnale diventa `market_reversal_waiting`.
 
-Lo Spot opera sulla lista eligible (149 BEP-20). A differenza del Volume Profile (che richiede molta liquidità), VWAP + market structure + relative volume sono **più robusti anche su token meno liquidi**. Resta comunque attivo il filtro di liquidità minima per escludere i pool troppo sottili.
+Il filtro inversione non sblocca mai un blocco risk-off o un guardrail di rischio.
 
 ---
 
-## 12. Il nuovo motore Spot (schema)
+## 7. Stop Loss V4
 
+Lo Stop Loss Spot ha due modalita' configurabili:
+
+### Modalita' ATR
+
+Default:
+
+```text
+stop_loss = entry - ATR * spot_atr_stop_multiplier
 ```
-TOKEN SCANNER (coin preferite + flag AI)
-        ↓
-LIQUIDITY FILTER (esclude pool troppo sottili)
-        ↓
-EVENTO: volume spike / volatility expansion
-        ↓
-REGIME: trend positivo? accumulazione?   (VWAP primario + EMA 20/50 di supporto)
-        + filtro inversione mercato opzionale: BTC 15m sopra EMA10 con 2 candele verdi
-          consecutive confermate. Resta bullish finché BTC non fa 2 candele rosse
-          consecutive sotto EMA10. È solo conferma di nuova entrata: non sblocca
-          guardrail o stati risk-off già attivi.
-        ↓
-ENTRY QUALITY: distanza da VWAP · supporto/resistenza · breakout/retest · estensione ATR
-        ↓
-AGENT (LLM): approva / riduce / blocca
-        ↓
-ENTRATA → gestione (ATR stop · TP parziale + trailing · loop veloce) → uscita + cooldown
+
+Default `spot_atr_stop_multiplier = 2.2`.
+
+### Modalita' Lowest 20
+
+Quando `spot_sl_mode = lowest`, lo stop e' strutturale:
+
+```text
+reference = minimo low nelle ultime N candele
+stop_loss = reference * (1 - buffer_pct / 100)
 ```
+
+Default:
+
+| Parametro | Default |
+|---|---:|
+| `spot_structural_stop_lookback_candles` | 20 |
+| `spot_structural_stop_buffer_pct` | 1.10 |
+
+Il segnale salva anche `stop_reference` con:
+
+- modalita';
+- campo usato (`low`);
+- timestamp candela;
+- prezzo minimo;
+- lookback;
+- buffer.
+
+Questo alimenta il dettaglio trade e il grafico con candela di riferimento.
 
 ---
 
-## 13. Riepilogo: V1 vs V2
+## 8. Take Profit, Breakeven E Trailing
 
-### V1 — Fondamenta (essenziale, fattibile per la deadline)
-```
-├── Trigger arricchito: volatilità + volume spike
-├── Pesi ribilanciati (RSI declassato a 15%)
-├── Relative volume (al posto del volume 24h assoluto)
-├── Regime: VWAP primario + EMA 20/50 di supporto (trend / accumulazione / downtrend)
-├── VWAP come filtro anti-pump (no long se prezzo > VWAP + X·ATR)
-├── ATR per stop loss (adattivo) e per misurare l'estensione
-├── Entrata singola (no media in perdita; aggiunta solo a favore)
-├── Take profit parziale + trailing sul resto
-├── LLM a poteri limitati (approva / riduce / blocca)
-├── Doppio loop veloce/lento
-└── Tutti i controlli di rischio
+### Target ATR
+
+I target sono ATR-based:
+
+```text
+TP1 = entry + ATR * spot_tp1_atr_multiplier
+TP2 = entry + ATR * spot_tp2_atr_multiplier
 ```
 
-### V2 — Struttura definitiva (dopo i test)
+Default:
+
+| Parametro | Default |
+|---|---:|
+| `spot_tp1_atr_multiplier` | 2.0 |
+| `spot_tp2_atr_multiplier` | 3.5 |
+
+### Chiusura Parziale A TP1
+
+Al primo raggiungimento di TP1:
+
+- chiusura parziale;
+- default UI/mobile `spot_tp1_close_pct = 50%`;
+- parametro YAML storico `spot_tp1_close_fraction = 0.30`, ma la percentuale usata dal service arriva dai mobile settings.
+
+TP2 diventa uscita finale solo dopo che TP1 e' stato raggiunto.
+
+### Breakeven
+
+Breakeven Spot e' abilitabile:
+
+- default: attivo;
+- trigger default: `entry + 0.6 * ATR`;
+- modalita': `atr` oppure `tp1`;
+- se `tp1`, il BE puo' scattare solo dopo TP1;
+- con `spot_breakeven_offset_costs = true`, lo stop viene alzato a entry piu' costi stimati andata/ritorno;
+- con `spot_breakeven_buffer_pct = 0.1`, se il prezzo lo permette, lo stop viene alzato a entry + 0.1%.
+
+Lo stop non viene mai abbassato.
+
+### Trailing
+
+Trailing Spot:
+
+- default: attivo;
+- parte da subito se `spot_trailing_active_from_start = true`;
+- usa il massimo raggiunto dalla posizione (`max_price`);
+- formula:
+
+```text
+trailing_stop = max_price - ATR * min(spot_trailing_atr_multiplier, spot_tp1_atr_multiplier)
 ```
-├── RELATIVE STRENGTH: ranking dei token per sovraperformance relativa
-│     → "non voglio quello che sale, voglio quello che sovraperforma gli altri"
-│     (rinviato a V2: richiede confronto in tempo reale tra molti token,
-│      tempo e risorse non disponibili per la V1)
-├── Market structure completa (breakout/retest rilevati automaticamente)
-├── Candle exhaustion detection (riconoscere la fine di un movimento)
-├── RSI multi-timeframe esteso (aggiunta del 4h per il trend)
-└── Raffinamenti dei filtri di contesto (BTC dominance, sentiment)
-```
+
+Il trailing diventa operativo solo se supera l'entry, cosi' non sostituisce lo stop iniziale con uno stop ancora in perdita.
 
 ---
 
-## 14. Flusso operativo (V1)
+## 9. Scale-In A Favore
 
-```
-1. TRIGGER
-   Volume spike + espansione di volatilità su una coin (preferiti + flag AI)
+Lo Spot V4 permette una sola aggiunta a favore, mai in perdita.
 
-2. LIQUIDITY FILTER
-   Esclude i pool sotto la soglia minima
+Condizioni default:
 
-3. REGIME (VWAP primario + EMA 20/50 di supporto)
-   La coin è in trend positivo / accumulazione? (evita downtrend e pump esteso)
-   Se il filtro inversione mercato è attivo, una nuova entrata aspetta anche BTC
-   15m con due candele verdi consecutive sopra EMA10 e EMA10 in salita. Una volta
-   attivo resta bullish finché BTC non fa due candele rosse consecutive sotto
-   EMA10. Questo filtro non sblocca mai lo Spot se altri blocchi/risk-off sono
-   già attivi.
+- `spot_scale_in_enabled = true`;
+- posizione gia' in profitto;
+- stop gia' a breakeven se `spot_scale_in_require_be_stop = true`;
+- nuovo higher-high se `spot_scale_in_require_new_hh = true`;
+- massimo aggiunte: `spot_scale_in_max_adds = 1`;
+- size aggiunta: 50% del notional corrente;
+- il notional totale non supera il cap nominale per trade.
 
-4. ENTRY QUALITY
-   Distanza da VWAP (no long se troppo esteso) ·
-   struttura (breakout/retest) · estensione ATR
-
-5. MOTORE SEGNALE
-   Trend/struttura 30% + Volume relativo 30% + BTC context 15% +
-   RSI 15% (filtro) + Sentiment 10% (filtro macro)
-
-6. META-CONTROLLER (LLM)
-   Approva / riduce size / blocca · motivazione registrata
-
-7. CONTROLLI DI RISCHIO
-   Liquidità · slippage · check uscita · esposizione ·
-   correlazione · drawdown · daily loss · riserva gas
-
-8. ENTRATA (una sola)
-   Aggiunta solo se in profitto + breakout confermato
-
-9. GESTIONE (loop veloce)
-   Stop ATR · take profit parziale + trailing · stop temporale
-
-10. USCITA + COOLDOWN
-```
+La nuova entry viene ricalcolata come media ponderata, ma lo stop non viene abbassato.
 
 ---
 
-## 15. Note dalla revisione professionale (sintesi delle modifiche)
+## 10. Time Stop
 
-Modifiche applicate rispetto alla prima versione dello Spot:
-1. **RSI** da 40% (cuore) → 15% (filtro)
-2. **Volume**: da 24h assoluto → **relative volume**
-3. **Aggiunto regime** con VWAP primario + EMA 20/50 di supporto (trend/structure 30%)
-4. **Aggiunto VWAP** come filtro anti-pump (centrale)
-5. **Aggiunta estensione ATR** per evitare ingressi tardivi
-6. **Trigger arricchito**: non solo volatilità, ma volatilità + volume spike + struttura (anti-pump)
-7. **Stop**: da fisso % → **ATR da subito**
-8. **DCA**: rimossa la media in perdita → aggiunta solo a favore
-9. **Fear & Greed**: da componente → filtro macro leggero
-10. **Relative strength** introdotto come obiettivo (rinviato a V2)
+Il time stop Spot e' ATR-aware:
 
-Distinzione finale tra i due motori:
-- **Perp** = precisione e microstruttura
-- **Spot** = trovare i cavalli migliori e cavalcare il momentum
+- default `spot_time_stop_mode = atr`;
+- lookback default: 8 candele 5m;
+- chiude solo se il movimento nelle ultime N candele e' inferiore a `0.5 * ATR`;
+- usa la cache klines, senza fare HTTP dedicato;
+- se non ci sono dati sufficienti non chiude;
+- fallback orario default: 6 ore, usato solo se `spot_time_stop_mode = hours`.
 
 ---
 
-*Documento v2 — aggiornato dopo revisione professionale. Modifica minore v2.1: aggiunto cap rischio per trade (1.5%) per coerenza con Strategia_Perpetual v3. Tutti i valori numerici sono default proposti e configurabili.*
+## 11. Risk Management Spot
+
+Il risk manager applica regole hard fail-closed:
+
+- kill switch hard/soft/degraded;
+- eligible universe;
+- portfolio floor;
+- drawdown cap;
+- daily loss limit;
+- liquidita' minima;
+- dedup per asset tra Spot e Perp;
+- max posizioni Spot;
+- max esposizione Spot;
+- cooldown per asset;
+- min trade size.
+
+Sizing Spot:
+
+```text
+nominal_size = equity * spot_capital_per_trade_pct / 100
+risk_amount = equity * spot_per_trade_pct / 100
+risk_size = min(nominal_size, risk_amount / stop_distance_pct)
+```
+
+Default mobile:
+
+| Parametro | Default |
+|---|---:|
+| `spot_capital_per_trade_pct` | 6.0 |
+| `spot_per_trade_pct` | 1.5 |
+| `spot_max_open_positions` | 3 |
+| `spot_max_exposure_pct` | 30.0 |
+| `spot_cooldown_minutes` | 30 |
+| `spot_max_slippage_pct` | 1.0 |
+
+Il principio e': la size si adatta allo stop, lo stop non viene stretto per far tornare la size.
+
+---
+
+## 12. Esecuzione E Costi
+
+### Dry-Run
+
+In dry-run:
+
+- viene creato uno `SpotTrade` con stato `prepared`;
+- viene creata una `SpotPosition` aperta;
+- lo slippage peggiora l'entry se `spot_fee_mode = all`;
+- fee e slippage sono salvati sulla posizione e sul trade;
+- PnL unrealized sottrae la swap fee.
+
+### Live
+
+In live:
+
+- il provider Spot attivo viene usato via `ExecutionProvider`;
+- gli indirizzi token vengono presi da `spot_token_map` o risolti via CMC;
+- il quote token e' configurabile o risolto come USDT;
+- se manca mapping/indirizzo, il trade viene saltato esplicitamente.
+
+---
+
+## 13. Gestione Posizione Nel Fast Loop
+
+Il fast loop:
+
+1. aggiorna prezzi live Spot in batch;
+2. aggiorna PnL unrealized;
+3. aggiorna massimo favorevole;
+4. muove breakeven se le condizioni sono soddisfatte;
+5. aggiorna trailing;
+6. valuta scale-in;
+7. chiude per priorita':
+   - trailing stop;
+   - stop loss o breakeven;
+   - TP2 dopo TP1;
+   - TP1 parziale;
+   - time stop.
+
+Le chiusure per SL/TP/trailing usano il livello di uscita specifico, non il prezzo corrente generico.
+
+---
+
+## 14. Osservabilita'
+
+Ogni decisione salva:
+
+- segnale;
+- risk decision;
+- brain decision;
+- action;
+- reasoning;
+- trade id se eseguito.
+
+Le viste app/dashboard mostrano:
+
+- posizioni aperte;
+- storico;
+- PnL realized/unrealized;
+- win rate;
+- livelli SL/TP/trailing;
+- costi;
+- grafico trade con entry/exit, livelli e candela di riferimento dello stop.
+
+---
+
+## 15. Stato V4 E Debiti Futuri
+
+Implementato:
+
+- momentum Spot su VWAP/EMA/volume/RSI;
+- filtri BTC;
+- stop ATR o Lowest 20;
+- TP ATR;
+- breakeven e trailing;
+- scale-in a favore;
+- time stop ATR-aware;
+- risk separato per mercato;
+- costi dry-run espliciti;
+- visualizzazione dettagli trade.
+
+Debiti futuri:
+
+- relative strength reale tra asset;
+- market structure piu' granulare;
+- candle exhaustion dedicato;
+- order-flow/whale flow se disponibile;
+- backtest quantitativo dei parametri V4.
+
+---
+
+## 16. Storico Versioni
+
+| Versione | Sintesi |
+|---|---|
+| V1 | Score composito iniziale, RSI molto pesante. |
+| V2 | Momentum + struttura, VWAP primario, RSI ridotto a filtro. |
+| V3 | Risk e gestione posizione piu' aggressivi: ATR stop, TP ATR, breakeven, trailing, scale-in, anti-spike. |
+| V4 | Allineamento al codice corrente: stop ATR/Lowest20 configurabile, filtri BTC persistiti, risk separato Spot/Perp, UI/dashboard e dettaglio trade con stop reference. |
+
+---
+
+*Fine documento Spot V4.*
