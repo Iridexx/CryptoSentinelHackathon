@@ -120,6 +120,11 @@ const defaultSettings: AgentMobileSettings = {
   perp_trailing_enabled: true,
   spot_time_stop_enabled: false,
   perp_time_stop_enabled: false,
+  perp_trend_shock_enabled: true,
+  perp_trend_shock_adx_threshold: 25,
+  perp_trend_shock_natr_percentile: 90,
+  perp_trend_shock_volume_threshold: 2.0,
+  perp_trend_shock_recovery_confirmations: 3,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
   spot_sl_mode: 'atr' as const,
@@ -1500,6 +1505,19 @@ const SetupPane: FC<{
           checked={settings.perp_time_stop_enabled}
           onChange={(perp_time_stop_enabled) => patch({ perp_time_stop_enabled })}
         />
+        <ToggleInput
+          label="Filtro shock BTC perp"
+          checked={settings.perp_trend_shock_enabled}
+          onChange={(perp_trend_shock_enabled) => patch({ perp_trend_shock_enabled })}
+        />
+        {settings.perp_trend_shock_enabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <NumberInput label="ADX threshold" value={settings.perp_trend_shock_adx_threshold} onChange={(perp_trend_shock_adx_threshold) => patch({ perp_trend_shock_adx_threshold })} />
+            <NumberInput label="NATR percentile" value={settings.perp_trend_shock_natr_percentile} onChange={(perp_trend_shock_natr_percentile) => patch({ perp_trend_shock_natr_percentile })} />
+            <NumberInput label="Volume threshold" value={settings.perp_trend_shock_volume_threshold} onChange={(perp_trend_shock_volume_threshold) => patch({ perp_trend_shock_volume_threshold })} />
+            <NumberInput label="Recovery checks" value={settings.perp_trend_shock_recovery_confirmations} onChange={(perp_trend_shock_recovery_confirmations) => patch({ perp_trend_shock_recovery_confirmations })} />
+          </div>
+        )}
       </section>
 
       <section className="space-y-3">
