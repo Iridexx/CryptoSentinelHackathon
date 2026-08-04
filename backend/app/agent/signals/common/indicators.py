@@ -143,5 +143,83 @@ def relative_volume(candles: list[Candle], lookback: int = 100) -> float | None:
     return candles[-1].volume / average
 
 
+def adx(candles: list[Candle], period: int = 14) -> tuple[float | None, float | None, float | None]:
+    """Return (ADX, DI+, DI-) using Wilder's smoothing.
+
+    Requires at least ``2 * period + 1`` candles. Returns ``(None, None, None)``
+    when data is insufficient.
+    """
+    if len(candles) < 2 * period + 1:
+        return None, None, None
+
+    plus_dm: list[float] = []
+    minus_dm: list[float] = []
+    tr_list: list[float] = []
+
+    for i in range(1, len(candles)):
+        high_diff = candles[i].high - candles[i - 1].high
+        low_diff = candles[i - 1].low - candles[i].low
+        plus_dm.append(max(high_diff, 0.0) if high_diff > low_diff else 0.0)
+        minus_dm.append(max(low_diff, 0.0) if low_diff > high_diff else 0.0)
+        tr_list.append(
+            max(
+                candles[i].high - candles[i].low,
+                abs(candles[i].high - candles[i - 1].close),
+                abs(candles[i].low - candles[i - 1].close),
+            )
+        )
+
+    smoothed_tr = sum(tr_list[:period])
+    smoothed_plus = sum(plus_dm[:period])
+    smoothed_minus = sum(minus_dm[:period])
+
+    for i in range(period, len(tr_list)):
+        smoothed_tr = smoothed_tr - smoothed_tr / period + tr_list[i]
+        smoothed_plus = smoothed_plus - smoothed_plus / period + plus_dm[i]
+        smoothed_minus = smoothed_minus - smoothed_minus / period + minus_dm[i]
+
+    if smoothed_tr == 0:
+        return None, None, None
+
+    di_plus = 100.0 * smoothed_plus / smoothed_tr
+    di_minus = 100.0 * smoothed_minus / smoothed_tr
+    di_sum = di_plus + di_minus
+    if di_sum == 0:
+        return 0.0, di_plus, di_minus
+
+    dx_list: list[float] = []
+    s_tr = sum(tr_list[:period])
+    s_plus = sum(plus_dm[:period])
+    s_minus = sum(minus_dm[:period])
+    for i in range(period, len(tr_list)):
+        s_tr = s_tr - s_tr / period + tr_list[i]
+        s_plus = s_plus - s_plus / period + plus_dm[i]
+        s_minus = s_minus - s_minus / period + minus_dm[i]
+        if s_tr == 0:
+            continue
+        dp = 100.0 * s_plus / s_tr
+        dm = 100.0 * s_minus / s_tr
+        ds = dp + dm
+        if ds > 0:
+            dx_list.append(100.0 * abs(dp - dm) / ds)
+
+    if len(dx_list) < period:
+        return None, None, None
+
+    adx_value = sum(dx_list[:period]) / period
+    for dx in dx_list[period:]:
+        adx_value = (adx_value * (period - 1) + dx) / period
+
+    return adx_value, di_plus, di_minus
+
+
+def percentile_rank(values: list[float], current: float) -> float:
+    """Return the percentile rank (0-100) of *current* within *values*."""
+    if not values:
+        return 0.0
+    count_below = sum(1 for v in values if v < current)
+    return count_below / len(values) * 100.0
+
+
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
     return max(minimum, min(maximum, value))

@@ -35,3 +35,10 @@ perp:
   leverage_atr_baseline_hours: 120 # baseline storica per atr_min/atr_max (~5gg, cap 1500 candele)
   volume_profile_window_hours: 24
   volume_profile_candle_minutes: 5
+  # Filtro shock BTC perp: blocca nuove aperture quando BTC mostra trend forte
+  # + volatilita' o volume anomali (score >= 2 su 3). Indipendente dal reversal filter.
+  trend_shock_enabled: true
+  trend_shock_adx_threshold: 25       # ADX >= soglia -> +1 allo score
+  trend_shock_natr_percentile: 90     # NATR percentile >= soglia -> +1
+  trend_shock_volume_threshold: 2.0   # relative volume >= soglia -> +1
+  trend_shock_recovery_confirmations: 3  # check consecutivi score<=1 per tornare NORMAL

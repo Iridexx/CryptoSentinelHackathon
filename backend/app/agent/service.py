@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
-from backend.app.agent.signals.common.indicators import ema
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
 from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _atr_range_leverage as _perp_atr_range_leverage
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
@@ -42,7 +41,7 @@ from backend.app.persistence.repositories.trades import PerpTradeRepository, Spo
 from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.mobile_agent import AgentMobileSettings
 from backend.app.execution.perp_fees import fetch_perp_fees, compute_opening_costs, accrue_funding
-from backend.app.agent.signals.common.indicators import atr_series, ema
+from backend.app.agent.signals.common.indicators import adx as calc_adx, atr_series, ema, percentile_rank, relative_volume as calc_relative_volume
 from backend.app.execution.spot_fees import compute_spot_costs
 
 logger = get_logger("agent.service")
@@ -59,6 +58,11 @@ HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
 # TTL cache del regime mercato (BTC 15m): evita un fetch BTC per ogni asset dello scan.
 SPOT_REGIME_CACHE_TTL_SECONDS = 90
+# TTL cache del filtro BTC trend-shock: un solo fetch per ciclo di scan.
+BTC_TREND_SHOCK_CACHE_TTL_SECONDS = 90
+# Candele BTC richieste per ADX/NATR (15m) e volume (5m).
+BTC_TREND_SHOCK_15M_BARS = 96
+BTC_TREND_SHOCK_5M_VOL_LOOKBACK = 50
 # Sentinel per la lazy-init del resolver token (distingue "non inizializzato" da "None").
 _UNSET = object()
 
@@ -158,6 +162,11 @@ class AgentService:
             perp_fixed_margin_usd=50.0,
             spot_time_stop_enabled=getattr(self.settings, "spot_time_stop_enabled", False),
             perp_time_stop_enabled=getattr(self.settings, "perp_time_stop_enabled", False),
+            perp_trend_shock_enabled=getattr(self.settings, "perp_trend_shock_enabled", True),
+            perp_trend_shock_adx_threshold=getattr(self.settings, "perp_trend_shock_adx_threshold", 25.0),
+            perp_trend_shock_natr_percentile=getattr(self.settings, "perp_trend_shock_natr_percentile", 90.0),
+            perp_trend_shock_volume_threshold=getattr(self.settings, "perp_trend_shock_volume_threshold", 2.0),
+            perp_trend_shock_recovery_confirmations=getattr(self.settings, "perp_trend_shock_recovery_confirmations", 3),
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -522,6 +531,174 @@ class AgentService:
             ),
         )
 
+    # ── BTC Global Market Regime Filter (trend-shock) ───────────────────
+
+    async def _btc_trend_shock_filter(self) -> dict:
+        """Filtro globale BTC: blocca nuove aperture perp quando BTC mostra
+        trend forte + volatilita' o volume anomali (score >= 2 su 3).
+
+        Tre stati: NORMAL / BLOCKED / RECOVERING.
+        Recovery: 3 check consecutivi con score <= 1 per tornare NORMAL.
+        Fail-open: dati insufficienti -> NORMAL.
+        """
+        ms = self._ms
+        if not ms.perp_trend_shock_enabled:
+            return {"state": "DISABLED", "enabled": False}
+
+        now = datetime.now(UTC)
+        cached = getattr(self, "_trend_shock_cache", None)
+        if cached and (now - cached["at"]).total_seconds() < BTC_TREND_SHOCK_CACHE_TTL_SECONDS:
+            return cached["value"]
+
+        adx_threshold = ms.perp_trend_shock_adx_threshold
+        natr_pct_threshold = ms.perp_trend_shock_natr_percentile
+        vol_threshold = ms.perp_trend_shock_volume_threshold
+        recovery_needed = max(1, ms.perp_trend_shock_recovery_confirmations)
+
+        try:
+            candles_15m = await self.price_feed.fetch(
+                symbol="BTCUSDT", interval="15m",
+                limit=BTC_TREND_SHOCK_15M_BARS + 30, market="spot",
+            )
+        except Exception:
+            candles_15m = []
+
+        try:
+            candles_5m = await self.price_feed.fetch(
+                symbol="BTCUSDT", interval="5m",
+                limit=BTC_TREND_SHOCK_5M_VOL_LOOKBACK + 5, market="spot",
+            )
+        except Exception:
+            candles_5m = []
+
+        if len(candles_15m) < 30 or len(candles_5m) < 10:
+            value = {"state": "NORMAL", "enabled": True, "reason": "insufficient_btc_data"}
+            self._trend_shock_cache = {"at": now, "value": value}
+            return value
+
+        adx_value, di_plus, di_minus = calc_adx(candles_15m, period=14)
+
+        atr_vals = atr_series(candles_15m, period=14)
+        closes_15m = [c.close for c in candles_15m]
+        natr_vals = [
+            atr_vals[i] / closes_15m[i + 14] * 100 if closes_15m[i + 14] > 0 else 0.0
+            for i in range(len(atr_vals))
+        ] if atr_vals and len(closes_15m) > 14 else []
+        natr_current = natr_vals[-1] if natr_vals else None
+        natr_history = natr_vals[-BTC_TREND_SHOCK_15M_BARS:] if natr_vals else []
+        natr_pct = percentile_rank(natr_history[:-1], natr_current) if natr_current is not None and len(natr_history) > 1 else None
+
+        rel_vol = calc_relative_volume(candles_5m, lookback=BTC_TREND_SHOCK_5M_VOL_LOOKBACK)
+
+        score = 0
+        adx_triggered = adx_value is not None and adx_value >= adx_threshold
+        natr_triggered = natr_pct is not None and natr_pct >= natr_pct_threshold
+        vol_triggered = rel_vol is not None and rel_vol >= vol_threshold
+
+        if adx_triggered:
+            score += 1
+        if natr_triggered:
+            score += 1
+        if vol_triggered:
+            score += 1
+
+        direction = None
+        if adx_value is not None and di_plus is not None and di_minus is not None:
+            if di_plus > di_minus:
+                direction = "bullish"
+            elif di_minus > di_plus:
+                direction = "bearish"
+
+        prev_state = self._trend_shock_state_persisted()
+        prev_rc = self._trend_shock_recovery_count()
+
+        if score >= 2:
+            new_state = "BLOCKED"
+            new_rc = 0
+        elif prev_state == "BLOCKED":
+            new_state = "RECOVERING"
+            new_rc = 1
+        elif prev_state == "RECOVERING":
+            new_rc = prev_rc + 1
+            if new_rc >= recovery_needed:
+                new_state = "NORMAL"
+                new_rc = 0
+            else:
+                new_state = "RECOVERING"
+        else:
+            new_state = "NORMAL"
+            new_rc = 0
+
+        if new_state != prev_state or new_rc != prev_rc:
+            self._set_trend_shock_persisted(new_state, new_rc)
+
+        value = {
+            "state": new_state,
+            "enabled": True,
+            "score": score,
+            "adx": round(adx_value, 2) if adx_value is not None else None,
+            "di_plus": round(di_plus, 2) if di_plus is not None else None,
+            "di_minus": round(di_minus, 2) if di_minus is not None else None,
+            "direction": direction,
+            "natr": round(natr_current, 4) if natr_current is not None else None,
+            "natr_percentile": round(natr_pct, 1) if natr_pct is not None else None,
+            "relative_volume": round(rel_vol, 2) if rel_vol is not None else None,
+            "adx_triggered": adx_triggered,
+            "natr_triggered": natr_triggered,
+            "vol_triggered": vol_triggered,
+            "reason": (
+                "btc_trend_shock" if new_state == "BLOCKED"
+                else "btc_trend_shock_recovering" if new_state == "RECOVERING"
+                else "ok"
+            ),
+        }
+
+        if new_state == "BLOCKED" and prev_state != "BLOCKED":
+            logger.info(
+                "btc_global_regime_filter_blocked",
+                adx=value["adx"], di_plus=value["di_plus"], di_minus=value["di_minus"],
+                direction=direction, natr_percentile=value["natr_percentile"],
+                relative_volume=value["relative_volume"], score=score,
+            )
+        elif new_state == "NORMAL" and prev_state in ("BLOCKED", "RECOVERING"):
+            logger.info(
+                "btc_global_regime_filter_recovered",
+                adx=value["adx"], natr_percentile=value["natr_percentile"],
+                relative_volume=value["relative_volume"],
+            )
+
+        self._trend_shock_cache = {"at": now, "value": value}
+        return value
+
+    def _trend_shock_state_persisted(self) -> str:
+        raw = get_runtime_value(str(self.settings.default_user_id), "btc_trend_shock")
+        if not raw:
+            return "NORMAL"
+        try:
+            return json.loads(raw).get("state", "NORMAL")
+        except (ValueError, AttributeError):
+            return "NORMAL"
+
+    def _trend_shock_recovery_count(self) -> int:
+        raw = get_runtime_value(str(self.settings.default_user_id), "btc_trend_shock")
+        if not raw:
+            return 0
+        try:
+            return int(json.loads(raw).get("recovery_count", 0))
+        except (ValueError, AttributeError):
+            return 0
+
+    def _set_trend_shock_persisted(self, state: str, recovery_count: int = 0) -> None:
+        set_runtime_value(
+            str(self.settings.default_user_id),
+            "btc_trend_shock",
+            json.dumps({
+                "state": state,
+                "recovery_count": recovery_count,
+                "updated_at": datetime.now(UTC).isoformat(),
+            }),
+        )
+
     async def evaluate_perp(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.perp_signal.evaluate(payload)
         if (
@@ -544,6 +721,28 @@ class AgentService:
             if reversal.get("risk_off"):
                 signal["action"] = "skip"
                 signal["reason"] = "market_reversal_long_blocked"
+        # Filtro shock BTC perp: blocca tutte le nuove aperture quando BTC è in regime anomalo.
+        if signal.get("action") != "skip":
+            trend_shock = await self._btc_trend_shock_filter()
+            signal.setdefault("components", {})["btc_trend_shock"] = trend_shock
+            if trend_shock.get("state") == "BLOCKED":
+                logger.info(
+                    "perp_entry_rejected",
+                    asset=signal.get("asset"), candidate_side=signal.get("side"),
+                    reason="btc_trend_shock_blocked",
+                    score=trend_shock.get("score"),
+                    adx=trend_shock.get("adx"),
+                    natr_percentile=trend_shock.get("natr_percentile"),
+                    relative_volume=trend_shock.get("relative_volume"),
+                    entry_price=signal.get("price"),
+                    stop_loss=signal.get("stop_loss"),
+                    take_profit_1=signal.get("take_profit_1"),
+                    take_profit_2=signal.get("take_profit_2"),
+                    quality=signal.get("quality"),
+                    leverage=signal.get("leverage"),
+                )
+                signal["action"] = "skip"
+                signal["reason"] = "btc_trend_shock_blocked"
         # Il segnale embeds la leva calcolata con il config YAML statico.
         # La sovrascriviamo con i mobile settings (RuntimeState) per rispettare
         # la leva impostata dall'utente nell'app.
@@ -1406,6 +1605,11 @@ class AgentService:
                 await self._spot_market_regime()
             except Exception as exc:
                 logger.warning("spot_market_regime_error", error=str(exc))
+        if "perp" in markets:
+            try:
+                await self._btc_trend_shock_filter()
+            except Exception as exc:
+                logger.warning("btc_trend_shock_filter_error", error=str(exc))
         spot_assets = selected_spot_watchlist(self.settings) if "spot" in markets else []
         perp_assets = selected_perp_watchlist(self.settings) if "perp" in markets else []
         selected_assets = list(dict.fromkeys([*spot_assets, *perp_assets]))

@@ -135,6 +135,11 @@ const settingFields = [
   'perp_sl_mode',
   'spot_structural_stop_buffer_pct',
   'perp_structural_stop_buffer_pct',
+  'perp_trend_shock_enabled',
+  'perp_trend_shock_adx_threshold',
+  'perp_trend_shock_natr_percentile',
+  'perp_trend_shock_volume_threshold',
+  'perp_trend_shock_recovery_confirmations',
 ];
 
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';
@@ -2175,6 +2180,14 @@ function LogsPanel({ logs, onRefresh, canAdmin }: { logs: LoadState<LogEntry[]>;
   );
 }
 
+const SETTING_LABELS: Record<string, string> = {
+  perp_trend_shock_enabled: 'Filtro shock BTC perp',
+  perp_trend_shock_adx_threshold: 'Shock BTC — ADX threshold',
+  perp_trend_shock_natr_percentile: 'Shock BTC — NATR percentile',
+  perp_trend_shock_volume_threshold: 'Shock BTC — Volume threshold',
+  perp_trend_shock_recovery_confirmations: 'Shock BTC — Recovery confirmations',
+};
+
 function SettingsPanel({
   settings,
   draft,
@@ -2194,7 +2207,7 @@ function SettingsPanel({
       <div className="settings-grid">
         {settingFields.map((field) => (
           <label key={field}>
-            <span>{field.replaceAll('_', ' ')}</span>
+            <span>{SETTING_LABELS[field] ?? field.replaceAll('_', ' ')}</span>
             {typeof draft[field] === 'boolean' ? (
               <input
                 type="checkbox"

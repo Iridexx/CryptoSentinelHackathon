@@ -261,6 +261,11 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "leverage_atr_baseline_hours": "perp_leverage_atr_baseline_hours",
         "volume_profile_window_hours": "perp_volume_profile_window_hours",
         "volume_profile_candle_minutes": "perp_volume_profile_candle_minutes",
+        "trend_shock_enabled": "perp_trend_shock_enabled",
+        "trend_shock_adx_threshold": "perp_trend_shock_adx_threshold",
+        "trend_shock_natr_percentile": "perp_trend_shock_natr_percentile",
+        "trend_shock_volume_threshold": "perp_trend_shock_volume_threshold",
+        "trend_shock_recovery_confirmations": "perp_trend_shock_recovery_confirmations",
     },
     "signal_engine": {
         "binance_futures_base_url": "binance_futures_base_url",
@@ -633,6 +638,12 @@ class Settings(BaseSettings):
     perp_leverage_atr_baseline_hours: int = Field(default=120, alias="PERP_LEVERAGE_ATR_BASELINE_HOURS")
     perp_volume_profile_window_hours: int = Field(default=24, alias="PERP_VOLUME_PROFILE_WINDOW_HOURS")
     perp_volume_profile_candle_minutes: int = Field(default=5, alias="PERP_VOLUME_PROFILE_CANDLE_MINUTES")
+    # Filtro shock BTC perp
+    perp_trend_shock_enabled: bool = Field(default=True, alias="PERP_TREND_SHOCK_ENABLED")
+    perp_trend_shock_adx_threshold: float = Field(default=25.0, alias="PERP_TREND_SHOCK_ADX_THRESHOLD")
+    perp_trend_shock_natr_percentile: float = Field(default=90.0, alias="PERP_TREND_SHOCK_NATR_PERCENTILE")
+    perp_trend_shock_volume_threshold: float = Field(default=2.0, alias="PERP_TREND_SHOCK_VOLUME_THRESHOLD")
+    perp_trend_shock_recovery_confirmations: int = Field(default=3, alias="PERP_TREND_SHOCK_RECOVERY_CONFIRMATIONS")
 
     binance_futures_base_url: str | None = Field(default=None, alias="BINANCE_FUTURES_BASE_URL")
     binance_futures_ws_url: str | None = Field(default=None, alias="BINANCE_FUTURES_WS_URL")
