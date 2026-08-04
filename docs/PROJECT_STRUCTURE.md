@@ -202,7 +202,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       `-- integration/ - gate Step 3 e API execution Step 4.
 |-- configs/ - configurazione versionata e template installazione.
 |   |-- README.md - categorie config, precedenza e guardrail hard.
-|   |-- instance.example.yaml - template installazione non segreta; include sezione backup DB da Step 5; copiare in instance.yaml locale gitignored.
+|   |-- instance.example.yaml - template installazione non segreta; include sezione backup DB da Step 5 e nota CORS per origin dashboard Tailscale; copiare in instance.yaml locale gitignored.
 |   |-- risk.yaml - default funzionali risk management, incluso dry_run_capital_usd 500 e min_trade_size_usd 7.
 |   |-- strategy_spot.yaml - default strategia Spot.
 |   |-- strategy_perp.yaml - default strategia Perpetual.
@@ -255,10 +255,11 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_dashboard_trade_history_page_size_2026-08-02.md - report filtro 20/50/100/Tutti history Spot/Perp dashboard.
 |       |-- report_trade_history_count_alignment_2026-08-02.md - report fix allineamento conteggi/history Spot/Perp.
 |       |-- report_bot_active_days_metric_2026-08-02.md - report nuova metrica Bot Day condivisa Spot/Perp.
+|       |-- report_dashboard_tailscale_host_2026-08-04.md - report accesso dashboard dev tramite Tailscale.
 |       `-- report_perp_fixed_margin_toggle_2026-07-27.md - report toggle margine fisso Perp app/dashboard.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
 |   |-- index.html - entrypoint HTML dashboard.
-|   |-- vite.config.ts - config Vite autonoma con `envDir` dedicato e output `dist-dashboard`.
+|   |-- vite.config.ts - config Vite autonoma con `envDir` dedicato, dev/preview su `0.0.0.0:5176` e output `dist-dashboard`.
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
@@ -270,8 +271,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- Plan_forHackathon.md - piano completo BNB Hack Track 1.
 |-- public/ - asset statici frontend/PWA.
 |-- scripts/ - script frontend/tooling.
-|   |-- start_dashboard.ps1 - avvio dashboard Vite su porta 5176 in finestra PowerShell visibile, senza avvio parallelo.
-|   |-- restart_dashboard.ps1 - riavvio dashboard: chiude il listener esistente su 5176 e poi avvia Vite.
+|   |-- start_dashboard.ps1 - avvio dashboard Vite su porta 5176 in finestra PowerShell visibile, bind su tutte le interfacce e stampa URL locale/Tailscale.
+|   |-- restart_dashboard.ps1 - riavvio dashboard: chiude il listener esistente su 5176 e poi avvia Vite su tutte le interfacce mostrando URL locale/Tailscale.
 |   |-- twak-password-file.cjs - wrapper Node per leggere password TWAK da file UTF-8 ed evitare problemi encoding PowerShell/keychain.
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
@@ -296,7 +297,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |-- .env.example - template solo segreti/sensitive paths, valori vuoti.
 |-- .gitignore - esclusioni frontend, backend, segreti, instance config e storage locale.
 |-- capacitor.config.ts - configurazione Capacitor.
-|-- package.json - script e dipendenze frontend/mobile/dashboard, incluso `dashboard:dev` su porta 5176.
+|-- package.json - script e dipendenze frontend/mobile/dashboard, incluso `dashboard:dev` su porta 5176 con host `0.0.0.0`.
 |-- package-lock.json - lockfile npm.
 |-- README.md - documentazione app mobile esistente.
 |-- requirements.txt - delega install Python a backend/requirements.txt.

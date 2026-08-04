@@ -7,10 +7,12 @@ export default defineConfig({
   envDir: path.resolve(__dirname, 'env'),
   plugins: [react()],
   server: {
+    host: '0.0.0.0',
     port: 5176,
     strictPort: true,
   },
   preview: {
+    host: '0.0.0.0',
     port: 5176,
     strictPort: true,
   },

@@ -15,6 +15,12 @@ function Get-DashboardPortProcess {
         }
 }
 
+function Get-TailscaleIp {
+    Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -like "100.*" -and $_.InterfaceAlias -like "*Tailscale*" } |
+        Select-Object -ExpandProperty IPAddress -First 1
+}
+
 try {
     Set-Location $RepoRoot
     Write-Host "CryptoSentinel dashboard start" -ForegroundColor Cyan
@@ -29,7 +35,12 @@ try {
         exit 1
     }
 
-    Write-Host "Starting dashboard at http://127.0.0.1:$Port" -ForegroundColor Green
+    $tailscaleIp = Get-TailscaleIp
+    Write-Host "Starting dashboard on all interfaces (0.0.0.0:$Port)" -ForegroundColor Green
+    Write-Host "Local URL: http://127.0.0.1:$Port"
+    if ($tailscaleIp) {
+        Write-Host "Tailscale URL: http://$tailscaleIp`:$Port" -ForegroundColor Green
+    }
     & npm.cmd run dashboard:dev
 }
 catch {
