@@ -711,6 +711,7 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
         <Stat label="Trade Tot" value={String(data?.trade_count ?? 0)} />
         <Stat label="Trade Day" value={String(data?.trade_count_today ?? 0)} />
+        <Stat label="Bot Day" value={String(data?.bot_active_days ?? 0)} />
       </div>
       {!hasActivity && (
         riskOff
@@ -780,6 +781,7 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
         <Stat label="Trade Tot" value={String(data?.trade_count ?? 0)} />
         <Stat label="Trade Day" value={String(data?.trade_count_today ?? 0)} />
+        <Stat label="Bot Day" value={String(data?.bot_active_days ?? 0)} />
       </div>
       {!hasActivity && (
         <EmptyState title="In attesa di segnali perp" detail="Nessuna posizione aperta e nessun trade registrato." />

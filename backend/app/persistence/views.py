@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import OrderedDict
+from datetime import UTC, datetime
 from decimal import Decimal
 from math import sqrt
 from statistics import mean, stdev
@@ -63,6 +64,17 @@ class ViewService:
         self._min_portfolio_value_usd = min_portfolio_value_usd
         self._base_equity_usd = Decimal(str(base_equity_usd))
 
+    async def _bot_active_days(self, user_id: str) -> int:
+        spot_first = await SpotTradeRepository(self._session).first_timestamp_for_user(user_id)
+        perp_first = await PerpTradeRepository(self._session).first_timestamp_for_user(user_id)
+        candidates = [ts for ts in (spot_first, perp_first) if ts is not None]
+        if not candidates:
+            return 0
+        first_ts = min(candidates)
+        if first_ts.tzinfo is None:
+            first_ts = first_ts.replace(tzinfo=UTC)
+        return max(1, (datetime.now(UTC).date() - first_ts.date()).days + 1)
+
     async def spot_view(self, user_id: str) -> SpotView:
         pos_repo = SpotPositionRepository(self._session)
         trade_repo = SpotTradeRepository(self._session)
@@ -75,6 +87,7 @@ class ViewService:
         day_start_spot = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         spot_trade_count_tot = await trade_repo.count_closed(user_id)
         spot_trade_count_today = await trade_repo.count_closed(user_id, since=day_start_spot)
+        bot_active_days = await self._bot_active_days(user_id)
         return SpotView(
             market_risk_off=_market_risk_off(user_id),
             open_positions=[
@@ -123,6 +136,7 @@ class ViewService:
             win_rate_pct=win["win_rate_pct"],
             trade_count=spot_trade_count_tot,
             trade_count_today=spot_trade_count_today,
+            bot_active_days=bot_active_days,
         )
 
     async def perp_view(self, user_id: str) -> PerpView:
@@ -139,6 +153,7 @@ class ViewService:
         day_start = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         trade_count_tot = await trade_repo.count_closed(user_id)
         trade_count_today = await trade_repo.count_closed(user_id, since=day_start)
+        bot_active_days = await self._bot_active_days(user_id)
         return PerpView(
             open_positions=[
                 PerpPositionView(
@@ -202,6 +217,7 @@ class ViewService:
             win_rate_pct=win["win_rate_pct"],
             trade_count=trade_count_tot,
             trade_count_today=trade_count_today,
+            bot_active_days=bot_active_days,
         )
 
     async def global_view(self, user_id: str) -> GlobalView:

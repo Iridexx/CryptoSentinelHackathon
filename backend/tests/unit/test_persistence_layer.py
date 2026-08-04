@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -423,6 +423,52 @@ async def test_spot_and_perp_views_return_open_positions(db) -> None:
         assert spot.unrealized_pnl_usd == Decimal("20")
         perp = await ViewService(session).perp_view(USER)
         assert perp.open_positions == []
+
+
+@pytest.mark.asyncio
+async def test_spot_and_perp_views_share_bot_active_days(db) -> None:
+    factory = get_session_factory()
+    now = datetime.now(UTC)
+    first_order_at = now - timedelta(days=3)
+    async with factory() as session:
+        await SpotTradeRepository(session).save(
+            SpotTrade(
+                trade_id="spot_first_order",
+                user_id=USER,
+                asset="BNB",
+                side="buy",
+                amount=Decimal("0.1"),
+                price=Decimal("600"),
+                amount_quote=Decimal("60"),
+                status="prepared",
+                timestamp_utc=first_order_at,
+            )
+        )
+        await PerpTradeRepository(session).save(
+            PerpTrade(
+                trade_id="perp_close_today",
+                user_id=USER,
+                asset="ETH",
+                side="long",
+                direction="close",
+                size=Decimal("0.1"),
+                price=Decimal("3000"),
+                leverage=25,
+                status="confirmed",
+                timestamp_utc=now,
+                pnl_usd=Decimal("2.5"),
+            )
+        )
+
+    async with factory() as session:
+        service = ViewService(session)
+        spot = await service.spot_view(USER)
+        perp = await service.perp_view(USER)
+
+    assert spot.bot_active_days == 4
+    assert perp.bot_active_days == 4
+    assert spot.trade_count_today == 0
+    assert perp.trade_count_today == 1
 
 
 @pytest.mark.asyncio

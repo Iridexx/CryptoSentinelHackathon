@@ -97,6 +97,13 @@ class SpotTradeRepository:
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
 
+    async def first_timestamp_for_user(self, user_id: str) -> datetime | None:
+        """Earliest spot trade timestamp for bot activity age."""
+        result = await self._session.execute(
+            select(func.min(SpotTrade.timestamp_utc)).where(SpotTrade.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
     async def count_today(self, user_id: str, now: datetime) -> int:
         """Conta trade spot dell'utente nel giorno corrente (da mezzanotte UTC)."""
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -209,6 +216,13 @@ class PerpTradeRepository:
             stmt = stmt.where(PerpTrade.timestamp_utc >= since)
         result = await self._session.execute(stmt)
         return int(result.scalar_one())
+
+    async def first_timestamp_for_user(self, user_id: str) -> datetime | None:
+        """Earliest perp trade timestamp for bot activity age."""
+        result = await self._session.execute(
+            select(func.min(PerpTrade.timestamp_utc)).where(PerpTrade.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
 
     async def sum_realized_pnl(self, user_id: str, *, since: datetime | None = None) -> Decimal:
         """Somma pnl_usd di tutti i trade perp con pnl registrato."""

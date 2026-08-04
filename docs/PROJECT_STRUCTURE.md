@@ -51,7 +51,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 20 con buffer percentuale e margine fisso Perp opzionale, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con exposure Perp mostrata come nozionale reale, margine separato, prezzi micro-token a 18 decimali e fallback entry spot da notional/size, prezzo minimo/massimo della candela riferimento SL, grafico opzionale best-effort bounded, marker candela riferimento SL con prezzo stop effettivo, valore stop iniziale preservato rispetto a breakeven/trailing, fallback legacy che ricostruisce il contesto pre-apertura per grafici senza stop_reference persistito e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con exposure Perp mostrata come nozionale reale, margine separato, prezzi micro-token a 18 decimali e fallback entry spot da notional/size, prezzo minimo/massimo della candela riferimento SL, grafico opzionale best-effort bounded, marker candela riferimento SL con prezzo stop effettivo, valore stop iniziale preservato rispetto a breakeven/trailing, Bot Day condiviso Spot/Perp dal primo ordine registrato, fallback legacy che ricostruisce il contesto pre-apertura per grafici senza stop_reference persistito e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
@@ -128,7 +128,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing, funding e reference stop loss con precisione prezzo micro-token.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, history Spot/Perp allineata ai trade chiusi con PnL, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, history Spot/Perp allineata ai trade chiusi con PnL, conteggio trade giornaliero invariato per mercato, Bot Day condiviso dal primo ordine Spot/Perp registrato, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.
@@ -153,7 +153,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- device_profiles.py - repository profili device/display name per supporto e registrazione FCM.
 |   |   |       |-- support.py - repository ticket supporto con creazione, lista per user_id, thread messaggi, cambio stato e filtro archivio.
 |   |   |       |-- alerts.py - AlertConfigRepository (save, load → tuple[config|None, state]).
-|   |   |       |-- trades.py - SpotTradeRepository e PerpTradeRepository (save, get, list, win_rate).
+|   |   |       |-- trades.py - SpotTradeRepository e PerpTradeRepository (save, get, list, win_rate, primo timestamp ordine per Bot Day).
 |   |   |       |-- positions.py - SpotPositionRepository e PerpPositionRepository (save, open_for_user, history).
 |   |   |       |-- decisions.py - AgentDecisionRepository (save, get, recent_for_user con filtro market).
 |   |   |       |-- pnl.py - PnlRepository (save_snapshot, recent_for_user, upsert_portfolio, get_portfolio, adjust_equity, list_equity_adjustments).
@@ -254,6 +254,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- report_time_stop_toggle_2026-08-02.md - report toggle time stop app/dashboard e backend.
 |       |-- report_dashboard_trade_history_page_size_2026-08-02.md - report filtro 20/50/100/Tutti history Spot/Perp dashboard.
 |       |-- report_trade_history_count_alignment_2026-08-02.md - report fix allineamento conteggi/history Spot/Perp.
+|       |-- report_bot_active_days_metric_2026-08-02.md - report nuova metrica Bot Day condivisa Spot/Perp.
 |       `-- report_perp_fixed_margin_toggle_2026-07-27.md - report toggle margine fisso Perp app/dashboard.
 |-- dashboard/ - progetto Vite separato Step 8 per dashboard web desktop-first su porta 5176.
 |   |-- index.html - entrypoint HTML dashboard.
@@ -261,7 +262,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- tsconfig.json - configurazione TypeScript isolata per dashboard.
 |   `-- src/ - applicazione React dashboard.
 |       |-- main.tsx - entrypoint React dashboard.
-|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export, formatter micro-prezzi con soglia full-decimal sotto 0.000001 e dettaglio trade con grafico/fee/margine/riferimento SL Perp; nei grafici trade le candele fuori dalla finestra di posizione sono attenuate, il marker SL ref cade sul prezzo SL effettivo e la linea ref evita la candela; le history Spot/Perp hanno filtri e selettore 20/50/100/Tutti per pagina, mentre il Settings espone i buffer Min/Max20 Spot/Perp, il toggle margine fisso Perp e i toggle Time Stop Spot/Perp con durata in ore.
+|       |-- App.tsx - viste Overview, Spot, Global, Health con Data Coverage filtrabile, Wallet, Logs, Settings, Onboarding, Markets, Support con archivio, Export, metriche Trade Day e Bot Day in Spot/Perp, formatter micro-prezzi con soglia full-decimal sotto 0.000001 e dettaglio trade con grafico/fee/margine/riferimento SL Perp; nei grafici trade le candele fuori dalla finestra di posizione sono attenuate, il marker SL ref cade sul prezzo SL effettivo e la linea ref evita la candela; le history Spot/Perp hanno filtri e selettore 20/50/100/Tutti per pagina, mentre il Settings espone i buffer Min/Max20 Spot/Perp, il toggle margine fisso Perp e i toggle Time Stop Spot/Perp con durata in ore.
 |       |-- api.ts - client API dashboard verso backend con token read/admin separati, inclusa gestione ticket supporto admin.
 |       |-- types.ts - tipi TypeScript dei contratti backend usati dalla dashboard, incluse analytics, fee, margine, liquidazione Perp, trade detail e support ticket.
 |       `-- styles.css - layout desktop-first, stati UI e controlli history/paginazione.
@@ -275,7 +276,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   `-- gen-icons.mjs - generazione icone.
 |-- src/ - frontend React/TypeScript esistente.
 |   |-- components/ - componenti UI CryptoSentinel.
-|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, analytics sintetica, formatter micro-prezzi con soglia full-decimal sotto 0.000001, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, risk levels con prezzo candela riferimento SL Perp, grafici trade con candele pre-entry/post-close attenuate, marker SL ref sul prezzo stop effettivo e linea ref che evita la candela, setup con stop loss ATR o Min/Max 20 con buffer per Spot/Perp, filtro inversione mercato, toggle margine fisso Perp, toggle Time Stop Spot/Perp con durata in ore, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
+|   |   |-- AgentTab.tsx - tab mobile agente con viste Spot/Perp/Global, metriche Trade Day e Bot Day in Spot/Perp, analytics sintetica, formatter micro-prezzi con soglia full-decimal sotto 0.000001, dettaglio trade rapido con cache che distingue grafico base e candele post-chiusura, deduplica delle richieste dettaglio in corso, refresh single-flight, preload base della prima pagina Spot/Perp e delle posizioni aperte, enrichment grafico solo dopo apertura dettaglio, risk levels con prezzo candela riferimento SL Perp, grafici trade con candele pre-entry/post-close attenuate, marker SL ref sul prezzo stop effettivo e linea ref che evita la candela, setup con stop loss ATR o Min/Max 20 con buffer per Spot/Perp, filtro inversione mercato, toggle margine fisso Perp, toggle Time Stop Spot/Perp con durata in ore, toggle breakeven Spot/Perp e allarme drawdown configurabili, onboarding, kill switch, admin token persistito localmente, wallet caricati solo nella vista dedicata ed empty state dedicati.
 |   |   `-- SettingsTab.tsx - impostazioni app, nome utente locale per supporto, apertura/lettura ticket con mark-read, reply utente, modalita' admin opzionale per risposta/chiusura e uso dello stesso admin token persistito dell'AgentTab.
 |   |-- hooks/ - hook dati, alert, preferiti, valuta, search e refresh.
 |   |-- services/marketData.ts - client unico verso API backend con request ID e diagnostica non sensibile.

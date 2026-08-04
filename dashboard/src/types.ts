@@ -83,6 +83,7 @@ export type SpotView = {
   win_rate_pct: number;
   trade_count: number;
   trade_count_today: number;
+  bot_active_days: number;
 };
 
 export type PnlPoint = {
@@ -137,6 +138,7 @@ export type PerpView = {
   win_rate_pct: number;
   trade_count: number;
   trade_count_today: number;
+  bot_active_days: number;
 };
 
 export type GlobalView = {

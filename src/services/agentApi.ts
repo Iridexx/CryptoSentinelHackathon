@@ -75,6 +75,7 @@ export interface SpotView {
   win_rate_pct: number;
   trade_count: number;
   trade_count_today: number;
+  bot_active_days: number;
   market_risk_off?: boolean;
 }
 
@@ -132,6 +133,7 @@ export interface PerpView {
   win_rate_pct: number;
   trade_count: number;
   trade_count_today: number;
+  bot_active_days: number;
 }
 
 export interface PnlPoint {
