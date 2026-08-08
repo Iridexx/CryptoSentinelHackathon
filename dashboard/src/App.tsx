@@ -41,6 +41,8 @@ import {
   setSpotExecutionProvider,
   updateSupportTicketStatus,
   validateOnboarding,
+  defaultBackendBaseUrl,
+  normalizeBackendBaseUrl,
   type DashboardSession,
   type EquityAdjustment,
 } from './api';
@@ -142,8 +144,6 @@ const settingFields = [
   'perp_trend_shock_recovery_confirmations',
 ];
 
-const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8001';
-const LEGACY_BACKEND_URL = 'http://127.0.0.1:8000';
 const AUTO_REFRESH_MS = 45_000;
 
 function emptyState<T>(data: T | null = null): LoadState<T> {
@@ -161,8 +161,7 @@ async function loadDetail<T>(setter: (value: LoadState<T>) => void, task: () => 
 
 function normalizedStoredBackendUrl() {
   const stored = localStorage.getItem('cs.dashboard.baseUrl');
-  if (!stored || stored === LEGACY_BACKEND_URL) return DEFAULT_BACKEND_URL;
-  return stored;
+  return stored ? normalizeBackendBaseUrl(stored) : defaultBackendBaseUrl();
 }
 
 export default function App() {
@@ -209,6 +208,13 @@ export default function App() {
 
   const canRead = Boolean(session.readToken);
   const canAdmin = Boolean(session.adminToken);
+
+  useEffect(() => {
+    setSession((current) => {
+      const normalized = normalizeBackendBaseUrl(current.baseUrl);
+      return normalized === current.baseUrl ? current : { ...current, baseUrl: normalized };
+    });
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('cs.dashboard.baseUrl', session.baseUrl);
@@ -601,6 +607,7 @@ export default function App() {
               aria-label="Backend URL"
               value={session.baseUrl}
               onChange={(event) => setSession((current) => ({ ...current, baseUrl: event.target.value }))}
+              onBlur={() => setSession((current) => ({ ...current, baseUrl: normalizeBackendBaseUrl(current.baseUrl) }))}
             />
             <input
               aria-label="Read token"

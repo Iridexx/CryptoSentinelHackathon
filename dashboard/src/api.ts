@@ -33,7 +33,37 @@ export type DashboardSession = {
   adminToken: string;
 };
 
+const DASHBOARD_PORT = '5176';
+const BACKEND_PORT = '8001';
+const LEGACY_BACKEND_URL = 'http://127.0.0.1:8000';
+const LOCAL_BACKEND_URL = 'http://127.0.0.1:8001';
+
 type TokenKind = 'read' | 'admin' | 'none';
+
+export function defaultBackendBaseUrl(): string {
+  if (typeof window === 'undefined') return LOCAL_BACKEND_URL;
+  const { protocol, hostname } = window.location;
+  if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') return LOCAL_BACKEND_URL;
+  return `${protocol}//${hostname}:${BACKEND_PORT}`;
+}
+
+export function normalizeBackendBaseUrl(baseUrl: string): string {
+  const fallback = defaultBackendBaseUrl();
+  const value = baseUrl.trim();
+  if (!value || value === LEGACY_BACKEND_URL) return fallback;
+  try {
+    const url = new URL(value);
+    if (url.port === DASHBOARD_PORT) {
+      url.port = BACKEND_PORT;
+    }
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return value.replace(/\/+$/, '');
+  }
+}
 
 async function requestJson<T>(
   session: DashboardSession,
@@ -50,7 +80,7 @@ async function requestJson<T>(
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  const url = `${session.baseUrl.replace(/\/$/, '')}${path}`;
+  const url = `${normalizeBackendBaseUrl(session.baseUrl)}${path}`;
   const response = await fetch(url, { ...options, headers });
   if (!response.ok) {
     const body = await response.text();
