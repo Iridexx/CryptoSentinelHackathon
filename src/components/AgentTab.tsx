@@ -1922,12 +1922,20 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
           const statusLabel = stateInfo?.status === 'sold' ? 'Venduto' : stateInfo?.status === 'rebought' ? 'Ricomprato' : idx === 2 ? 'Classico SL' : 'In attesa';
           const statusColor = stateInfo?.status === 'sold' ? 'text-amber-400' : stateInfo?.status === 'rebought' ? 'text-sky-400' : 'text-gray-500';
           return (
-            <div key={idx} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
-              <span className="text-gray-500">L{idx + 1} ({idx === 0 ? '25%' : idx === 1 ? '55%' : '20%'})</span>
-              <span className="flex items-center gap-2">
-                <span className={statusColor}>{statusLabel}{stateInfo && stateInfo.reentries > 0 ? ` (${stateInfo.reentries}x)` : ''}</span>
-                <span className="text-white">{fmtPriceFull(price)}</span>
-              </span>
+            <div key={idx} className="rounded-lg bg-dark-900 px-3 py-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">L{idx + 1} ({idx === 0 ? '25%' : idx === 1 ? '55%' : '20%'})</span>
+                <span className="flex items-center gap-2">
+                  <span className={statusColor}>{statusLabel}{stateInfo && stateInfo.reentries > 0 ? ` (${stateInfo.reentries}x)` : ''}</span>
+                  <span className="text-white">{fmtPriceFull(price)}</span>
+                </span>
+              </div>
+              {stateInfo?.fill_price && (
+                <div className="mt-1 flex items-center justify-between text-amber-400/80">
+                  <span>Fill reale</span>
+                  <span className="font-semibold">{fmtPriceFull(stateInfo.fill_price)}</span>
+                </div>
+              )}
             </div>
           );
         })}

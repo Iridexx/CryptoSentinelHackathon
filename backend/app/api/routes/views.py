@@ -882,7 +882,11 @@ def _smart_sl_detail(position) -> dict:
             state = json.loads(raw)
             levels_state = state.get("levels", [])
             summary = [
-                {"status": lv.get("status", "idle"), "reentries": lv.get("reentries", 0)}
+                {
+                    "status": lv.get("status", "idle"),
+                    "reentries": lv.get("reentries", 0),
+                    "fill_price": lv.get("sell_price"),
+                }
                 for lv in levels_state
             ]
         except (ValueError, KeyError):

@@ -288,7 +288,7 @@ export interface TradeDetail {
   closed_at?: string | null;
   close_reason?: string | null;
   smart_sl_levels?: string[] | null;
-  smart_sl_state_summary?: { status: string; reentries: number }[] | null;
+  smart_sl_state_summary?: { status: string; reentries: number; fill_price?: string | null }[] | null;
   chart?: TradeChart | null;
   is_simulated: boolean;
 }
