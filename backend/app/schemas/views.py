@@ -80,6 +80,8 @@ class PerpPositionView(BaseModel):
     maker_fee_usd: Decimal | None = None
     slippage_usd: Decimal | None = None
     funding_accrued_usd: Decimal | None = None
+    smart_sl_active: bool = False
+    smart_sl_levels_sold: list[bool] | None = None
     status: str
     opened_at: str
 

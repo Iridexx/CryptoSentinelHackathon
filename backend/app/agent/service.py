@@ -1351,6 +1351,17 @@ class AgentService:
                         lv["confirm_since"] = None
                     changed = True
                     logger.info("smart_sl_sell", asset=pos.asset, level=i+1, price=float(sell_price), size=float(split_size), pnl=float(pnl))
+                    notifier = get_agent_notifier()
+                    margin = pos.entry_price * orig_size / Decimal(max(int(pos.leverage or 1), 1))
+                    pnl_pct = pnl / margin * 100 if margin > 0 else Decimal("0")
+                    asyncio.create_task(
+                        notifier.notify_trade_closed(
+                            user_id=pos.user_id, trade_id=close_trade.trade_id,
+                            asset=pos.asset, market="perp", pnl_usd=pnl, pnl_pct=pnl_pct,
+                            close_reason=f"smart_sl_sell_l{i+1}",
+                            is_dry_run=ms.execution_mode == "dry_run",
+                        )
+                    )
                 else:
                     if i == 0 and lv.get("confirm_since") is not None:
                         lv["confirm_since"] = None
@@ -1384,6 +1395,15 @@ class AgentService:
                     lv["sell_price"] = None
                     changed = True
                     logger.info("smart_sl_rebuy", asset=pos.asset, level=i+1, price=float(rebuy_price), size=float(split_size))
+                    notifier = get_agent_notifier()
+                    asyncio.create_task(
+                        notifier.notify_trade_closed(
+                            user_id=pos.user_id, trade_id=rebuy_trade.trade_id,
+                            asset=pos.asset, market="perp", pnl_usd=Decimal("0"), pnl_pct=Decimal("0"),
+                            close_reason=f"smart_sl_rebuy_l{i+1}",
+                            is_dry_run=ms.execution_mode == "dry_run",
+                        )
+                    )
 
         if changed:
             pos.smart_sl_state = json.dumps(state)

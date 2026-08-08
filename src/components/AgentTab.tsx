@@ -583,6 +583,10 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   take_profit_2: { label: 'Take Profit 2', className: 'text-accent-green' },
   trailing_stop: { label: 'Trailing Stop', className: 'text-accent-green' },
   time_stop: { label: 'Time Stop', className: 'text-gray-300' },
+  smart_sl_sell_l1: { label: 'Smart SL Sell L1', className: 'text-amber-400' },
+  smart_sl_sell_l2: { label: 'Smart SL Sell L2', className: 'text-amber-400' },
+  smart_sl_rebuy_l1: { label: 'Smart SL Rebuy L1', className: 'text-sky-400' },
+  smart_sl_rebuy_l2: { label: 'Smart SL Rebuy L2', className: 'text-sky-400' },
 };
 
 const TradeHistoryList: FC<{
@@ -815,6 +819,11 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
                   <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
+                  {position.smart_sl_active && (
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${position.smart_sl_levels_sold?.some(Boolean) ? 'bg-amber-900/40 text-amber-400' : 'bg-dark-700 text-gray-400'}`}>
+                      SSL {position.smart_sl_levels_sold?.filter(Boolean).length ?? 0}/2
+                    </span>
+                  )}
                 </div>
                 <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
                   {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
@@ -1905,6 +1914,25 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
         </div>
       ))}
     </section>
+    {detail.market === 'perp' && detail.smart_sl_levels && (
+      <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
+        <h3 className="text-sm font-semibold text-white">Smart Stop Loss</h3>
+        {detail.smart_sl_levels.map((price, idx) => {
+          const stateInfo = detail.smart_sl_state_summary?.[idx];
+          const statusLabel = stateInfo?.status === 'sold' ? 'Venduto' : stateInfo?.status === 'rebought' ? 'Ricomprato' : idx === 2 ? 'Classico SL' : 'In attesa';
+          const statusColor = stateInfo?.status === 'sold' ? 'text-amber-400' : stateInfo?.status === 'rebought' ? 'text-sky-400' : 'text-gray-500';
+          return (
+            <div key={idx} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
+              <span className="text-gray-500">L{idx + 1} ({idx === 0 ? '25%' : idx === 1 ? '55%' : '20%'})</span>
+              <span className="flex items-center gap-2">
+                <span className={statusColor}>{statusLabel}{stateInfo && stateInfo.reentries > 0 ? ` (${stateInfo.reentries}x)` : ''}</span>
+                <span className="text-white">{fmtPriceFull(price)}</span>
+              </span>
+            </div>
+          );
+        })}
+      </section>
+    )}
     <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
       <h3 className="text-sm font-semibold text-white">Timeline</h3>
       <p className="text-xs text-gray-500">Open {new Date(detail.opened_at).toLocaleString('it-IT')}</p>

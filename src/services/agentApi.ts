@@ -102,6 +102,8 @@ export interface PerpPositionView {
   maker_fee_usd?: string | null;
   slippage_usd?: string | null;
   funding_accrued_usd?: string | null;
+  smart_sl_active?: boolean;
+  smart_sl_levels_sold?: boolean[] | null;
   status: string;
   opened_at: string;
 }
@@ -285,6 +287,8 @@ export interface TradeDetail {
   opened_at: string;
   closed_at?: string | null;
   close_reason?: string | null;
+  smart_sl_levels?: string[] | null;
+  smart_sl_state_summary?: { status: string; reentries: number }[] | null;
   chart?: TradeChart | null;
   is_simulated: boolean;
 }

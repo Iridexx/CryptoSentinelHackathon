@@ -858,6 +858,42 @@ def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
     return None
 
 
+def _smart_sl_detail(position) -> dict:
+    """Livelli Smart SL calcolati da entry/initial_stop_loss + stato corrente."""
+    if position is None or getattr(position, "initial_stop_loss", None) is None:
+        return {"smart_sl_levels": None, "smart_sl_state_summary": None}
+    entry = Decimal(str(position.entry_price))
+    isl = Decimal(str(position.initial_stop_loss))
+    is_long = position.side == "long"
+    dist = abs(entry - isl)
+    if dist == 0:
+        return {"smart_sl_levels": None, "smart_sl_state_summary": None}
+
+    fracs = [Decimal("0.333"), Decimal("0.666"), Decimal("1")]
+    if is_long:
+        prices = [entry - f * dist for f in fracs]
+    else:
+        prices = [entry + f * dist for f in fracs]
+
+    summary = None
+    raw = getattr(position, "smart_sl_state", None)
+    if raw:
+        try:
+            state = json.loads(raw)
+            levels_state = state.get("levels", [])
+            summary = [
+                {"status": lv.get("status", "idle"), "reentries": lv.get("reentries", 0)}
+                for lv in levels_state
+            ]
+        except (ValueError, KeyError):
+            pass
+
+    return {
+        "smart_sl_levels": [_fmt_price(p) for p in prices],
+        "smart_sl_state_summary": summary,
+    }
+
+
 def _breakeven_price(position, is_long: bool) -> str | None:
     """Prezzo di breakeven: valorizzato solo quando lo stop è già stato spostato
     a breakeven (≥ entry per i long, ≤ entry per gli short). Altrimenti None → "---"."""
@@ -1060,6 +1096,7 @@ def _perp_trade_detail(
         "close_reason": _close_reason(trade),
         "decision": _decision_payload(decision),
         "events": [{"name": "tp1", "reached": position.tp1_reached}] if position else [],
+        **_smart_sl_detail(position),
         "chart": chart,
         "is_simulated": trade.trade_id.startswith("dry_") or trade.venue == "dry_run",
     }

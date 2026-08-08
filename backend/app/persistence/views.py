@@ -46,6 +46,19 @@ def _market_risk_off(user_id: str) -> bool:
         return False
 
 
+def _smart_sl_view_fields(pos) -> dict:
+    raw = getattr(pos, "smart_sl_state", None)
+    if not raw:
+        return {"smart_sl_active": False, "smart_sl_levels_sold": None}
+    try:
+        state = json.loads(raw)
+        levels = state.get("levels", [])
+        sold = [lv.get("status") == "sold" for lv in levels]
+        return {"smart_sl_active": True, "smart_sl_levels_sold": sold}
+    except (ValueError, KeyError):
+        return {"smart_sl_active": False, "smart_sl_levels_sold": None}
+
+
 class ViewService:
     """Assembles the Spot / Perp / Global dashboard payloads."""
 
@@ -179,6 +192,7 @@ class ViewService:
                     maker_fee_usd=p.maker_fee_usd,
                     slippage_usd=p.slippage_usd,
                     funding_accrued_usd=p.funding_accrued_usd,
+                    **_smart_sl_view_fields(p),
                     status=p.status,
                     opened_at=p.opened_at.isoformat(),
                 )
