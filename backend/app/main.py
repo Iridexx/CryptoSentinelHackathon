@@ -1,6 +1,7 @@
 ﻿"""FastAPI application entrypoint."""
 
 import asyncio
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from decimal import Decimal
@@ -33,6 +34,18 @@ from backend.app.persistence.sync_database import init_sync_db, reset_sync_db
 settings = get_settings()
 configure_logging(settings)
 logger = get_logger("api")
+
+
+def _dashboard_cors_origin_regex(port: int) -> str:
+    """Allow local and Tailscale dashboard dev origins without wildcard CORS."""
+    escaped_port = re.escape(str(port))
+    return (
+        r"^https?://("
+        r"localhost|"
+        r"127\.0\.0\.1|"
+        r"100(?:\.\d{1,3}){3}"
+        rf"):{escaped_port}$"
+    )
 
 
 async def _heartbeat_loop(settings: Settings) -> None:
@@ -172,6 +185,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=_dashboard_cors_origin_regex(settings.dashboard_port),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-API-Token", "X-Request-ID"],

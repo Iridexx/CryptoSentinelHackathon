@@ -36,7 +36,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- README.md - runbook backend, endpoint, auth, configurazione e FCM.
 |   |-- requirements.txt - dipendenze Python backend, incluso PyYAML per config centralizzata.
 |   |-- app/ - package applicativo backend.
-|   |   |-- main.py - entrypoint FastAPI, lifespan non bloccante, warm-up OHLCV watchlist in background, heartbeat loop, CORS, proxy headers, logging richieste.
+|   |   |-- main.py - entrypoint FastAPI, lifespan non bloccante, warm-up OHLCV watchlist in background, heartbeat loop, CORS con origin dashboard locale/Tailscale su porta 5176, proxy headers, logging richieste.
 |   |   |-- api/ - router FastAPI e dipendenze API.
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
@@ -187,6 +187,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |       |-- unit/test_alert_store.py - regressione stato alert tra sincronizzazioni (DB-backed da Step 5).
 |       |-- unit/test_auth_scopes.py - separazione scope device, alerts e admin.
 |       |-- unit/test_market_data_rate_limit.py - accodamento richieste oltre soglia.
+|       |-- unit/test_dashboard_cors.py - regressione CORS dashboard: origin localhost/Tailscale su porta 5176 consentiti senza wildcard.
 |       |-- integration/test_support_api.py - flusso ticket utente/admin: profilo device, creazione, reply, risoluzione e chiusura.
 |       |-- unit/test_execution_layer.py - gate gas, approval, RPC, EIP-712, TWAK, retry e x402.
 |       |-- unit/test_execution_providers.py - interfaccia ExecutionProvider, selettore twak/pancakeswap, quote getAmountsOut, costruzione swap tx, guardrail (slippage/gas/gate mainnet), normalizzazione TWAK.
