@@ -1294,7 +1294,7 @@ class AgentService:
                 "original_size": str(pos.size),
                 "levels": [
                     {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None},
-                    {"status": "idle", "sell_price": None, "reentries": 0},
+                    {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None},
                 ],
             }
         orig_size = Decimal(state["original_size"])
@@ -1309,16 +1309,14 @@ class AgentService:
             if lv["status"] in ("idle", "rebought"):
                 crossed = (is_long and price <= level_price) or (not is_long and price >= level_price)
                 if crossed:
-                    # L1 richiede conferma (N candele da 5 min)
-                    if i == 0:
-                        if lv.get("confirm_since") is None:
-                            lv["confirm_since"] = now.isoformat()
-                            changed = True
-                            continue
-                        cs = datetime.fromisoformat(lv["confirm_since"])
-                        elapsed = (now - cs).total_seconds()
-                        if elapsed < ms.perp_smart_sl_confirmation_candles * 300:
-                            continue
+                    if lv.get("confirm_since") is None:
+                        lv["confirm_since"] = now.isoformat()
+                        changed = True
+                        continue
+                    cs = datetime.fromisoformat(lv["confirm_since"])
+                    elapsed = (now - cs).total_seconds()
+                    if elapsed < ms.perp_smart_sl_confirmation_candles * 300:
+                        continue
                     # Vende la porzione
                     if pos.size <= split_size:
                         continue
@@ -1347,8 +1345,7 @@ class AgentService:
 
                     lv["status"] = "sold"
                     lv["sell_price"] = str(sell_price)
-                    if i == 0:
-                        lv["confirm_since"] = None
+                    lv["confirm_since"] = None
                     changed = True
                     logger.info("smart_sl_sell", asset=pos.asset, level=i+1, price=float(sell_price), size=float(split_size), pnl=float(pnl))
                     notifier = get_agent_notifier()
@@ -1363,7 +1360,7 @@ class AgentService:
                         )
                     )
                 else:
-                    if i == 0 and lv.get("confirm_since") is not None:
+                    if lv.get("confirm_since") is not None:
                         lv["confirm_since"] = None
                         changed = True
 
