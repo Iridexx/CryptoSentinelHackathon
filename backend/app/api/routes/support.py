@@ -70,7 +70,14 @@ def _message_response(message) -> SupportMessageResponse:
     )
 
 
-def _ticket_summary(ticket) -> SupportTicketSummary:
+def _ticket_summary(ticket, *, viewer: str = "user") -> SupportTicketSummary:
+    seen_at = ticket.admin_last_seen_at if viewer == "admin" else ticket.user_last_seen_at
+    other_sender = "user" if viewer == "admin" else "admin"
+    messages = getattr(ticket, "messages", []) or []
+    has_unread = any(
+        m.sender_type == other_sender and (seen_at is None or m.created_at > seen_at)
+        for m in messages
+    )
     return SupportTicketSummary(
         ticket_id=ticket.ticket_id,
         user_id=ticket.user_id,
@@ -86,22 +93,25 @@ def _ticket_summary(ticket) -> SupportTicketSummary:
         resolved_at=ticket.resolved_at,
         closed_at=ticket.closed_at,
         closed_by=ticket.closed_by,
-        message_count=len(getattr(ticket, "messages", []) or []),
+        message_count=len(messages),
+        has_unread=has_unread,
     )
 
 
-def _ticket_detail(ticket) -> SupportTicketDetail:
-    summary = _ticket_summary(ticket)
+def _ticket_detail(ticket, *, viewer: str = "user") -> SupportTicketDetail:
+    summary = _ticket_summary(ticket, viewer=viewer)
+    seen_at = ticket.admin_last_seen_at if viewer == "admin" else ticket.user_last_seen_at
     return SupportTicketDetail(
         **summary.model_dump(),
         messages=[_message_response(message) for message in ticket.messages],
+        last_seen_at=seen_at,
     )
 
 
-def _notification_response(count: int, latest_ticket) -> SupportNotificationResponse:
+def _notification_response(count: int, latest_ticket, *, viewer: str = "user") -> SupportNotificationResponse:
     return SupportNotificationResponse(
         unread_count=count,
-        latest_ticket=_ticket_summary(latest_ticket) if latest_ticket is not None else None,
+        latest_ticket=_ticket_summary(latest_ticket, viewer=viewer) if latest_ticket is not None else None,
     )
 
 
@@ -308,7 +318,7 @@ async def list_admin_tickets(
         status=ticket_status,
         include_archived=include_archived,
     )
-    summaries = [_ticket_summary(item) for item in items]
+    summaries = [_ticket_summary(item, viewer="admin") for item in items]
     return SupportTicketListResponse(items=summaries, total=len(summaries))
 
 
@@ -321,7 +331,7 @@ async def admin_notifications(
         user_id=str(DEFAULT_SINGLE_USER_ID),
         viewer="admin",
     )
-    return _notification_response(count, latest)
+    return _notification_response(count, latest, viewer="admin")
 
 
 @router.get("/admin/tickets/{ticket_id}", response_model=SupportTicketDetail)
@@ -337,7 +347,7 @@ async def get_admin_ticket(
     )
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    return _ticket_detail(ticket)
+    return _ticket_detail(ticket, viewer="admin")
 
 
 @router.post("/admin/tickets/{ticket_id}/read", response_model=SupportTicketDetail)
@@ -354,7 +364,7 @@ async def mark_admin_ticket_read(
     )
     if ticket is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    return _ticket_detail(await repo.mark_seen(ticket, viewer="admin"))
+    return _ticket_detail(await repo.mark_seen(ticket, viewer="admin"), viewer="admin")
 
 
 @router.post("/admin/tickets/read-all", response_model=SupportReadAllResponse)
@@ -389,7 +399,7 @@ async def add_admin_message(
         body=request.message,
     )
     await _notify_device(updated, title="Risposta supporto", body=updated.subject)
-    return _ticket_detail(updated)
+    return _ticket_detail(updated, viewer="admin")
 
 
 @router.patch("/admin/tickets/{ticket_id}/status", response_model=SupportTicketDetail)
@@ -406,4 +416,4 @@ async def update_admin_ticket_status(
     updated = await repo.set_status(ticket, status=request.status, actor="admin")
     if request.status in {"resolved", "closed"}:
         await _notify_device(updated, title="Ticket aggiornato", body=f"{updated.subject}: {updated.status}")
-    return _ticket_detail(updated)
+    return _ticket_detail(updated, viewer="admin")

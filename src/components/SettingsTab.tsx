@@ -15,7 +15,6 @@ import { resetDatabase } from '../services/agentApi';
 import {
   adminListSupportTickets,
   adminGetSupportTicket,
-  adminMarkAllSupportTicketsRead,
   adminMarkSupportTicketRead,
   adminReplySupportTicket,
   adminUpdateSupportStatus,
@@ -23,7 +22,6 @@ import {
   createSupportTicket,
   getSupportTicket,
   listSupportTickets,
-  markAllSupportTicketsRead,
   markSupportTicketRead,
   replySupportTicket,
   syncDeviceProfile,
@@ -470,12 +468,6 @@ const SettingsTab: FC<Props> = ({
         ? await adminListSupportTickets(adminToken)
         : await listSupportTickets();
       setSupportTickets(response.items);
-      if (mode === 'admin' && adminToken) {
-        await adminMarkAllSupportTicketsRead(adminToken);
-      } else {
-        await markAllSupportTicketsRead();
-      }
-      onSupportNotificationsChanged?.();
       setSupportState('idle');
     } catch (err) {
       setSupportState('error');
@@ -535,6 +527,9 @@ const SettingsTab: FC<Props> = ({
         await markSupportTicketRead(ticket.ticket_id);
       }
       onSupportNotificationsChanged?.();
+      setSupportTickets((prev) =>
+        prev.map((t) => (t.ticket_id === ticket.ticket_id ? { ...t, has_unread: false } : t)),
+      );
       setSupportState('idle');
     } catch (err) {
       setSupportState('error');
@@ -1099,14 +1094,28 @@ const SettingsTab: FC<Props> = ({
                   onTouchEnd={cancelSupportLongPress}
                   onTouchMove={cancelSupportLongPress}
                   onTouchCancel={cancelSupportLongPress}
-                  className={`w-full text-left px-3 py-2 rounded-lg bg-dark-700 border ${supportDetail?.ticket_id === ticket.ticket_id ? 'border-accent-blue' : 'border-transparent'}`}
+                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                    ticket.has_unread
+                      ? 'bg-amber-500/10 border-amber-500/40 animate-pulse'
+                      : supportDetail?.ticket_id === ticket.ticket_id
+                        ? 'bg-dark-700 border-accent-blue'
+                        : 'bg-dark-700 border-transparent'
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-white truncate">{ticket.subject}</span>
-                    <span className="text-xs text-gray-400 flex-shrink-0">{statusLabel(ticket.status)}</span>
+                    <span className={`text-sm truncate ${ticket.has_unread ? 'text-amber-400 font-semibold' : 'text-white'}`}>{ticket.subject}</span>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {ticket.has_unread && <span className="w-2 h-2 rounded-full bg-amber-400" />}
+                      <span className="text-xs text-gray-400">{statusLabel(ticket.status)}</span>
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5 truncate">
-                    {supportMode === 'admin' ? `${ticket.display_name} · ` : ''}{categoryLabel(ticket.category)} · {priorityLabel(ticket.priority)}
+                    {supportMode === 'admin' ? `${ticket.display_name} · ` : ''}{categoryLabel(ticket.category)} · <span className={
+                      ticket.priority === 'critical' ? 'text-red-400 font-semibold'
+                        : ticket.priority === 'high' ? 'text-orange-400 font-semibold'
+                          : ticket.priority === 'medium' ? 'text-yellow-400'
+                            : 'text-gray-500'
+                    }>{priorityLabel(ticket.priority)}</span>
                   </p>
                 </button>
               ))
@@ -1119,7 +1128,12 @@ const SettingsTab: FC<Props> = ({
                 <div className="min-w-0">
                   <p className="text-sm text-white font-semibold truncate">{supportDetail.subject}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {supportDetail.display_name} · {statusLabel(supportDetail.status)}
+                    {supportDetail.display_name} · {statusLabel(supportDetail.status)} · <span className={
+                      supportDetail.priority === 'critical' ? 'text-red-400 font-semibold'
+                        : supportDetail.priority === 'high' ? 'text-orange-400 font-semibold'
+                          : supportDetail.priority === 'medium' ? 'text-yellow-400'
+                            : 'text-gray-500'
+                    }>{priorityLabel(supportDetail.priority)}</span>
                   </p>
                 </div>
                 {!['closed', 'archived'].includes(supportDetail.status) && (
@@ -1130,18 +1144,32 @@ const SettingsTab: FC<Props> = ({
               </div>
 
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {supportDetail.messages.map((message) => (
-                  <div
-                    key={message.message_id}
-                    className={`px-3 py-2 rounded-lg ${message.sender_type === 'admin' ? 'bg-accent-blue/15' : 'bg-dark-700'}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-gray-400">{message.sender_type === 'admin' ? 'Admin' : 'Utente'}</span>
-                      <span className="text-[11px] text-gray-600">{new Date(message.created_at).toLocaleString('it-IT')}</span>
+                {supportDetail.messages.map((message) => {
+                  const isNew = supportDetail.last_seen_at != null
+                    && new Date(message.created_at) > new Date(supportDetail.last_seen_at)
+                    && message.sender_type !== (supportMode === 'admin' ? 'admin' : 'user');
+                  return (
+                    <div
+                      key={message.message_id}
+                      className={`px-3 py-2 rounded-lg border-l-2 ${
+                        isNew
+                          ? 'bg-amber-500/10 border-l-amber-400'
+                          : message.sender_type === 'admin'
+                            ? 'bg-accent-blue/15 border-l-transparent'
+                            : 'bg-dark-700 border-l-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-semibold ${isNew ? 'text-amber-400' : 'text-gray-400'}`}>
+                          {message.sender_type === 'admin' ? 'Admin' : 'Utente'}
+                          {isNew && ' · Nuovo'}
+                        </span>
+                        <span className="text-[11px] text-gray-600">{new Date(message.created_at).toLocaleString('it-IT')}</span>
+                      </div>
+                      <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{message.body}</p>
                     </div>
-                    <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{message.body}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {supportMode === 'admin' && adminToken && (

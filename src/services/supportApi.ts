@@ -31,10 +31,12 @@ export interface SupportTicketSummary {
   closed_at: string | null;
   closed_by: string | null;
   message_count: number;
+  has_unread: boolean;
 }
 
 export interface SupportTicketDetail extends SupportTicketSummary {
   messages: SupportMessage[];
+  last_seen_at: string | null;
 }
 
 export interface SupportNotificationResponse {

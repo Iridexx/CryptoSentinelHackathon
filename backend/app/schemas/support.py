@@ -83,10 +83,12 @@ class SupportTicketSummary(BaseModel):
     closed_at: datetime | None
     closed_by: str | None
     message_count: int = 0
+    has_unread: bool = False
 
 
 class SupportTicketDetail(SupportTicketSummary):
     messages: list[SupportMessageResponse]
+    last_seen_at: datetime | None = None
 
 
 class SupportTicketListResponse(BaseModel):
