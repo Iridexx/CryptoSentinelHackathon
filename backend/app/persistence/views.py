@@ -481,14 +481,17 @@ def _close_reason(trade) -> str | None:
     """Estrae il motivo di chiusura pulito dalle note (es. 'take_profit_1').
 
     Le chiusure automatiche salvano notes='auto_close:<reason>' (con '_partial'
-    per le chiusure parziali). Le aperture non hanno un motivo di chiusura.
+    per le chiusure parziali). I trade Smart SL usano 'smart_sl:<action>'.
     """
     notes = trade.notes or ""
     prefix = "auto_close:"
-    if not notes.startswith(prefix):
-        return None
-    reason = notes[len(prefix):].replace("_partial", "")
-    return reason or None
+    if notes.startswith(prefix):
+        reason = notes[len(prefix):].replace("_partial", "")
+        return reason or None
+    ssl_prefix = "smart_sl:"
+    if notes.startswith(ssl_prefix):
+        return "smart_sl_" + notes[len(ssl_prefix):]
+    return None
 
 
 def _is_spot_dry_run(trade) -> bool:
