@@ -1274,7 +1274,24 @@ class AgentService:
         if not sl_in_loss:
             return
 
-        dist = abs(entry - isl)
+        # Carica o inizializza lo stato
+        if pos.smart_sl_state:
+            state = json.loads(pos.smart_sl_state)
+        else:
+            state = {
+                "original_size": str(pos.size),
+                "original_entry": str(pos.entry_price),
+                "levels": [
+                    {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None, "rebuy_confirm_since": None},
+                    {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None, "rebuy_confirm_since": None},
+                ],
+            }
+        if "original_entry" not in state:
+            state["original_entry"] = str(pos.entry_price)
+        orig_entry = Decimal(state["original_entry"])
+        orig_size = Decimal(state["original_size"])
+
+        dist = abs(orig_entry - isl)
         if dist == 0:
             return
         fracs = [ms.perp_smart_sl_l1_frac, ms.perp_smart_sl_l2_frac]
@@ -1282,22 +1299,9 @@ class AgentService:
         deltas = [ms.perp_smart_sl_delta_l1, ms.perp_smart_sl_delta_l2]
 
         if is_long:
-            levels = [entry - Decimal(str(f)) * dist for f in fracs]
+            levels = [orig_entry - Decimal(str(f)) * dist for f in fracs]
         else:
-            levels = [entry + Decimal(str(f)) * dist for f in fracs]
-
-        # Carica o inizializza lo stato
-        if pos.smart_sl_state:
-            state = json.loads(pos.smart_sl_state)
-        else:
-            state = {
-                "original_size": str(pos.size),
-                "levels": [
-                    {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None},
-                    {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None},
-                ],
-            }
-        orig_size = Decimal(state["original_size"])
+            levels = [orig_entry + Decimal(str(f)) * dist for f in fracs]
 
         changed = False
         for i in range(2):
@@ -1317,11 +1321,10 @@ class AgentService:
                     elapsed = (now - cs).total_seconds()
                     if elapsed < ms.perp_smart_sl_confirmation_candles * 300:
                         continue
-                    # Vende la porzione
                     if pos.size <= split_size:
                         continue
                     sell_price = price
-                    pnl_per_unit = (sell_price - entry) if is_long else (entry - sell_price)
+                    pnl_per_unit = (sell_price - orig_entry) if is_long else (orig_entry - sell_price)
                     fee_frac = split_size / pos.size
                     fee_share = ((pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))) * fee_frac
                     funding_share = pos.funding_accrued_usd * fee_frac
@@ -1333,9 +1336,14 @@ class AgentService:
                         direction="close", size=split_size, price=sell_price,
                         leverage=pos.leverage, status="confirmed",
                         venue=pos.venue or "agent", timestamp_utc=now,
-                        notes=f"smart_sl:sell_l{i+1}", pnl_usd=pnl,
+                        notes=f"auto_close:smart_sl_sell_l{i+1}", pnl_usd=pnl,
                     )
                     await PerpTradeRepository(session).save(close_trade)
+
+                    # Salva fee pre-sell per ripristinarle al rebuy
+                    lv["pre_sell_opening_fee"] = str(pos.opening_fee_usd or Decimal("0"))
+                    lv["pre_sell_slippage"] = str(pos.slippage_usd or Decimal("0"))
+                    lv["pre_sell_funding"] = str(pos.funding_accrued_usd)
 
                     remaining_frac = (pos.size - split_size) / pos.size
                     pos.size = pos.size - split_size
@@ -1349,7 +1357,7 @@ class AgentService:
                     changed = True
                     logger.info("smart_sl_sell", asset=pos.asset, level=i+1, price=float(sell_price), size=float(split_size), pnl=float(pnl))
                     notifier = get_agent_notifier()
-                    margin = pos.entry_price * orig_size / Decimal(max(int(pos.leverage or 1), 1))
+                    margin = orig_entry * orig_size / Decimal(max(int(pos.leverage or 1), 1))
                     pnl_pct = pnl / margin * 100 if margin > 0 else Decimal("0")
                     asyncio.create_task(
                         notifier.notify_trade_closed(
@@ -1373,25 +1381,42 @@ class AgentService:
                     rebuy_price = sp - delta_dist
                     bounced = price <= rebuy_price
                 if bounced:
-                    new_entry = (pos.size * pos.entry_price + split_size * rebuy_price) / (pos.size + split_size)
-                    pos.entry_price = new_entry.quantize(Decimal("0.000000000000000001"))
+                    if lv.get("rebuy_confirm_since") is None:
+                        lv["rebuy_confirm_since"] = now.isoformat()
+                        changed = True
+                        continue
+                    rcs = datetime.fromisoformat(lv["rebuy_confirm_since"])
+                    r_elapsed = (now - rcs).total_seconds()
+                    if r_elapsed < ms.perp_smart_sl_confirmation_candles * 300:
+                        continue
+
                     pos.size = pos.size + split_size
 
                     rebuy_trade = PerpTrade(
                         trade_id=f"ssl_{pos.position_id}_{uuid4().hex[:8]}",
                         user_id=pos.user_id, asset=pos.asset, side=pos.side,
-                        direction="open", size=split_size, price=rebuy_price,
+                        direction="open", size=split_size, price=price,
                         leverage=pos.leverage, status="confirmed",
                         venue=pos.venue or "agent", timestamp_utc=now,
-                        notes=f"smart_sl:rebuy_l{i+1}", pnl_usd=Decimal("0"),
+                        notes=f"auto_close:smart_sl_rebuy_l{i+1}", pnl_usd=Decimal("0"),
                     )
                     await PerpTradeRepository(session).save(rebuy_trade)
+
+                    # Ripristina fee proporzionali pre-sell
+                    if lv.get("pre_sell_opening_fee"):
+                        pos.opening_fee_usd = Decimal(lv["pre_sell_opening_fee"])
+                    if lv.get("pre_sell_slippage"):
+                        pos.slippage_usd = Decimal(lv["pre_sell_slippage"])
+                    if lv.get("pre_sell_funding"):
+                        pos.funding_accrued_usd = Decimal(lv["pre_sell_funding"])
 
                     lv["status"] = "rebought"
                     lv["reentries"] += 1
                     lv["sell_price"] = None
+                    lv["rebuy_confirm_since"] = None
+                    lv["rebuy_fill_price"] = str(price)
                     changed = True
-                    logger.info("smart_sl_rebuy", asset=pos.asset, level=i+1, price=float(rebuy_price), size=float(split_size))
+                    logger.info("smart_sl_rebuy", asset=pos.asset, level=i+1, price=float(price), size=float(split_size))
                     notifier = get_agent_notifier()
                     asyncio.create_task(
                         notifier.notify_trade_closed(
@@ -1401,6 +1426,10 @@ class AgentService:
                             is_dry_run=ms.execution_mode == "dry_run",
                         )
                     )
+                else:
+                    if lv.get("rebuy_confirm_since") is not None:
+                        lv["rebuy_confirm_since"] = None
+                        changed = True
 
         if changed:
             pos.smart_sl_state = json.dumps(state)

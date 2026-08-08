@@ -1551,7 +1551,7 @@ const SetupPane: FC<{
             <NumberInput label="Split L3 %" value={settings.perp_smart_sl_split_l3} step={0.01} onChange={(perp_smart_sl_split_l3) => patch({ perp_smart_sl_split_l3 })} />
             <NumberInput label="Delta L1" value={settings.perp_smart_sl_delta_l1} step={0.01} onChange={(perp_smart_sl_delta_l1) => patch({ perp_smart_sl_delta_l1 })} />
             <NumberInput label="Delta L2" value={settings.perp_smart_sl_delta_l2} step={0.01} onChange={(perp_smart_sl_delta_l2) => patch({ perp_smart_sl_delta_l2 })} />
-            <NumberInput label="Candele conferma L1" value={settings.perp_smart_sl_confirmation_candles} step={1} onChange={(perp_smart_sl_confirmation_candles) => patch({ perp_smart_sl_confirmation_candles: Math.round(perp_smart_sl_confirmation_candles) })} />
+            <NumberInput label="Candele conferma SSL" value={settings.perp_smart_sl_confirmation_candles} step={1} onChange={(perp_smart_sl_confirmation_candles) => patch({ perp_smart_sl_confirmation_candles: Math.round(perp_smart_sl_confirmation_candles) })} />
             <NumberInput label="Max reentries" value={settings.perp_smart_sl_max_reentries} step={1} onChange={(perp_smart_sl_max_reentries) => patch({ perp_smart_sl_max_reentries: Math.round(perp_smart_sl_max_reentries) })} />
           </div>
         )}
@@ -1833,87 +1833,114 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
     <button onClick={onBack} className="rounded-lg bg-dark-800 px-3 py-2 text-sm font-semibold text-gray-300">
       Back
     </button>
-    {detail.chart && (
-      <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-white">{detail.chart.live ? 'Grafico posizione (live)' : 'Grafico del trade'}</h3>
-          <span className="text-xs text-gray-500">{detail.chart.interval}</span>
-        </div>
-        <TradeCandleChart chart={detail.chart} />
-        <div className="flex flex-wrap gap-3 text-[10px] text-gray-400">
-          <span>⚪ Entry</span>
-          <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.chart.live ? 'Ora' : 'Exit'}</span>
-          <span className="text-accent-red">- - SL</span>
-          {detail.chart.stop_reference && <span className="text-purple-300">- - SL ref</span>}
-          <span className="text-accent-green">- - TP</span>
-        </div>
-      </section>
-    )}
-    <section className="rounded-xl bg-dark-800 px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold text-white">{detail.asset}</h3>
-          <p className="text-xs text-gray-500">{detail.market} / {detail.direction}</p>
-        </div>
-        <span className={detail.is_simulated ? 'rounded-full bg-accent-yellow/15 px-2 py-1 text-xs text-accent-yellow' : 'rounded-full bg-accent-green/15 px-2 py-1 text-xs text-accent-green'}>
-          {detail.is_simulated ? 'dry-run' : 'live'}
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Stat label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
-        <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
-        <Stat label="Entry" value={fmtPriceFull(detail.entry_price)} />
-        <Stat label="Now/Exit" value={fmtPriceFull(detail.current_or_exit_price)} />
-        <Stat label="Size" value={detail.size} />
-        <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
-      </div>
-      {detail.fee_mode && (
-        <>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase text-gray-500">Costi posizione</span>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${detail.fee_mode === 'none' ? 'bg-gray-700 text-gray-300' : detail.fee_mode === 'maker' ? 'bg-accent-green/15 text-accent-green' : 'bg-accent-yellow/15 text-accent-yellow'}`}>
-              {detail.fee_mode === 'none' ? 'Nessuna fee' : detail.fee_mode === 'maker' ? 'Maker (limit)' : detail.fee_mode === 'all' ? 'Swap + Slippage' : 'Taker (market)'}
-            </span>
+    {detail.is_smart_sl ? (
+      /* ── Vista dedicata per trade Smart SL (no grafico) ── */
+      <section className="rounded-xl bg-dark-800 px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-white">{detail.asset}</h3>
+            <p className="text-xs text-gray-500">{detail.market} / {detail.direction}</p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {/* perp-specific */}
-            {detail.margin_usd != null && <Stat label="Margine" value={fmtUsd(detail.margin_usd)} />}
-            {detail.opening_fee_usd != null && <Stat label="Fee applicata" value={fmtUsd(detail.opening_fee_usd)} tone="bad" />}
-            {detail.taker_fee_usd != null && <Stat label="Fee taker (0.06%)" value={fmtUsd(detail.taker_fee_usd)} />}
-            {detail.maker_fee_usd != null && <Stat label="Fee maker (0.02%)" value={fmtUsd(detail.maker_fee_usd)} />}
-            {detail.funding_accrued_usd != null && <Stat label="Funding maturato" value={fmtUsd(detail.funding_accrued_usd)} tone={Number(detail.funding_accrued_usd) >= 0 ? 'good' : 'bad'} />}
-            {detail.funding_rate_8h != null && <Stat label="Funding rate (8h)" value={`${(Number(detail.funding_rate_8h) * 100).toFixed(4)}%`} />}
-            {/* spot-specific */}
-            {detail.swap_fee_usd != null && <Stat label="Swap fee (0.05%)" value={fmtUsd(detail.swap_fee_usd)} tone="bad" />}
-            {detail.gas_cost_bnb != null && <Stat label="Gas (BNB)" value={Number(detail.gas_cost_bnb).toFixed(6)} />}
-            {/* shared */}
-            {detail.slippage_usd != null && Number(detail.slippage_usd) > 0 && <Stat label="Slippage" value={fmtUsd(detail.slippage_usd)} tone="bad" />}
-          </div>
-        </>
-      )}
-    </section>
-    <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
-      <h3 className="text-sm font-semibold text-white">Risk levels</h3>
-      {[
-        ['Stop loss', detail.stop_loss],
-        ...(detail.market === 'perp' ? [[
-          detail.stop_reference_field === 'high' ? 'Max candela ref SL' : 'Min candela ref SL',
-          detail.stop_reference_price,
-        ] as [string, string | null | undefined]] : []),
-        ...(detail.market === 'perp' ? [['Liquidation', detail.liquidation_price] as [string, string | null | undefined]] : []),
-        ['Breakeven', detail.breakeven_price],
-        ['Take profit 1', detail.take_profit_1],
-        ['Take profit 2', detail.take_profit_2],
-        ['Trailing stop', detail.trailing_stop],
-      ].map(([label, value]) => (
-        <div key={label} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
-          <span className="text-gray-500">{label}</span>
-          <span className={value ? 'text-white' : 'text-gray-600'}>
-            {value ? fmtPriceFull(value) : (label === 'Trailing stop' ? 'Non attivo' : '---')}
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${detail.ssl_action === 'sell' ? 'bg-amber-500/15 text-amber-400' : 'bg-sky-500/15 text-sky-400'}`}>
+            Smart SL {detail.ssl_action === 'sell' ? 'Sell' : 'Rebuy'} L{detail.ssl_level}
           </span>
         </div>
-      ))}
-    </section>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Stat label="Azione" value={detail.ssl_action === 'sell' ? 'Vendita parziale' : 'Riacquisto'} />
+          <Stat label="Livello" value={`L${detail.ssl_level}`} />
+          <Stat label="Prezzo esecuzione" value={fmtPriceFull(detail.current_or_exit_price)} />
+          <Stat label="Size" value={detail.size} />
+          <Stat label="Entry originale" value={fmtPriceFull(detail.entry_price)} />
+          <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
+          {detail.ssl_action === 'sell' && (
+            <Stat label="PnL parziale" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
+          )}
+          <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
+        </div>
+      </section>
+    ) : (
+      /* ── Vista normale con grafico ── */
+      <>
+        {detail.chart && (
+          <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">{detail.chart.live ? 'Grafico posizione (live)' : 'Grafico del trade'}</h3>
+              <span className="text-xs text-gray-500">{detail.chart.interval}</span>
+            </div>
+            <TradeCandleChart chart={detail.chart} />
+            <div className="flex flex-wrap gap-3 text-[10px] text-gray-400">
+              <span>⚪ Entry</span>
+              <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.chart.live ? 'Ora' : 'Exit'}</span>
+              <span className="text-accent-red">- - SL</span>
+              {detail.chart.stop_reference && <span className="text-purple-300">- - SL ref</span>}
+              <span className="text-accent-green">- - TP</span>
+            </div>
+          </section>
+        )}
+        <section className="rounded-xl bg-dark-800 px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white">{detail.asset}</h3>
+              <p className="text-xs text-gray-500">{detail.market} / {detail.direction}</p>
+            </div>
+            <span className={detail.is_simulated ? 'rounded-full bg-accent-yellow/15 px-2 py-1 text-xs text-accent-yellow' : 'rounded-full bg-accent-green/15 px-2 py-1 text-xs text-accent-green'}>
+              {detail.is_simulated ? 'dry-run' : 'live'}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Stat label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
+            <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
+            <Stat label="Entry" value={fmtPriceFull(detail.entry_price)} />
+            <Stat label="Now/Exit" value={fmtPriceFull(detail.current_or_exit_price)} />
+            <Stat label="Size" value={detail.size} />
+            <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
+          </div>
+          {detail.fee_mode && (
+            <>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase text-gray-500">Costi posizione</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${detail.fee_mode === 'none' ? 'bg-gray-700 text-gray-300' : detail.fee_mode === 'maker' ? 'bg-accent-green/15 text-accent-green' : 'bg-accent-yellow/15 text-accent-yellow'}`}>
+                  {detail.fee_mode === 'none' ? 'Nessuna fee' : detail.fee_mode === 'maker' ? 'Maker (limit)' : detail.fee_mode === 'all' ? 'Swap + Slippage' : 'Taker (market)'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {detail.margin_usd != null && <Stat label="Margine" value={fmtUsd(detail.margin_usd)} />}
+                {detail.opening_fee_usd != null && <Stat label="Fee applicata" value={fmtUsd(detail.opening_fee_usd)} tone="bad" />}
+                {detail.taker_fee_usd != null && <Stat label="Fee taker (0.06%)" value={fmtUsd(detail.taker_fee_usd)} />}
+                {detail.maker_fee_usd != null && <Stat label="Fee maker (0.02%)" value={fmtUsd(detail.maker_fee_usd)} />}
+                {detail.funding_accrued_usd != null && <Stat label="Funding maturato" value={fmtUsd(detail.funding_accrued_usd)} tone={Number(detail.funding_accrued_usd) >= 0 ? 'good' : 'bad'} />}
+                {detail.funding_rate_8h != null && <Stat label="Funding rate (8h)" value={`${(Number(detail.funding_rate_8h) * 100).toFixed(4)}%`} />}
+                {detail.swap_fee_usd != null && <Stat label="Swap fee (0.05%)" value={fmtUsd(detail.swap_fee_usd)} tone="bad" />}
+                {detail.gas_cost_bnb != null && <Stat label="Gas (BNB)" value={Number(detail.gas_cost_bnb).toFixed(6)} />}
+                {detail.slippage_usd != null && Number(detail.slippage_usd) > 0 && <Stat label="Slippage" value={fmtUsd(detail.slippage_usd)} tone="bad" />}
+              </div>
+            </>
+          )}
+        </section>
+        <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
+          <h3 className="text-sm font-semibold text-white">Risk levels</h3>
+          {[
+            ['Stop loss', detail.stop_loss],
+            ...(detail.market === 'perp' ? [[
+              detail.stop_reference_field === 'high' ? 'Max candela ref SL' : 'Min candela ref SL',
+              detail.stop_reference_price,
+            ] as [string, string | null | undefined]] : []),
+            ...(detail.market === 'perp' ? [['Liquidation', detail.liquidation_price] as [string, string | null | undefined]] : []),
+            ['Breakeven', detail.breakeven_price],
+            ['Take profit 1', detail.take_profit_1],
+            ['Take profit 2', detail.take_profit_2],
+            ['Trailing stop', detail.trailing_stop],
+          ].map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2 text-xs">
+              <span className="text-gray-500">{label}</span>
+              <span className={value ? 'text-white' : 'text-gray-600'}>
+                {value ? fmtPriceFull(value) : (label === 'Trailing stop' ? 'Non attivo' : '---')}
+              </span>
+            </div>
+          ))}
+        </section>
+      </>
+    )}
     {detail.market === 'perp' && detail.smart_sl_levels && (
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
         <h3 className="text-sm font-semibold text-white">Smart Stop Loss</h3>
@@ -1932,8 +1959,14 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
               </div>
               {stateInfo?.fill_price && (
                 <div className="mt-1 flex items-center justify-between text-amber-400/80">
-                  <span>Fill reale</span>
+                  <span>Fill vendita</span>
                   <span className="font-semibold">{fmtPriceFull(stateInfo.fill_price)}</span>
+                </div>
+              )}
+              {stateInfo?.rebuy_fill_price && (
+                <div className="mt-1 flex items-center justify-between text-sky-400/80">
+                  <span>Fill rebuy</span>
+                  <span className="font-semibold">{fmtPriceFull(stateInfo.rebuy_fill_price)}</span>
                 </div>
               )}
             </div>

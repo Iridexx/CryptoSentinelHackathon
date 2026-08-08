@@ -859,10 +859,19 @@ def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
 
 
 def _smart_sl_detail(position) -> dict:
-    """Livelli Smart SL calcolati da entry/initial_stop_loss + stato corrente."""
+    """Livelli Smart SL calcolati da original_entry/initial_stop_loss + stato corrente."""
     if position is None or getattr(position, "initial_stop_loss", None) is None:
         return {"smart_sl_levels": None, "smart_sl_state_summary": None}
-    entry = Decimal(str(position.entry_price))
+
+    raw = getattr(position, "smart_sl_state", None)
+    state = None
+    if raw:
+        try:
+            state = json.loads(raw)
+        except (ValueError, KeyError):
+            pass
+
+    entry = Decimal(str(state["original_entry"])) if state and "original_entry" in state else Decimal(str(position.entry_price))
     isl = Decimal(str(position.initial_stop_loss))
     is_long = position.side == "long"
     dist = abs(entry - isl)
@@ -876,21 +885,17 @@ def _smart_sl_detail(position) -> dict:
         prices = [entry + f * dist for f in fracs]
 
     summary = None
-    raw = getattr(position, "smart_sl_state", None)
-    if raw:
-        try:
-            state = json.loads(raw)
-            levels_state = state.get("levels", [])
-            summary = [
-                {
-                    "status": lv.get("status", "idle"),
-                    "reentries": lv.get("reentries", 0),
-                    "fill_price": lv.get("sell_price"),
-                }
-                for lv in levels_state
-            ]
-        except (ValueError, KeyError):
-            pass
+    if state:
+        levels_state = state.get("levels", [])
+        summary = [
+            {
+                "status": lv.get("status", "idle"),
+                "reentries": lv.get("reentries", 0),
+                "fill_price": lv.get("sell_price"),
+                "rebuy_fill_price": lv.get("rebuy_fill_price"),
+            }
+            for lv in levels_state
+        ]
 
     return {
         "smart_sl_levels": [_fmt_price(p) for p in prices],
@@ -1044,12 +1049,13 @@ def _perp_trade_detail(
     if chart is not None and post_close_candles:
         chart = {**chart, "post_close_candles": post_close_candles}
     is_close = trade.trade_id.startswith("cls_")
+    is_ssl = trade.trade_id.startswith("ssl_")
     entry = (
         Decimal(position.entry_price) if position is not None
         else Decimal(str(chart["entry_price"])) if chart
         else Decimal(trade.price)
     )
-    if is_close:
+    if is_close or is_ssl:
         current = Decimal(trade.price)
     elif position is not None:
         current = Decimal(position.current_price)
@@ -1057,7 +1063,7 @@ def _perp_trade_detail(
         current = Decimal(str(chart["exit_price"]))
     else:
         current = Decimal(trade.price)
-    size = Decimal(trade.size) if (is_close or position is None) else Decimal(position.size)
+    size = Decimal(trade.size) if (is_close or is_ssl or position is None) else Decimal(position.size)
     if trade.pnl_usd is not None:
         pnl = Decimal(trade.pnl_usd)
     elif position is not None:
@@ -1065,7 +1071,35 @@ def _perp_trade_detail(
     else:
         pnl = Decimal("0")
     leverage = trade.leverage or (position.leverage if position is not None else None)
-    opened_at, closed_at = _trade_timeline(trade, position, chart, is_close)
+    opened_at, closed_at = _trade_timeline(trade, position, chart, is_close or is_ssl)
+
+    if is_ssl:
+        return {
+            "trade_id": trade.trade_id,
+            "asset": trade.asset,
+            "market": "perp",
+            "direction": trade.side,
+            "is_smart_sl": True,
+            "ssl_action": "sell" if trade.direction == "close" else "rebuy",
+            "ssl_level": trade.notes.split("_l")[-1] if trade.notes else None,
+            "entry_price": _fmt_price(entry),
+            "current_or_exit_price": _fmt_price(current),
+            "pnl_usd": _signed(_q2(pnl)),
+            "pnl_pct": _pnl_pct(pnl, entry, size, leverage or 1),
+            "size": _fmt_price(size),
+            "leverage": leverage,
+            "exposure_usd": _q2(size * current),
+            "opened_at": opened_at,
+            "closed_at": closed_at,
+            "duration_seconds": None,
+            "close_reason": _close_reason(trade),
+            "decision": None,
+            "events": [],
+            **_smart_sl_detail(position),
+            "chart": None,
+            "is_simulated": trade.trade_id.startswith("dry_") or trade.venue == "dry_run",
+        }
+
     return {
         "trade_id": trade.trade_id,
         "asset": trade.asset,

@@ -287,8 +287,11 @@ export interface TradeDetail {
   opened_at: string;
   closed_at?: string | null;
   close_reason?: string | null;
+  is_smart_sl?: boolean;
+  ssl_action?: 'sell' | 'rebuy';
+  ssl_level?: string | null;
   smart_sl_levels?: string[] | null;
-  smart_sl_state_summary?: { status: string; reentries: number; fill_price?: string | null }[] | null;
+  smart_sl_state_summary?: { status: string; reentries: number; fill_price?: string | null; rebuy_fill_price?: string | null }[] | null;
   chart?: TradeChart | null;
   is_simulated: boolean;
 }
