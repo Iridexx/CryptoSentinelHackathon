@@ -266,6 +266,16 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "trend_shock_natr_percentile": "perp_trend_shock_natr_percentile",
         "trend_shock_volume_threshold": "perp_trend_shock_volume_threshold",
         "trend_shock_recovery_confirmations": "perp_trend_shock_recovery_confirmations",
+        "smart_sl_enabled": "perp_smart_sl_enabled",
+        "smart_sl_l1_frac": "perp_smart_sl_l1_frac",
+        "smart_sl_l2_frac": "perp_smart_sl_l2_frac",
+        "smart_sl_split_l1": "perp_smart_sl_split_l1",
+        "smart_sl_split_l2": "perp_smart_sl_split_l2",
+        "smart_sl_split_l3": "perp_smart_sl_split_l3",
+        "smart_sl_delta_l1": "perp_smart_sl_delta_l1",
+        "smart_sl_delta_l2": "perp_smart_sl_delta_l2",
+        "smart_sl_confirmation_candles": "perp_smart_sl_confirmation_candles",
+        "smart_sl_max_reentries": "perp_smart_sl_max_reentries",
     },
     "signal_engine": {
         "binance_futures_base_url": "binance_futures_base_url",
@@ -644,6 +654,17 @@ class Settings(BaseSettings):
     perp_trend_shock_natr_percentile: float = Field(default=90.0, alias="PERP_TREND_SHOCK_NATR_PERCENTILE")
     perp_trend_shock_volume_threshold: float = Field(default=2.0, alias="PERP_TREND_SHOCK_VOLUME_THRESHOLD")
     perp_trend_shock_recovery_confirmations: int = Field(default=3, alias="PERP_TREND_SHOCK_RECOVERY_CONFIRMATIONS")
+    # Smart Stop Loss
+    perp_smart_sl_enabled: bool = Field(default=True, alias="PERP_SMART_SL_ENABLED")
+    perp_smart_sl_l1_frac: float = Field(default=0.333, alias="PERP_SMART_SL_L1_FRAC")
+    perp_smart_sl_l2_frac: float = Field(default=0.666, alias="PERP_SMART_SL_L2_FRAC")
+    perp_smart_sl_split_l1: float = Field(default=0.25, alias="PERP_SMART_SL_SPLIT_L1")
+    perp_smart_sl_split_l2: float = Field(default=0.55, alias="PERP_SMART_SL_SPLIT_L2")
+    perp_smart_sl_split_l3: float = Field(default=0.20, alias="PERP_SMART_SL_SPLIT_L3")
+    perp_smart_sl_delta_l1: float = Field(default=0.08, alias="PERP_SMART_SL_DELTA_L1")
+    perp_smart_sl_delta_l2: float = Field(default=0.16, alias="PERP_SMART_SL_DELTA_L2")
+    perp_smart_sl_confirmation_candles: int = Field(default=3, alias="PERP_SMART_SL_CONFIRMATION_CANDLES")
+    perp_smart_sl_max_reentries: int = Field(default=2, alias="PERP_SMART_SL_MAX_REENTRIES")
 
     binance_futures_base_url: str | None = Field(default=None, alias="BINANCE_FUTURES_BASE_URL")
     binance_futures_ws_url: str | None = Field(default=None, alias="BINANCE_FUTURES_WS_URL")

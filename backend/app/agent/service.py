@@ -167,6 +167,16 @@ class AgentService:
             perp_trend_shock_natr_percentile=getattr(self.settings, "perp_trend_shock_natr_percentile", 90.0),
             perp_trend_shock_volume_threshold=getattr(self.settings, "perp_trend_shock_volume_threshold", 2.0),
             perp_trend_shock_recovery_confirmations=getattr(self.settings, "perp_trend_shock_recovery_confirmations", 3),
+            perp_smart_sl_enabled=getattr(self.settings, "perp_smart_sl_enabled", True),
+            perp_smart_sl_l1_frac=getattr(self.settings, "perp_smart_sl_l1_frac", 0.333),
+            perp_smart_sl_l2_frac=getattr(self.settings, "perp_smart_sl_l2_frac", 0.666),
+            perp_smart_sl_split_l1=getattr(self.settings, "perp_smart_sl_split_l1", 0.25),
+            perp_smart_sl_split_l2=getattr(self.settings, "perp_smart_sl_split_l2", 0.55),
+            perp_smart_sl_split_l3=getattr(self.settings, "perp_smart_sl_split_l3", 0.20),
+            perp_smart_sl_delta_l1=getattr(self.settings, "perp_smart_sl_delta_l1", 0.08),
+            perp_smart_sl_delta_l2=getattr(self.settings, "perp_smart_sl_delta_l2", 0.16),
+            perp_smart_sl_confirmation_candles=getattr(self.settings, "perp_smart_sl_confirmation_candles", 3),
+            perp_smart_sl_max_reentries=getattr(self.settings, "perp_smart_sl_max_reentries", 2),
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -1246,6 +1256,140 @@ class AgentService:
         logger.info("perp_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
         return pnl
 
+    async def _process_smart_sl(
+        self,
+        session: AsyncSession,
+        pos: PerpPosition,
+        price: Decimal,
+        ms: AgentMobileSettings,
+        now: datetime,
+    ) -> None:
+        """Smart Stop Loss: vende parzialmente su livelli intermedi, ricompra su rimbalzo."""
+        if pos.initial_stop_loss is None:
+            return
+        is_long = pos.side == "long"
+        entry = pos.entry_price
+        isl = pos.initial_stop_loss
+        sl_in_loss = (is_long and pos.stop_loss < entry) or (not is_long and pos.stop_loss > entry)
+        if not sl_in_loss:
+            return
+
+        dist = abs(entry - isl)
+        if dist == 0:
+            return
+        fracs = [ms.perp_smart_sl_l1_frac, ms.perp_smart_sl_l2_frac]
+        splits = [ms.perp_smart_sl_split_l1, ms.perp_smart_sl_split_l2]
+        deltas = [ms.perp_smart_sl_delta_l1, ms.perp_smart_sl_delta_l2]
+
+        if is_long:
+            levels = [entry - Decimal(str(f)) * dist for f in fracs]
+        else:
+            levels = [entry + Decimal(str(f)) * dist for f in fracs]
+
+        # Carica o inizializza lo stato
+        if pos.smart_sl_state:
+            state = json.loads(pos.smart_sl_state)
+        else:
+            state = {
+                "original_size": str(pos.size),
+                "levels": [
+                    {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None},
+                    {"status": "idle", "sell_price": None, "reentries": 0},
+                ],
+            }
+        orig_size = Decimal(state["original_size"])
+
+        changed = False
+        for i in range(2):
+            lv = state["levels"][i]
+            level_price = levels[i]
+            split_size = (orig_size * Decimal(str(splits[i]))).quantize(Decimal("0.000001"))
+            delta_dist = Decimal(str(deltas[i])) * dist
+
+            if lv["status"] in ("idle", "rebought"):
+                crossed = (is_long and price <= level_price) or (not is_long and price >= level_price)
+                if crossed:
+                    # L1 richiede conferma (N candele da 5 min)
+                    if i == 0:
+                        if lv.get("confirm_since") is None:
+                            lv["confirm_since"] = now.isoformat()
+                            changed = True
+                            continue
+                        cs = datetime.fromisoformat(lv["confirm_since"])
+                        elapsed = (now - cs).total_seconds()
+                        if elapsed < ms.perp_smart_sl_confirmation_candles * 300:
+                            continue
+                    # Vende la porzione
+                    if pos.size <= split_size:
+                        continue
+                    sell_price = price
+                    pnl_per_unit = (sell_price - entry) if is_long else (entry - sell_price)
+                    fee_frac = split_size / pos.size
+                    fee_share = ((pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))) * fee_frac
+                    funding_share = pos.funding_accrued_usd * fee_frac
+                    pnl = pnl_per_unit * split_size - fee_share + funding_share
+
+                    close_trade = PerpTrade(
+                        trade_id=f"ssl_{pos.position_id}_{uuid4().hex[:8]}",
+                        user_id=pos.user_id, asset=pos.asset, side=pos.side,
+                        direction="close", size=split_size, price=sell_price,
+                        leverage=pos.leverage, status="confirmed",
+                        venue=pos.venue or "agent", timestamp_utc=now,
+                        notes=f"smart_sl:sell_l{i+1}", pnl_usd=pnl,
+                    )
+                    await PerpTradeRepository(session).save(close_trade)
+
+                    remaining_frac = (pos.size - split_size) / pos.size
+                    pos.size = pos.size - split_size
+                    pos.opening_fee_usd = (pos.opening_fee_usd or Decimal("0")) * remaining_frac
+                    pos.slippage_usd = (pos.slippage_usd or Decimal("0")) * remaining_frac
+                    pos.funding_accrued_usd = pos.funding_accrued_usd * remaining_frac
+
+                    lv["status"] = "sold"
+                    lv["sell_price"] = str(sell_price)
+                    if i == 0:
+                        lv["confirm_since"] = None
+                    changed = True
+                    logger.info("smart_sl_sell", asset=pos.asset, level=i+1, price=float(sell_price), size=float(split_size), pnl=float(pnl))
+                else:
+                    if i == 0 and lv.get("confirm_since") is not None:
+                        lv["confirm_since"] = None
+                        changed = True
+
+            elif lv["status"] == "sold" and lv["reentries"] < ms.perp_smart_sl_max_reentries:
+                sp = Decimal(lv["sell_price"])
+                if is_long:
+                    rebuy_price = sp + delta_dist
+                    bounced = price >= rebuy_price
+                else:
+                    rebuy_price = sp - delta_dist
+                    bounced = price <= rebuy_price
+                if bounced:
+                    new_entry = (pos.size * pos.entry_price + split_size * rebuy_price) / (pos.size + split_size)
+                    pos.entry_price = new_entry.quantize(Decimal("0.000000000000000001"))
+                    pos.size = pos.size + split_size
+
+                    rebuy_trade = PerpTrade(
+                        trade_id=f"ssl_{pos.position_id}_{uuid4().hex[:8]}",
+                        user_id=pos.user_id, asset=pos.asset, side=pos.side,
+                        direction="open", size=split_size, price=rebuy_price,
+                        leverage=pos.leverage, status="confirmed",
+                        venue=pos.venue or "agent", timestamp_utc=now,
+                        notes=f"smart_sl:rebuy_l{i+1}", pnl_usd=Decimal("0"),
+                    )
+                    await PerpTradeRepository(session).save(rebuy_trade)
+
+                    lv["status"] = "rebought"
+                    lv["reentries"] += 1
+                    lv["sell_price"] = None
+                    changed = True
+                    logger.info("smart_sl_rebuy", asset=pos.asset, level=i+1, price=float(rebuy_price), size=float(split_size))
+
+        if changed:
+            pos.smart_sl_state = json.dumps(state)
+            pos.updated_at = now
+            session.add(pos)
+
     async def _check_sl_tp(
         self,
         session: AsyncSession,
@@ -1443,6 +1587,10 @@ class AgentService:
                     # Stesso guard per gli short: trail deve essere <= entry (in profitto).
                     if ms.perp_trailing_enabled and trail <= pos.entry_price and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
+
+            # ── Smart Stop Loss (vende parzialmente prima del SL classico) ──
+            if ms.perp_smart_sl_enabled and pos.initial_stop_loss is not None:
+                await self._process_smart_sl(session, pos, price, ms, now)
 
             # ── Uscite — trailing (se più protettivo) → stop → TP2 → TP1 → time ──
             if ms.perp_trailing_enabled and pos.trailing_stop is not None and (

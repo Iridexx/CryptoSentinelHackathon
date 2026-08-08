@@ -125,6 +125,16 @@ const defaultSettings: AgentMobileSettings = {
   perp_trend_shock_natr_percentile: 90,
   perp_trend_shock_volume_threshold: 2.0,
   perp_trend_shock_recovery_confirmations: 3,
+  perp_smart_sl_enabled: true,
+  perp_smart_sl_l1_frac: 0.333,
+  perp_smart_sl_l2_frac: 0.666,
+  perp_smart_sl_split_l1: 0.25,
+  perp_smart_sl_split_l2: 0.55,
+  perp_smart_sl_split_l3: 0.20,
+  perp_smart_sl_delta_l1: 0.08,
+  perp_smart_sl_delta_l2: 0.16,
+  perp_smart_sl_confirmation_candles: 3,
+  perp_smart_sl_max_reentries: 2,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
   spot_sl_mode: 'atr' as const,
@@ -1516,6 +1526,24 @@ const SetupPane: FC<{
             <NumberInput label="NATR percentile" value={settings.perp_trend_shock_natr_percentile} onChange={(perp_trend_shock_natr_percentile) => patch({ perp_trend_shock_natr_percentile })} />
             <NumberInput label="Volume threshold" value={settings.perp_trend_shock_volume_threshold} onChange={(perp_trend_shock_volume_threshold) => patch({ perp_trend_shock_volume_threshold })} />
             <NumberInput label="Recovery checks" value={settings.perp_trend_shock_recovery_confirmations} onChange={(perp_trend_shock_recovery_confirmations) => patch({ perp_trend_shock_recovery_confirmations })} />
+          </div>
+        )}
+        <ToggleInput
+          label="Smart Stop Loss Perp"
+          checked={settings.perp_smart_sl_enabled}
+          onChange={(perp_smart_sl_enabled) => patch({ perp_smart_sl_enabled })}
+        />
+        {settings.perp_smart_sl_enabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <NumberInput label="L1 frac" value={settings.perp_smart_sl_l1_frac} step={0.01} onChange={(perp_smart_sl_l1_frac) => patch({ perp_smart_sl_l1_frac })} />
+            <NumberInput label="L2 frac" value={settings.perp_smart_sl_l2_frac} step={0.01} onChange={(perp_smart_sl_l2_frac) => patch({ perp_smart_sl_l2_frac })} />
+            <NumberInput label="Split L1 %" value={settings.perp_smart_sl_split_l1} step={0.01} onChange={(perp_smart_sl_split_l1) => patch({ perp_smart_sl_split_l1 })} />
+            <NumberInput label="Split L2 %" value={settings.perp_smart_sl_split_l2} step={0.01} onChange={(perp_smart_sl_split_l2) => patch({ perp_smart_sl_split_l2 })} />
+            <NumberInput label="Split L3 %" value={settings.perp_smart_sl_split_l3} step={0.01} onChange={(perp_smart_sl_split_l3) => patch({ perp_smart_sl_split_l3 })} />
+            <NumberInput label="Delta L1" value={settings.perp_smart_sl_delta_l1} step={0.01} onChange={(perp_smart_sl_delta_l1) => patch({ perp_smart_sl_delta_l1 })} />
+            <NumberInput label="Delta L2" value={settings.perp_smart_sl_delta_l2} step={0.01} onChange={(perp_smart_sl_delta_l2) => patch({ perp_smart_sl_delta_l2 })} />
+            <NumberInput label="Candele conferma L1" value={settings.perp_smart_sl_confirmation_candles} step={1} onChange={(perp_smart_sl_confirmation_candles) => patch({ perp_smart_sl_confirmation_candles: Math.round(perp_smart_sl_confirmation_candles) })} />
+            <NumberInput label="Max reentries" value={settings.perp_smart_sl_max_reentries} step={1} onChange={(perp_smart_sl_max_reentries) => patch({ perp_smart_sl_max_reentries: Math.round(perp_smart_sl_max_reentries) })} />
           </div>
         )}
       </section>

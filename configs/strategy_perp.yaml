@@ -42,3 +42,14 @@ perp:
   trend_shock_natr_percentile: 90     # NATR percentile >= soglia -> +1
   trend_shock_volume_threshold: 2.0   # relative volume >= soglia -> +1
   trend_shock_recovery_confirmations: 3  # check consecutivi score<=1 per tornare NORMAL
+  # Smart Stop Loss: uscita scalata su 3 livelli con rebuy su rimbalzo
+  smart_sl_enabled: true
+  smart_sl_l1_frac: 0.333            # L1 = 33.3% della distanza entry→SL
+  smart_sl_l2_frac: 0.666            # L2 = 66.6%
+  smart_sl_split_l1: 0.25            # 25% della size venduta a L1
+  smart_sl_split_l2: 0.55            # 55% a L2
+  smart_sl_split_l3: 0.20            # 20% rimane, chiuso dal classico SL
+  smart_sl_delta_l1: 0.08            # 8% di dist: rimbalzo per rebuy L1
+  smart_sl_delta_l2: 0.16            # 16% di dist: rimbalzo per rebuy L2/L3
+  smart_sl_confirmation_candles: 3   # candele 5min di conferma prima di vendere L1
+  smart_sl_max_reentries: 2          # max cicli sell→rebuy per livello

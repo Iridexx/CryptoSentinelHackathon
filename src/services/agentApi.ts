@@ -313,6 +313,16 @@ export interface AgentMobileSettings {
   perp_trend_shock_natr_percentile: number;
   perp_trend_shock_volume_threshold: number;
   perp_trend_shock_recovery_confirmations: number;
+  perp_smart_sl_enabled: boolean;
+  perp_smart_sl_l1_frac: number;
+  perp_smart_sl_l2_frac: number;
+  perp_smart_sl_split_l1: number;
+  perp_smart_sl_split_l2: number;
+  perp_smart_sl_split_l3: number;
+  perp_smart_sl_delta_l1: number;
+  perp_smart_sl_delta_l2: number;
+  perp_smart_sl_confirmation_candles: number;
+  perp_smart_sl_max_reentries: number;
   spot_breakeven_mode: string;
   perp_breakeven_mode: string;
   spot_sl_mode: string;

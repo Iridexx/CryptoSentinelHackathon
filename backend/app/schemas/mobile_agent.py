@@ -38,6 +38,17 @@ class AgentMobileSettings(BaseModel):
     perp_trend_shock_natr_percentile: float = Field(default=90.0, ge=50.0, le=99.0)
     perp_trend_shock_volume_threshold: float = Field(default=2.0, ge=1.0, le=10.0)
     perp_trend_shock_recovery_confirmations: int = Field(default=3, ge=1, le=10)
+    # Smart Stop Loss perp
+    perp_smart_sl_enabled: bool = True
+    perp_smart_sl_l1_frac: float = Field(default=0.333, ge=0.1, le=0.5)
+    perp_smart_sl_l2_frac: float = Field(default=0.666, ge=0.4, le=0.9)
+    perp_smart_sl_split_l1: float = Field(default=0.25, ge=0.05, le=0.5)
+    perp_smart_sl_split_l2: float = Field(default=0.55, ge=0.1, le=0.7)
+    perp_smart_sl_split_l3: float = Field(default=0.20, ge=0.05, le=0.5)
+    perp_smart_sl_delta_l1: float = Field(default=0.08, ge=0.02, le=0.5)
+    perp_smart_sl_delta_l2: float = Field(default=0.16, ge=0.02, le=0.5)
+    perp_smart_sl_confirmation_candles: int = Field(default=3, ge=1, le=10)
+    perp_smart_sl_max_reentries: int = Field(default=2, ge=0, le=5)
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)
