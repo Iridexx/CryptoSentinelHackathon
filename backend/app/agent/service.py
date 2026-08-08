@@ -1390,6 +1390,8 @@ class AgentService:
                     if r_elapsed < ms.perp_smart_sl_confirmation_candles * 300:
                         continue
 
+                    new_entry = (pos.size * pos.entry_price + split_size * price) / (pos.size + split_size)
+                    pos.entry_price = new_entry.quantize(Decimal("0.000000000000000001"))
                     pos.size = pos.size + split_size
 
                     rebuy_trade = PerpTrade(
