@@ -657,6 +657,58 @@ def test_perp_trade_detail_exposure_uses_notional_once() -> None:
     assert detail["stop_reference_field"] == "low"
 
 
+def test_perp_smart_sl_detail_preserves_original_entry() -> None:
+    now = datetime(2026, 8, 9, tzinfo=UTC)
+    trade = PerpTrade(
+        trade_id="ssl_pos_btc_test_abc12345",
+        user_id=str(USER_ID),
+        asset="BTC",
+        side="long",
+        direction="close",
+        size=Decimal("0.25"),
+        price=Decimal("94"),
+        leverage=10,
+        status="confirmed",
+        timestamp_utc=now,
+        venue="dry_run",
+        notes="auto_close:smart_sl_sell_l1",
+        pnl_usd=Decimal("-1.50"),
+    )
+    position = PerpPosition(
+        position_id="pos_btc_test",
+        user_id=str(USER_ID),
+        asset="BTC",
+        side="long",
+        size=Decimal("0.75"),
+        entry_price=Decimal("97"),
+        current_price=Decimal("94"),
+        leverage=10,
+        pnl_unrealized=Decimal("-2.25"),
+        initial_stop_loss=Decimal("90"),
+        status="open",
+        smart_sl_state=json.dumps(
+            {
+                "original_size": "1",
+                "original_entry": "100",
+                "levels": [
+                    {"status": "sold", "sell_price": "94", "reentries": 0},
+                    {"status": "idle", "sell_price": None, "reentries": 0},
+                ],
+            }
+        ),
+        opened_at=now - timedelta(hours=1),
+        updated_at=now,
+    )
+
+    detail = view_routes._perp_trade_detail(trade, position, None, settings())
+
+    assert detail["is_smart_sl"] is True
+    assert detail["entry_price"] == "100.00"
+    assert detail["original_entry_price"] == "100.00"
+    assert detail["current_position_entry_price"] == "97.00"
+    assert detail["current_or_exit_price"] == "94.00"
+
+
 def test_spot_trade_detail_preserves_micro_token_prices() -> None:
     now = datetime(2026, 8, 1, tzinfo=UTC)
     entry = Decimal("0.000000001234")

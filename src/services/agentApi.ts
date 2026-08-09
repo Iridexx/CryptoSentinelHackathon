@@ -257,6 +257,8 @@ export interface TradeDetail {
   market: 'spot' | 'perp';
   direction: string;
   entry_price: string;
+  original_entry_price?: string | null;
+  current_position_entry_price?: string | null;
   current_or_exit_price: string;
   pnl_usd: string;
   pnl_pct: string;

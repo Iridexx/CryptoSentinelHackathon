@@ -461,9 +461,10 @@ def _clean_decimal(value: Decimal) -> Decimal:
 
 
 def _position_id_from_close_trade(trade_id: str) -> str | None:
-    if not trade_id.startswith("cls_"):
-        return None
-    return trade_id.rsplit("_", 1)[0][len("cls_"):]
+    for prefix in ("cls_", "ssl_"):
+        if trade_id.startswith(prefix):
+            return trade_id.rsplit("_", 1)[0][len(prefix):]
+    return None
 
 
 def _perp_trade_position_id(t, positions: list) -> str | None:

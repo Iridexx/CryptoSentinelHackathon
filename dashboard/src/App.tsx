@@ -1361,7 +1361,10 @@ function TradeDetailInline({ tradeId, session }: { tradeId: string; session: Das
         <>
           <div className="metric-grid">
             <Metric label="Direction" value={detail.direction} />
-            <Metric label="Entry" value={fmtPrice(detail.entry_price)} />
+            <Metric label={detail.is_smart_sl ? 'Entry originale' : 'Entry'} value={fmtPrice(detail.original_entry_price ?? detail.entry_price)} />
+            {detail.current_position_entry_price && detail.current_position_entry_price !== (detail.original_entry_price ?? detail.entry_price) && (
+              <Metric label="Entry corrente" value={fmtPrice(detail.current_position_entry_price)} />
+            )}
             <Metric label="Now/Exit" value={fmtPrice(detail.current_or_exit_price)} />
             <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Metric label="Size" value={detail.size} />
@@ -1414,7 +1417,10 @@ function TradeDetailCard({ detail }: { detail: TradeDetail }) {
       </div>
       <div className="metric-grid">
         <Metric label="Direction" value={detail.direction} />
-        <Metric label="Entry" value={fmtPrice(detail.entry_price)} />
+        <Metric label={detail.is_smart_sl ? 'Entry originale' : 'Entry'} value={fmtPrice(detail.original_entry_price ?? detail.entry_price)} />
+        {detail.current_position_entry_price && detail.current_position_entry_price !== (detail.original_entry_price ?? detail.entry_price) && (
+          <Metric label="Entry corrente" value={fmtPrice(detail.current_position_entry_price)} />
+        )}
         <Metric label="Now/Exit" value={fmtPrice(detail.current_or_exit_price)} />
         <Metric label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
         <Metric label="Exposure" value={money(detail.exposure_usd)} />

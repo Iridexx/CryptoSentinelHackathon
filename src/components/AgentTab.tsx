@@ -1850,7 +1850,10 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
           <Stat label="Livello" value={`L${detail.ssl_level}`} />
           <Stat label="Prezzo esecuzione" value={fmtPriceFull(detail.current_or_exit_price)} />
           <Stat label="Size" value={detail.size} />
-          <Stat label="Entry originale" value={fmtPriceFull(detail.entry_price)} />
+          <Stat label="Entry originale" value={fmtPriceFull(detail.original_entry_price ?? detail.entry_price)} />
+          {detail.current_position_entry_price && detail.current_position_entry_price !== (detail.original_entry_price ?? detail.entry_price) && (
+            <Stat label="Entry corrente" value={fmtPriceFull(detail.current_position_entry_price)} />
+          )}
           <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
           {detail.ssl_action === 'sell' && (
             <Stat label="PnL parziale" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />

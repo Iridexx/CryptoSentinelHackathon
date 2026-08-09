@@ -237,7 +237,7 @@ async def _find_trade_position(session, model, trade):
     pos = (await session.execute(select(model).where(model.open_trade_id == trade.trade_id))).scalar_one_or_none()
     if pos is not None:
         return pos
-    for prefix in ("cls_", "add_"):
+    for prefix in ("cls_", "add_", "ssl_"):
         if trade.trade_id.startswith(prefix):
             position_id = trade.trade_id.rsplit("_", 1)[0][len(prefix):]
             return (
@@ -861,7 +861,7 @@ def _level(position, attr: str, chart: dict | None, key: str) -> str | None:
 def _smart_sl_detail(position) -> dict:
     """Livelli Smart SL calcolati da original_entry/initial_stop_loss + stato corrente."""
     if position is None or getattr(position, "initial_stop_loss", None) is None:
-        return {"smart_sl_levels": None, "smart_sl_state_summary": None}
+        return {"original_entry_price": None, "smart_sl_levels": None, "smart_sl_state_summary": None}
 
     raw = getattr(position, "smart_sl_state", None)
     state = None
@@ -876,7 +876,7 @@ def _smart_sl_detail(position) -> dict:
     is_long = position.side == "long"
     dist = abs(entry - isl)
     if dist == 0:
-        return {"smart_sl_levels": None, "smart_sl_state_summary": None}
+        return {"original_entry_price": _fmt_price(entry), "smart_sl_levels": None, "smart_sl_state_summary": None}
 
     fracs = [Decimal("0.333"), Decimal("0.666"), Decimal("1")]
     if is_long:
@@ -898,9 +898,25 @@ def _smart_sl_detail(position) -> dict:
         ]
 
     return {
+        "original_entry_price": _fmt_price(entry),
         "smart_sl_levels": [_fmt_price(p) for p in prices],
         "smart_sl_state_summary": summary,
     }
+
+
+def _smart_sl_original_entry(position) -> Decimal | None:
+    if position is None:
+        return None
+    raw = getattr(position, "smart_sl_state", None)
+    if not raw:
+        return None
+    try:
+        state = json.loads(raw)
+        if state.get("original_entry") is None:
+            return None
+        return Decimal(str(state["original_entry"]))
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 def _breakeven_price(position, is_long: bool) -> str | None:
@@ -1074,6 +1090,7 @@ def _perp_trade_detail(
     opened_at, closed_at = _trade_timeline(trade, position, chart, is_close or is_ssl)
 
     if is_ssl:
+        original_entry = _smart_sl_original_entry(position) or entry
         return {
             "trade_id": trade.trade_id,
             "asset": trade.asset,
@@ -1082,10 +1099,12 @@ def _perp_trade_detail(
             "is_smart_sl": True,
             "ssl_action": "sell" if trade.direction == "close" else "rebuy",
             "ssl_level": trade.notes.split("_l")[-1] if trade.notes else None,
-            "entry_price": _fmt_price(entry),
+            "entry_price": _fmt_price(original_entry),
+            "original_entry_price": _fmt_price(original_entry),
+            "current_position_entry_price": _fmt_price(entry),
             "current_or_exit_price": _fmt_price(current),
             "pnl_usd": _signed(_q2(pnl)),
-            "pnl_pct": _pnl_pct(pnl, entry, size, leverage or 1),
+            "pnl_pct": _pnl_pct(pnl, original_entry, size, leverage or 1),
             "size": _fmt_price(size),
             "leverage": leverage,
             "exposure_usd": _q2(size * current),

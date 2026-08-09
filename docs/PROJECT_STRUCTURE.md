@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-07-27
+Ultimo aggiornamento: 2026-08-09
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -51,7 +51,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- agent.py - status agente, eligible tokens, watchlist operativa AI read/admin, decision log paginato, data coverage OHLCV read-only, kill switch admin-only e valutazione esplicita segnali Spot/Perp per dry-run/test Step 6.
 |   |   |       |-- mobile_agent.py - endpoint Step 7 per settings agente mobile, inclusa applicazione live dei toggle stop loss ATR/Min-Max 20 con buffer percentuale e margine fisso Perp opzionale, onboarding validation con lock 10 minuti e wallet multi-network senza esposizione segreti.
 |   |   |       |-- observability.py - endpoint admin-only Step 8 per log viewer dashboard con tail bounded e redazione valori sensibili.
-|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con exposure Perp mostrata come nozionale reale, margine separato, prezzi micro-token a 18 decimali e fallback entry spot da notional/size, prezzo minimo/massimo della candela riferimento SL, grafico opzionale best-effort bounded, marker candela riferimento SL con prezzo stop effettivo, valore stop iniziale preservato rispetto a breakeven/trailing, Bot Day condiviso Spot/Perp dal primo ordine registrato, fallback legacy che ricostruisce il contesto pre-apertura per grafici senza stop_reference persistito e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
+|   |   |       |-- views.py - viste dashboard/app: spot, perp, global, equity-curve, asset-breakdown, trade-detail rapido con exposure Perp mostrata come nozionale reale, margine separato, prezzi micro-token a 18 decimali e fallback entry spot da notional/size, prezzo minimo/massimo della candela riferimento SL, grafico opzionale best-effort bounded, marker candela riferimento SL con prezzo stop effettivo, valore stop iniziale preservato rispetto a breakeven/trailing, dettaglio Smart SL Perp con entry originale separata dall'entry corrente ricalcolata, Bot Day condiviso Spot/Perp dal primo ordine registrato, fallback legacy che ricostruisce il contesto pre-apertura per grafici senza stop_reference persistito e riuso cache klines recente per ridurre timeout su candele trade, operational-stats e archived-runs.
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
@@ -128,7 +128,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing, funding e reference stop loss con precisione prezzo micro-token.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, history Spot/Perp allineata ai trade chiusi con PnL, conteggio trade giornaliero invariato per mercato, Bot Day condiviso dal primo ordine Spot/Perp registrato, esposizione a margine, fee aggregate, position_id nella history Perp, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, history Spot/Perp allineata ai trade chiusi con PnL, conteggio trade giornaliero invariato per mercato, Bot Day condiviso dal primo ordine Spot/Perp registrato, esposizione a margine, fee aggregate, position_id nella history Perp inclusi eventi Smart SL `ssl_`, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.

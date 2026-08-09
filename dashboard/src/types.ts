@@ -236,6 +236,8 @@ export type TradeDetail = {
   market: 'spot' | 'perp';
   direction: string;
   entry_price: string;
+  original_entry_price?: string | null;
+  current_position_entry_price?: string | null;
   current_or_exit_price: string;
   pnl_usd: string;
   pnl_pct: string;
@@ -264,6 +266,11 @@ export type TradeDetail = {
   } | null;
   events: Array<Record<string, unknown>>;
   chart?: TradeChart | null;
+  is_smart_sl?: boolean;
+  ssl_action?: 'sell' | 'rebuy';
+  ssl_level?: string | null;
+  smart_sl_levels?: string[] | null;
+  smart_sl_state_summary?: Array<Record<string, unknown>> | null;
   is_simulated: boolean;
 };
 
