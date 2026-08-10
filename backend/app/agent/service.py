@@ -174,7 +174,7 @@ class AgentService:
             perp_smart_sl_split_l2=getattr(self.settings, "perp_smart_sl_split_l2", 0.55),
             perp_smart_sl_split_l3=getattr(self.settings, "perp_smart_sl_split_l3", 0.20),
             perp_smart_sl_rebuy_mode=getattr(self.settings, "perp_smart_sl_rebuy_mode", "above_entry"),
-            perp_smart_sl_rebuy_above_entry_pct=getattr(self.settings, "perp_smart_sl_rebuy_above_entry_pct", 1.0),
+            perp_smart_sl_rebuy_above_entry_pct=getattr(self.settings, "perp_smart_sl_rebuy_above_entry_pct", 100.0),
             perp_smart_sl_delta_l1=getattr(self.settings, "perp_smart_sl_delta_l1", 0.08),
             perp_smart_sl_delta_l2=getattr(self.settings, "perp_smart_sl_delta_l2", 0.16),
             perp_smart_sl_confirmation_candles=getattr(self.settings, "perp_smart_sl_confirmation_candles", 2),
@@ -1450,7 +1450,7 @@ class AgentService:
                         rcs = datetime.fromisoformat(state["rebuy_above_confirm_since"])
                         r_elapsed = (now - rcs).total_seconds()
                         if r_elapsed >= confirm_secs:
-                            rebuy_pct = Decimal(str(ms.perp_smart_sl_rebuy_above_entry_pct))
+                            rebuy_pct = Decimal(str(ms.perp_smart_sl_rebuy_above_entry_pct)) / Decimal("100")
                             total_rebuy_size = Decimal("0")
                             for idx in sold_levels:
                                 sz = (orig_size * Decimal(str(splits[idx]))).quantize(Decimal("0.000001"))

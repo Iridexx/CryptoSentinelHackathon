@@ -46,7 +46,7 @@ class AgentMobileSettings(BaseModel):
     perp_smart_sl_split_l2: float = Field(default=0.55, ge=0.1, le=0.7)
     perp_smart_sl_split_l3: float = Field(default=0.20, ge=0.05, le=0.5)
     perp_smart_sl_rebuy_mode: str = Field(default="above_entry", pattern=r"^(above_entry|delta)$")
-    perp_smart_sl_rebuy_above_entry_pct: float = Field(default=1.0, ge=0.1, le=1.0)
+    perp_smart_sl_rebuy_above_entry_pct: float = Field(default=100.0, ge=10.0, le=100.0)
     perp_smart_sl_delta_l1: float = Field(default=0.08, ge=0.02, le=0.5)
     perp_smart_sl_delta_l2: float = Field(default=0.16, ge=0.02, le=0.5)
     perp_smart_sl_confirmation_candles: int = Field(default=2, ge=1, le=10)

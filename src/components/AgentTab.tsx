@@ -132,7 +132,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_split_l2: 0.55,
   perp_smart_sl_split_l3: 0.20,
   perp_smart_sl_rebuy_mode: 'above_entry',
-  perp_smart_sl_rebuy_above_entry_pct: 1.0,
+  perp_smart_sl_rebuy_above_entry_pct: 100,
   perp_smart_sl_delta_l1: 0.08,
   perp_smart_sl_delta_l2: 0.16,
   perp_smart_sl_confirmation_candles: 2,
@@ -1552,7 +1552,10 @@ const SetupPane: FC<{
             <NumberInput label="Split L1 %" value={settings.perp_smart_sl_split_l1} step={0.01} onChange={(perp_smart_sl_split_l1) => patch({ perp_smart_sl_split_l1 })} />
             <NumberInput label="Split L2 %" value={settings.perp_smart_sl_split_l2} step={0.01} onChange={(perp_smart_sl_split_l2) => patch({ perp_smart_sl_split_l2 })} />
             <NumberInput label="Split L3 %" value={settings.perp_smart_sl_split_l3} step={0.01} onChange={(perp_smart_sl_split_l3) => patch({ perp_smart_sl_split_l3 })} />
-            <SelectInput label="Rebuy mode" value={settings.perp_smart_sl_rebuy_mode} onChange={(v) => patch({ perp_smart_sl_rebuy_mode: v })} options={[
+            <SelectInput label="Rebuy mode" value={settings.perp_smart_sl_rebuy_mode} onChange={(v) => patch({
+              perp_smart_sl_rebuy_mode: v,
+              ...(v === 'above_entry' ? { perp_smart_sl_confirmation_candles: 2, perp_smart_sl_max_reentries: 1 } : { perp_smart_sl_confirmation_candles: 3, perp_smart_sl_max_reentries: 2 }),
+            })} options={[
               { value: 'above_entry', label: 'Sopra entry' },
               { value: 'delta', label: 'Delta per livello' },
             ]} />
