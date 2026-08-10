@@ -1098,7 +1098,7 @@ def _perp_trade_detail(
             "direction": trade.side,
             "is_smart_sl": True,
             "ssl_action": "sell" if trade.direction == "close" else "rebuy",
-            "ssl_level": trade.notes.split("_l")[-1] if trade.notes else None,
+            "ssl_level": "all" if "rebuy_all" in (trade.notes or "") else (trade.notes.rsplit("_l", 1)[-1] if trade.notes and "_l" in trade.notes else None),
             "entry_price": _fmt_price(original_entry),
             "original_entry_price": _fmt_price(original_entry),
             "current_position_entry_price": _fmt_price(entry),

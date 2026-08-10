@@ -173,10 +173,12 @@ class AgentService:
             perp_smart_sl_split_l1=getattr(self.settings, "perp_smart_sl_split_l1", 0.25),
             perp_smart_sl_split_l2=getattr(self.settings, "perp_smart_sl_split_l2", 0.55),
             perp_smart_sl_split_l3=getattr(self.settings, "perp_smart_sl_split_l3", 0.20),
+            perp_smart_sl_rebuy_mode=getattr(self.settings, "perp_smart_sl_rebuy_mode", "above_entry"),
+            perp_smart_sl_rebuy_above_entry_pct=getattr(self.settings, "perp_smart_sl_rebuy_above_entry_pct", 1.0),
             perp_smart_sl_delta_l1=getattr(self.settings, "perp_smart_sl_delta_l1", 0.08),
             perp_smart_sl_delta_l2=getattr(self.settings, "perp_smart_sl_delta_l2", 0.16),
-            perp_smart_sl_confirmation_candles=getattr(self.settings, "perp_smart_sl_confirmation_candles", 3),
-            perp_smart_sl_max_reentries=getattr(self.settings, "perp_smart_sl_max_reentries", 2),
+            perp_smart_sl_confirmation_candles=getattr(self.settings, "perp_smart_sl_confirmation_candles", 2),
+            perp_smart_sl_max_reentries=getattr(self.settings, "perp_smart_sl_max_reentries", 1),
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -1303,6 +1305,10 @@ class AgentService:
         else:
             levels = [orig_entry + Decimal(str(f)) * dist for f in fracs]
 
+        rebuy_mode = ms.perp_smart_sl_rebuy_mode
+        confirm_secs = ms.perp_smart_sl_confirmation_candles * 300
+        global_reentries = state.get("global_reentries", 0)
+
         changed = False
         for i in range(2):
             lv = state["levels"][i]
@@ -1319,7 +1325,7 @@ class AgentService:
                         continue
                     cs = datetime.fromisoformat(lv["confirm_since"])
                     elapsed = (now - cs).total_seconds()
-                    if elapsed < ms.perp_smart_sl_confirmation_candles * 300:
+                    if elapsed < confirm_secs:
                         continue
                     if pos.size <= split_size:
                         continue
@@ -1340,7 +1346,6 @@ class AgentService:
                     )
                     await PerpTradeRepository(session).save(close_trade)
 
-                    # Salva fee pre-sell per ripristinarle al rebuy
                     lv["pre_sell_opening_fee"] = str(pos.opening_fee_usd or Decimal("0"))
                     lv["pre_sell_slippage"] = str(pos.slippage_usd or Decimal("0"))
                     lv["pre_sell_funding"] = str(pos.funding_accrued_usd)
@@ -1372,7 +1377,7 @@ class AgentService:
                         lv["confirm_since"] = None
                         changed = True
 
-            elif lv["status"] == "sold" and lv["reentries"] < ms.perp_smart_sl_max_reentries:
+            elif lv["status"] == "sold" and rebuy_mode == "delta" and lv["reentries"] < ms.perp_smart_sl_max_reentries:
                 sp = Decimal(lv["sell_price"])
                 if is_long:
                     rebuy_price = sp + delta_dist
@@ -1387,7 +1392,7 @@ class AgentService:
                         continue
                     rcs = datetime.fromisoformat(lv["rebuy_confirm_since"])
                     r_elapsed = (now - rcs).total_seconds()
-                    if r_elapsed < ms.perp_smart_sl_confirmation_candles * 300:
+                    if r_elapsed < confirm_secs:
                         continue
 
                     new_entry = (pos.size * pos.entry_price + split_size * price) / (pos.size + split_size)
@@ -1404,7 +1409,6 @@ class AgentService:
                     )
                     await PerpTradeRepository(session).save(rebuy_trade)
 
-                    # Ripristina fee proporzionali pre-sell
                     if lv.get("pre_sell_opening_fee"):
                         pos.opening_fee_usd = Decimal(lv["pre_sell_opening_fee"])
                     if lv.get("pre_sell_slippage"):
@@ -1431,6 +1435,89 @@ class AgentService:
                 else:
                     if lv.get("rebuy_confirm_since") is not None:
                         lv["rebuy_confirm_since"] = None
+                        changed = True
+
+        # --- Rebuy above_entry: ricompra tutto quando prezzo supera original_entry ---
+        if rebuy_mode == "above_entry" and global_reentries < ms.perp_smart_sl_max_reentries:
+            sold_levels = [i for i in range(2) if state["levels"][i]["status"] == "sold"]
+            if sold_levels:
+                above = (is_long and price >= orig_entry) or (not is_long and price <= orig_entry)
+                if above:
+                    if state.get("rebuy_above_confirm_since") is None:
+                        state["rebuy_above_confirm_since"] = now.isoformat()
+                        changed = True
+                    else:
+                        rcs = datetime.fromisoformat(state["rebuy_above_confirm_since"])
+                        r_elapsed = (now - rcs).total_seconds()
+                        if r_elapsed >= confirm_secs:
+                            rebuy_pct = Decimal(str(ms.perp_smart_sl_rebuy_above_entry_pct))
+                            total_rebuy_size = Decimal("0")
+                            for idx in sold_levels:
+                                sz = (orig_size * Decimal(str(splits[idx]))).quantize(Decimal("0.000001"))
+                                total_rebuy_size += (sz * rebuy_pct).quantize(Decimal("0.000001"))
+
+                            new_entry = (pos.size * pos.entry_price + total_rebuy_size * price) / (pos.size + total_rebuy_size)
+                            pos.entry_price = new_entry.quantize(Decimal("0.000000000000000001"))
+                            pos.size = pos.size + total_rebuy_size
+
+                            rebuy_trade = PerpTrade(
+                                trade_id=f"ssl_{pos.position_id}_{uuid4().hex[:8]}",
+                                user_id=pos.user_id, asset=pos.asset, side=pos.side,
+                                direction="open", size=total_rebuy_size, price=price,
+                                leverage=pos.leverage, status="confirmed",
+                                venue=pos.venue or "agent", timestamp_utc=now,
+                                notes="auto_close:smart_sl_rebuy_all", pnl_usd=Decimal("0"),
+                            )
+                            await PerpTradeRepository(session).save(rebuy_trade)
+
+                            max_fee = Decimal("0")
+                            max_slip = Decimal("0")
+                            max_fund = Decimal("0")
+                            for idx in sold_levels:
+                                lv = state["levels"][idx]
+                                if lv.get("pre_sell_opening_fee"):
+                                    v = Decimal(lv["pre_sell_opening_fee"])
+                                    if v > max_fee:
+                                        max_fee = v
+                                if lv.get("pre_sell_slippage"):
+                                    v = Decimal(lv["pre_sell_slippage"])
+                                    if v > max_slip:
+                                        max_slip = v
+                                if lv.get("pre_sell_funding"):
+                                    v = Decimal(lv["pre_sell_funding"])
+                                    if v > max_fund:
+                                        max_fund = v
+                            if max_fee:
+                                pos.opening_fee_usd = max_fee
+                            if max_slip:
+                                pos.slippage_usd = max_slip
+                            if max_fund:
+                                pos.funding_accrued_usd = max_fund
+
+                            for idx in sold_levels:
+                                lv = state["levels"][idx]
+                                lv["status"] = "rebought"
+                                lv["reentries"] += 1
+                                lv["sell_price"] = None
+                                lv["rebuy_confirm_since"] = None
+                                lv["rebuy_fill_price"] = str(price)
+
+                            state["global_reentries"] = global_reentries + 1
+                            state["rebuy_above_confirm_since"] = None
+                            changed = True
+                            logger.info("smart_sl_rebuy_above_entry", asset=pos.asset, price=float(price), size=float(total_rebuy_size), levels=[i+1 for i in sold_levels])
+                            notifier = get_agent_notifier()
+                            asyncio.create_task(
+                                notifier.notify_trade_closed(
+                                    user_id=pos.user_id, trade_id=rebuy_trade.trade_id,
+                                    asset=pos.asset, market="perp", pnl_usd=Decimal("0"), pnl_pct=Decimal("0"),
+                                    close_reason="smart_sl_rebuy_all",
+                                    is_dry_run=ms.execution_mode == "dry_run",
+                                )
+                            )
+                else:
+                    if state.get("rebuy_above_confirm_since") is not None:
+                        state["rebuy_above_confirm_since"] = None
                         changed = True
 
         if changed:

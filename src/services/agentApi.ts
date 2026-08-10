@@ -328,6 +328,8 @@ export interface AgentMobileSettings {
   perp_smart_sl_split_l1: number;
   perp_smart_sl_split_l2: number;
   perp_smart_sl_split_l3: number;
+  perp_smart_sl_rebuy_mode: string;
+  perp_smart_sl_rebuy_above_entry_pct: number;
   perp_smart_sl_delta_l1: number;
   perp_smart_sl_delta_l2: number;
   perp_smart_sl_confirmation_candles: number;

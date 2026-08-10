@@ -131,10 +131,12 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_split_l1: 0.25,
   perp_smart_sl_split_l2: 0.55,
   perp_smart_sl_split_l3: 0.20,
+  perp_smart_sl_rebuy_mode: 'above_entry',
+  perp_smart_sl_rebuy_above_entry_pct: 1.0,
   perp_smart_sl_delta_l1: 0.08,
   perp_smart_sl_delta_l2: 0.16,
-  perp_smart_sl_confirmation_candles: 3,
-  perp_smart_sl_max_reentries: 2,
+  perp_smart_sl_confirmation_candles: 2,
+  perp_smart_sl_max_reentries: 1,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
   spot_sl_mode: 'atr' as const,
@@ -587,6 +589,7 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   smart_sl_sell_l2: { label: 'Smart SL Sell L2', className: 'text-amber-400' },
   smart_sl_rebuy_l1: { label: 'Smart SL Rebuy L1', className: 'text-sky-400' },
   smart_sl_rebuy_l2: { label: 'Smart SL Rebuy L2', className: 'text-sky-400' },
+  smart_sl_rebuy_all: { label: 'Smart SL Rebuy All', className: 'text-sky-400' },
 };
 
 const TradeHistoryList: FC<{
@@ -1549,8 +1552,19 @@ const SetupPane: FC<{
             <NumberInput label="Split L1 %" value={settings.perp_smart_sl_split_l1} step={0.01} onChange={(perp_smart_sl_split_l1) => patch({ perp_smart_sl_split_l1 })} />
             <NumberInput label="Split L2 %" value={settings.perp_smart_sl_split_l2} step={0.01} onChange={(perp_smart_sl_split_l2) => patch({ perp_smart_sl_split_l2 })} />
             <NumberInput label="Split L3 %" value={settings.perp_smart_sl_split_l3} step={0.01} onChange={(perp_smart_sl_split_l3) => patch({ perp_smart_sl_split_l3 })} />
-            <NumberInput label="Delta L1" value={settings.perp_smart_sl_delta_l1} step={0.01} onChange={(perp_smart_sl_delta_l1) => patch({ perp_smart_sl_delta_l1 })} />
-            <NumberInput label="Delta L2" value={settings.perp_smart_sl_delta_l2} step={0.01} onChange={(perp_smart_sl_delta_l2) => patch({ perp_smart_sl_delta_l2 })} />
+            <SelectInput label="Rebuy mode" value={settings.perp_smart_sl_rebuy_mode} onChange={(v) => patch({ perp_smart_sl_rebuy_mode: v })} options={[
+              { value: 'above_entry', label: 'Sopra entry' },
+              { value: 'delta', label: 'Delta per livello' },
+            ]} />
+            {settings.perp_smart_sl_rebuy_mode === 'above_entry' && (
+              <NumberInput label="Rebuy % venduto" value={settings.perp_smart_sl_rebuy_above_entry_pct} step={0.1} onChange={(perp_smart_sl_rebuy_above_entry_pct) => patch({ perp_smart_sl_rebuy_above_entry_pct })} />
+            )}
+            {settings.perp_smart_sl_rebuy_mode === 'delta' && (
+              <>
+                <NumberInput label="Delta L1" value={settings.perp_smart_sl_delta_l1} step={0.01} onChange={(perp_smart_sl_delta_l1) => patch({ perp_smart_sl_delta_l1 })} />
+                <NumberInput label="Delta L2" value={settings.perp_smart_sl_delta_l2} step={0.01} onChange={(perp_smart_sl_delta_l2) => patch({ perp_smart_sl_delta_l2 })} />
+              </>
+            )}
             <NumberInput label="Candele conferma SSL" value={settings.perp_smart_sl_confirmation_candles} step={1} onChange={(perp_smart_sl_confirmation_candles) => patch({ perp_smart_sl_confirmation_candles: Math.round(perp_smart_sl_confirmation_candles) })} />
             <NumberInput label="Max reentries" value={settings.perp_smart_sl_max_reentries} step={1} onChange={(perp_smart_sl_max_reentries) => patch({ perp_smart_sl_max_reentries: Math.round(perp_smart_sl_max_reentries) })} />
           </div>
