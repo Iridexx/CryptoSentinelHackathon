@@ -274,6 +274,9 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "smart_sl_split_l3": "perp_smart_sl_split_l3",
         "smart_sl_rebuy_mode": "perp_smart_sl_rebuy_mode",
         "smart_sl_rebuy_above_entry_pct": "perp_smart_sl_rebuy_above_entry_pct",
+        "smart_sl_split_l1_r2": "perp_smart_sl_split_l1_r2",
+        "smart_sl_split_l2_r2": "perp_smart_sl_split_l2_r2",
+        "smart_sl_split_l3_r2": "perp_smart_sl_split_l3_r2",
         "smart_sl_delta_l1": "perp_smart_sl_delta_l1",
         "smart_sl_delta_l2": "perp_smart_sl_delta_l2",
         "smart_sl_confirmation_candles": "perp_smart_sl_confirmation_candles",
@@ -665,6 +668,9 @@ class Settings(BaseSettings):
     perp_smart_sl_split_l3: float = Field(default=0.20, alias="PERP_SMART_SL_SPLIT_L3")
     perp_smart_sl_rebuy_mode: str = Field(default="above_entry", alias="PERP_SMART_SL_REBUY_MODE")
     perp_smart_sl_rebuy_above_entry_pct: float = Field(default=100.0, alias="PERP_SMART_SL_REBUY_ABOVE_ENTRY_PCT")
+    perp_smart_sl_split_l1_r2: float = Field(default=0.75, alias="PERP_SMART_SL_SPLIT_L1_R2")
+    perp_smart_sl_split_l2_r2: float = Field(default=0.20, alias="PERP_SMART_SL_SPLIT_L2_R2")
+    perp_smart_sl_split_l3_r2: float = Field(default=0.05, alias="PERP_SMART_SL_SPLIT_L3_R2")
     perp_smart_sl_delta_l1: float = Field(default=0.08, alias="PERP_SMART_SL_DELTA_L1")
     perp_smart_sl_delta_l2: float = Field(default=0.16, alias="PERP_SMART_SL_DELTA_L2")
     perp_smart_sl_confirmation_candles: int = Field(default=2, alias="PERP_SMART_SL_CONFIRMATION_CANDLES")

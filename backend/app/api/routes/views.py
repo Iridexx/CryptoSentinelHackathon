@@ -885,8 +885,13 @@ def _smart_sl_detail(position) -> dict:
         prices = [entry + f * dist for f in fracs]
 
     summary = None
+    reentries_exhausted = False
     if state:
         levels_state = state.get("levels", [])
+        global_reentries = state.get("global_reentries", 0)
+        reentries_exhausted = global_reentries >= 1 or all(
+            lv.get("reentries", 0) >= 1 for lv in levels_state
+        )
         summary = [
             {
                 "status": lv.get("status", "idle"),
@@ -901,6 +906,7 @@ def _smart_sl_detail(position) -> dict:
         "original_entry_price": _fmt_price(entry),
         "smart_sl_levels": [_fmt_price(p) for p in prices],
         "smart_sl_state_summary": summary,
+        "smart_sl_reentries_exhausted": reentries_exhausted,
     }
 
 

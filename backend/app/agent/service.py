@@ -175,6 +175,9 @@ class AgentService:
             perp_smart_sl_split_l3=getattr(self.settings, "perp_smart_sl_split_l3", 0.20),
             perp_smart_sl_rebuy_mode=getattr(self.settings, "perp_smart_sl_rebuy_mode", "above_entry"),
             perp_smart_sl_rebuy_above_entry_pct=getattr(self.settings, "perp_smart_sl_rebuy_above_entry_pct", 100.0),
+            perp_smart_sl_split_l1_r2=getattr(self.settings, "perp_smart_sl_split_l1_r2", 0.75),
+            perp_smart_sl_split_l2_r2=getattr(self.settings, "perp_smart_sl_split_l2_r2", 0.20),
+            perp_smart_sl_split_l3_r2=getattr(self.settings, "perp_smart_sl_split_l3_r2", 0.05),
             perp_smart_sl_delta_l1=getattr(self.settings, "perp_smart_sl_delta_l1", 0.08),
             perp_smart_sl_delta_l2=getattr(self.settings, "perp_smart_sl_delta_l2", 0.16),
             perp_smart_sl_confirmation_candles=getattr(self.settings, "perp_smart_sl_confirmation_candles", 2),
@@ -1308,12 +1311,15 @@ class AgentService:
         rebuy_mode = ms.perp_smart_sl_rebuy_mode
         confirm_secs = ms.perp_smart_sl_confirmation_candles * 300
         global_reentries = state.get("global_reentries", 0)
+        splits_r2 = [ms.perp_smart_sl_split_l1_r2, ms.perp_smart_sl_split_l2_r2]
 
         changed = False
         for i in range(2):
             lv = state["levels"][i]
             level_price = levels[i]
-            split_size = (orig_size * Decimal(str(splits[i]))).quantize(Decimal("0.000001"))
+            use_r2 = rebuy_mode == "above_entry" and lv["status"] == "rebought"
+            active_split = splits_r2[i] if use_r2 else splits[i]
+            split_size = (orig_size * Decimal(str(active_split))).quantize(Decimal("0.000001"))
             delta_dist = Decimal(str(deltas[i])) * dist
 
             if lv["status"] in ("idle", "rebought"):

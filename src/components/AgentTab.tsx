@@ -133,6 +133,9 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_split_l3: 0.20,
   perp_smart_sl_rebuy_mode: 'above_entry',
   perp_smart_sl_rebuy_above_entry_pct: 100,
+  perp_smart_sl_split_l1_r2: 0.75,
+  perp_smart_sl_split_l2_r2: 0.20,
+  perp_smart_sl_split_l3_r2: 0.05,
   perp_smart_sl_delta_l1: 0.08,
   perp_smart_sl_delta_l2: 0.16,
   perp_smart_sl_confirmation_candles: 2,
@@ -1560,7 +1563,12 @@ const SetupPane: FC<{
               { value: 'delta', label: 'Delta per livello' },
             ]} />
             {settings.perp_smart_sl_rebuy_mode === 'above_entry' && (
-              <NumberInput label="Rebuy % venduto" value={settings.perp_smart_sl_rebuy_above_entry_pct} step={0.1} onChange={(perp_smart_sl_rebuy_above_entry_pct) => patch({ perp_smart_sl_rebuy_above_entry_pct })} />
+              <>
+                <NumberInput label="Rebuy % venduto" value={settings.perp_smart_sl_rebuy_above_entry_pct} step={1} onChange={(perp_smart_sl_rebuy_above_entry_pct) => patch({ perp_smart_sl_rebuy_above_entry_pct })} />
+                <NumberInput label="R2 Split L1 %" value={settings.perp_smart_sl_split_l1_r2} step={0.01} onChange={(perp_smart_sl_split_l1_r2) => patch({ perp_smart_sl_split_l1_r2 })} />
+                <NumberInput label="R2 Split L2 %" value={settings.perp_smart_sl_split_l2_r2} step={0.01} onChange={(perp_smart_sl_split_l2_r2) => patch({ perp_smart_sl_split_l2_r2 })} />
+                <NumberInput label="R2 Split L3 %" value={settings.perp_smart_sl_split_l3_r2} step={0.01} onChange={(perp_smart_sl_split_l3_r2) => patch({ perp_smart_sl_split_l3_r2 })} />
+              </>
             )}
             {settings.perp_smart_sl_rebuy_mode === 'delta' && (
               <>
@@ -1963,7 +1971,12 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
     )}
     {detail.market === 'perp' && detail.smart_sl_levels && (
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
-        <h3 className="text-sm font-semibold text-white">Smart Stop Loss</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-white">Smart Stop Loss</h3>
+          {detail.smart_sl_reentries_exhausted && (
+            <span className="rounded-full bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-400">Reentries esauriti</span>
+          )}
+        </div>
         {detail.smart_sl_levels.map((price, idx) => {
           const stateInfo = detail.smart_sl_state_summary?.[idx];
           const statusLabel = stateInfo?.status === 'sold' ? 'Venduto' : stateInfo?.status === 'rebought' ? 'Ricomprato' : idx === 2 ? 'Classico SL' : 'In attesa';
