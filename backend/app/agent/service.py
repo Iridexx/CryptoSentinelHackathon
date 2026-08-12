@@ -1434,6 +1434,8 @@ class AgentService:
                     lv["sell_price"] = None
                     lv["rebuy_confirm_since"] = None
                     lv["rebuy_fill_price"] = str(price)
+                    state["protection_suspended"] = True
+                    pos.trailing_stop = None
                     changed = True
                     logger.info("smart_sl_rebuy", asset=pos.asset, level=i+1, price=float(price), size=float(split_size))
                     notifier = get_agent_notifier()
@@ -1543,6 +1545,8 @@ class AgentService:
 
                             state["global_reentries"] = global_reentries + 1
                             state["rebuy_above_confirm_since"] = None
+                            state["protection_suspended"] = True
+                            pos.trailing_stop = None
                             changed = True
                             logger.info("smart_sl_rebuy_above_entry", asset=pos.asset, price=float(price), size=float(total_rebuy_size), levels=[i+1 for i in sold_levels])
                             notifier = get_agent_notifier()
@@ -1696,8 +1700,16 @@ class AgentService:
                     pos.max_price = price; pos.updated_at = now; session.add(pos)
             extreme = pos.max_price if pos.max_price is not None else price
 
+            _ssl_suspended = False
+            if pos.smart_sl_state:
+                try:
+                    _ssl_st = json.loads(pos.smart_sl_state)
+                    _ssl_suspended = _ssl_st.get("protection_suspended", False)
+                except (ValueError, KeyError):
+                    pass
+
             # Protezione ATR — solo se l'ATR è stato congelato all'ingresso (trade nuovi).
-            if atr_v and atr_v > 0:
+            if atr_v and atr_v > 0 and not _ssl_suspended:
                 # Breakeven: a +N×ATR lo SL si sposta a entry (+costi), solo verso il sicuro.
                 be_trigger = (pos.entry_price + atr_v * be_mult) if is_long else (pos.entry_price - atr_v * be_mult)
                 be_tp1_ok = ms.perp_breakeven_mode != "tp1" or pos.tp1_reached
@@ -1789,6 +1801,13 @@ class AgentService:
                 if (is_long and price >= pos.take_profit_1) or (not is_long and price <= pos.take_profit_1):
                     reason = "take_profit_1"
                     partial = True
+                    if _ssl_suspended and pos.smart_sl_state:
+                        try:
+                            _ssl_st2 = json.loads(pos.smart_sl_state)
+                            _ssl_st2["protection_suspended"] = False
+                            pos.smart_sl_state = json.dumps(_ssl_st2)
+                        except (ValueError, KeyError):
+                            pass
 
             if reason is None and ms.perp_time_stop_enabled and ms.perp_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600

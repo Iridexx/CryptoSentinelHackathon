@@ -904,6 +904,7 @@ def _smart_sl_detail(position) -> dict:
 
     original_tp1 = state.get("original_tp1") if state else None
     original_tp2 = state.get("original_tp2") if state else None
+    protection_suspended = state.get("protection_suspended", False) if state else False
 
     return {
         "original_entry_price": _fmt_price(entry),
@@ -912,6 +913,7 @@ def _smart_sl_detail(position) -> dict:
         "smart_sl_reentries_exhausted": reentries_exhausted,
         "smart_sl_original_tp1": original_tp1,
         "smart_sl_original_tp2": original_tp2,
+        "smart_sl_protection_suspended": protection_suspended,
     }
 
 

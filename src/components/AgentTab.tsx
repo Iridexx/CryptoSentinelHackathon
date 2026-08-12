@@ -1979,6 +1979,9 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
       <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">Smart Stop Loss</h3>
+          {detail.smart_sl_protection_suspended && (
+            <span className="rounded-full bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-400">BE/Trail sospesi</span>
+          )}
           {detail.smart_sl_reentries_exhausted && (
             <span className="rounded-full bg-red-500/15 px-2 py-1 text-xs font-semibold text-red-400">Reentries esauriti</span>
           )}

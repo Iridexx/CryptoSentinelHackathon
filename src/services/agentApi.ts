@@ -297,6 +297,7 @@ export interface TradeDetail {
   smart_sl_reentries_exhausted?: boolean;
   smart_sl_original_tp1?: string | null;
   smart_sl_original_tp2?: string | null;
+  smart_sl_protection_suspended?: boolean;
   chart?: TradeChart | null;
   is_simulated: boolean;
 }
