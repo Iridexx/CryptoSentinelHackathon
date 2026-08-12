@@ -1801,13 +1801,6 @@ class AgentService:
                 if (is_long and price >= pos.take_profit_1) or (not is_long and price <= pos.take_profit_1):
                     reason = "take_profit_1"
                     partial = True
-                    if _ssl_suspended and pos.smart_sl_state:
-                        try:
-                            _ssl_st2 = json.loads(pos.smart_sl_state)
-                            _ssl_st2["protection_suspended"] = False
-                            pos.smart_sl_state = json.dumps(_ssl_st2)
-                        except (ValueError, KeyError):
-                            pass
 
             if reason is None and ms.perp_time_stop_enabled and ms.perp_time_stop_hours > 0:
                 age_hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
