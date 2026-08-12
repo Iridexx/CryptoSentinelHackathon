@@ -902,11 +902,16 @@ def _smart_sl_detail(position) -> dict:
             for lv in levels_state
         ]
 
+    original_tp1 = state.get("original_tp1") if state else None
+    original_tp2 = state.get("original_tp2") if state else None
+
     return {
         "original_entry_price": _fmt_price(entry),
         "smart_sl_levels": [_fmt_price(p) for p in prices],
         "smart_sl_state_summary": summary,
         "smart_sl_reentries_exhausted": reentries_exhausted,
+        "smart_sl_original_tp1": original_tp1,
+        "smart_sl_original_tp2": original_tp2,
     }
 
 

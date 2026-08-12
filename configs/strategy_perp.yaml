@@ -56,5 +56,7 @@ perp:
   smart_sl_split_l1_r2: 0.75          # (solo above_entry) round 2: 75% a L1
   smart_sl_split_l2_r2: 0.20          # round 2: 20% a L2
   smart_sl_split_l3_r2: 0.05          # round 2: 5% rimane a SL
+  smart_sl_tp_adjust_after_rebuy: true  # ricalcola TP dopo rebuy per coprire perdite SSL
+  smart_sl_tp_recovery_delta_pct: 7    # delta extra % oltre copertura perdite (guadagno minimo)
   smart_sl_confirmation_candles: 2   # candele 5min di conferma (sell e rebuy above_entry)
   smart_sl_max_reentries: 1          # max cicli sell→rebuy

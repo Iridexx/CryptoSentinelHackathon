@@ -140,6 +140,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_delta_l2: 0.16,
   perp_smart_sl_confirmation_candles: 2,
   perp_smart_sl_max_reentries: 1,
+  perp_smart_sl_tp_adjust_after_rebuy: true,
+  perp_smart_sl_tp_recovery_delta_pct: 7,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
   spot_sl_mode: 'atr' as const,
@@ -1578,6 +1580,10 @@ const SetupPane: FC<{
             )}
             <NumberInput label="Candele conferma SSL" value={settings.perp_smart_sl_confirmation_candles} step={1} onChange={(perp_smart_sl_confirmation_candles) => patch({ perp_smart_sl_confirmation_candles: Math.round(perp_smart_sl_confirmation_candles) })} />
             <NumberInput label="Max reentries" value={settings.perp_smart_sl_max_reentries} step={1} onChange={(perp_smart_sl_max_reentries) => patch({ perp_smart_sl_max_reentries: Math.round(perp_smart_sl_max_reentries) })} />
+            <ToggleInput label="Adegua TP dopo rebuy" value={settings.perp_smart_sl_tp_adjust_after_rebuy} onChange={(perp_smart_sl_tp_adjust_after_rebuy) => patch({ perp_smart_sl_tp_adjust_after_rebuy })} />
+            {settings.perp_smart_sl_tp_adjust_after_rebuy && (
+              <NumberInput label="Delta recovery TP %" value={settings.perp_smart_sl_tp_recovery_delta_pct} step={1} onChange={(perp_smart_sl_tp_recovery_delta_pct) => patch({ perp_smart_sl_tp_recovery_delta_pct })} />
+            )}
           </div>
         )}
       </section>
@@ -2005,6 +2011,35 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
             </div>
           );
         })}
+        {(detail.smart_sl_original_tp1 || detail.smart_sl_original_tp2) && (
+          <div className="rounded-lg bg-dark-900 px-3 py-2 text-xs space-y-1">
+            <span className="text-gray-500 font-semibold">TP adeguati dopo rebuy</span>
+            {detail.smart_sl_original_tp1 && (
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">TP1 originale</span>
+                <span className="text-gray-400 line-through">{fmtPriceFull(detail.smart_sl_original_tp1)}</span>
+              </div>
+            )}
+            {detail.take_profit_1 && (
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">TP1 nuovo</span>
+                <span className="text-emerald-400 font-semibold">{fmtPriceFull(detail.take_profit_1)}</span>
+              </div>
+            )}
+            {detail.smart_sl_original_tp2 && (
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">TP2 originale</span>
+                <span className="text-gray-400 line-through">{fmtPriceFull(detail.smart_sl_original_tp2)}</span>
+              </div>
+            )}
+            {detail.take_profit_2 && (
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">TP2 nuovo</span>
+                <span className="text-emerald-400 font-semibold">{fmtPriceFull(detail.take_profit_2)}</span>
+              </div>
+            )}
+          </div>
+        )}
       </section>
     )}
     <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-2">

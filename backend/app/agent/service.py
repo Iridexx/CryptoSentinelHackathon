@@ -175,6 +175,8 @@ class AgentService:
             perp_smart_sl_split_l3=getattr(self.settings, "perp_smart_sl_split_l3", 0.20),
             perp_smart_sl_rebuy_mode=getattr(self.settings, "perp_smart_sl_rebuy_mode", "above_entry"),
             perp_smart_sl_rebuy_above_entry_pct=getattr(self.settings, "perp_smart_sl_rebuy_above_entry_pct", 100.0),
+            perp_smart_sl_tp_adjust_after_rebuy=getattr(self.settings, "perp_smart_sl_tp_adjust_after_rebuy", True),
+            perp_smart_sl_tp_recovery_delta_pct=getattr(self.settings, "perp_smart_sl_tp_recovery_delta_pct", 7.0),
             perp_smart_sl_split_l1_r2=getattr(self.settings, "perp_smart_sl_split_l1_r2", 0.75),
             perp_smart_sl_split_l2_r2=getattr(self.settings, "perp_smart_sl_split_l2_r2", 0.20),
             perp_smart_sl_split_l3_r2=getattr(self.settings, "perp_smart_sl_split_l3_r2", 0.05),
@@ -1342,6 +1344,10 @@ class AgentService:
                     funding_share = pos.funding_accrued_usd * fee_frac
                     pnl = pnl_per_unit * split_size - fee_share + funding_share
 
+                    if "original_tp1" not in state:
+                        state["original_tp1"] = str(pos.take_profit_1) if pos.take_profit_1 else None
+                        state["original_tp2"] = str(pos.take_profit_2) if pos.take_profit_2 else None
+
                     close_trade = PerpTrade(
                         trade_id=f"ssl_{pos.position_id}_{uuid4().hex[:8]}",
                         user_id=pos.user_id, asset=pos.asset, side=pos.side,
@@ -1365,6 +1371,7 @@ class AgentService:
                     lv["status"] = "sold"
                     lv["sell_price"] = str(sell_price)
                     lv["confirm_since"] = None
+                    lv["realized_loss"] = str(Decimal(lv.get("realized_loss", "0")) + pnl)
                     changed = True
                     logger.info("smart_sl_sell", asset=pos.asset, level=i+1, price=float(sell_price), size=float(split_size), pnl=float(pnl))
                     notifier = get_agent_notifier()
@@ -1507,6 +1514,32 @@ class AgentService:
                                 lv["sell_price"] = None
                                 lv["rebuy_confirm_since"] = None
                                 lv["rebuy_fill_price"] = str(price)
+
+                            # Ricalcolo TP per coprire perdite SSL + delta
+                            if ms.perp_smart_sl_tp_adjust_after_rebuy and pos.size > 0:
+                                ssl_losses = Decimal("0")
+                                for lv_st in state["levels"]:
+                                    ssl_losses += Decimal(lv_st.get("realized_loss", "0"))
+                                if ssl_losses < 0:
+                                    if "original_tp1" not in state:
+                                        state["original_tp1"] = str(pos.take_profit_1) if pos.take_profit_1 else None
+                                        state["original_tp2"] = str(pos.take_profit_2) if pos.take_profit_2 else None
+                                    loss_abs = abs(ssl_losses)
+                                    delta_mult = Decimal("1") + Decimal(str(ms.perp_smart_sl_tp_recovery_delta_pct)) / Decimal("100")
+                                    target = loss_abs * delta_mult
+                                    tp1_share = target * Decimal("0.4")
+                                    tp2_share = target * Decimal("0.6")
+                                    half_size = pos.size / Decimal("2")
+                                    if half_size > 0:
+                                        tp1_dist = tp1_share / half_size
+                                        tp2_dist = tp2_share / half_size
+                                        if is_long:
+                                            pos.take_profit_1 = pos.entry_price + tp1_dist
+                                            pos.take_profit_2 = pos.entry_price + tp2_dist
+                                        else:
+                                            pos.take_profit_1 = pos.entry_price - tp1_dist
+                                            pos.take_profit_2 = pos.entry_price - tp2_dist
+                                        logger.info("smart_sl_tp_adjusted", asset=pos.asset, tp1=float(pos.take_profit_1), tp2=float(pos.take_profit_2), ssl_loss=float(ssl_losses), target=float(target))
 
                             state["global_reentries"] = global_reentries + 1
                             state["rebuy_above_confirm_since"] = None

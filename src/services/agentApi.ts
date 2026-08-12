@@ -295,6 +295,8 @@ export interface TradeDetail {
   smart_sl_levels?: string[] | null;
   smart_sl_state_summary?: { status: string; reentries: number; fill_price?: string | null; rebuy_fill_price?: string | null }[] | null;
   smart_sl_reentries_exhausted?: boolean;
+  smart_sl_original_tp1?: string | null;
+  smart_sl_original_tp2?: string | null;
   chart?: TradeChart | null;
   is_simulated: boolean;
 }
@@ -338,6 +340,8 @@ export interface AgentMobileSettings {
   perp_smart_sl_delta_l2: number;
   perp_smart_sl_confirmation_candles: number;
   perp_smart_sl_max_reentries: number;
+  perp_smart_sl_tp_adjust_after_rebuy: boolean;
+  perp_smart_sl_tp_recovery_delta_pct: number;
   spot_breakeven_mode: string;
   perp_breakeven_mode: string;
   spot_sl_mode: string;
