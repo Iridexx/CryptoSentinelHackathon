@@ -1260,7 +1260,16 @@ class AgentService:
             session, pos, market="perp", exit_price=exit_price,
             close_trade_id=close_trade.trade_id, now=now,
         )
-        logger.info("perp_position_closed", asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl))
+        mfe_to_tp2 = None
+        if pos.take_profit_2 and pos.max_price is not None:
+            _span = (pos.take_profit_2 - pos.entry_price) if is_long else (pos.entry_price - pos.take_profit_2)
+            if _span and _span > 0:
+                _fav = (pos.max_price - pos.entry_price) if is_long else (pos.entry_price - pos.max_price)
+                mfe_to_tp2 = float(max(Decimal("0"), min(Decimal("1"), _fav / _span)))
+        logger.info(
+            "perp_position_closed",
+            asset=pos.asset, reason=reason, partial=partial, pnl_usd=float(pnl), mfe_to_tp2=mfe_to_tp2,
+        )
         return pnl
 
     async def _process_smart_sl(
@@ -1720,6 +1729,8 @@ class AgentService:
             trail_base = self.settings.perp_trailing_base_atr_largo
             trail_floor = self.settings.perp_trailing_floor_atr_largo
         be_mult = Decimal(str(self.settings.perp_breakeven_trigger_atr))
+        prot_mode = (getattr(ms, "perp_protection_mode", None) or "trailing")
+        profit_lock_steps = list(getattr(ms, "perp_profit_lock_steps", None) or [])
 
         for pos in perp_positions:
             if pos.status != "open":
@@ -1759,6 +1770,15 @@ class AgentService:
                         fee_only = ((pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))) * 2
                         offset = fee_only / pos.size
                         be_stop = pos.entry_price + offset if is_long else pos.entry_price - offset
+                    min_profit = Decimal(str(getattr(ms, "perp_breakeven_min_profit_usd", 0) or 0))
+                    if min_profit > 0 and pos.size > 0:
+                        fee_res = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
+                        dist = (min_profit + fee_res) / pos.size
+                        target = pos.entry_price + dist if is_long else pos.entry_price - dist
+                        if is_long and price > target and target > be_stop:
+                            be_stop = target
+                        elif not is_long and price < target and target < be_stop:
+                            be_stop = target
                     # Cuscinetto extra entry±X%, applicato solo se il prezzo l'ha superato
                     # (mai oltre il prezzo corrente → niente chiusura immediata).
                     buf_pct = Decimal(str(self.settings.perp_breakeven_buffer_pct))
@@ -1813,18 +1833,49 @@ class AgentService:
                     if ms.perp_trailing_enabled and trail <= pos.entry_price and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
                         pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
 
+            # ── Profit Lock Ratchet: dopo TP1, lo stop sale a gradini verso TP2. ──
+            if (
+                prot_mode == "profit_lock"
+                and not _ssl_suspended
+                and pos.tp1_reached
+                and pos.take_profit_2
+                and pos.max_price is not None
+            ):
+                _pl = _profit_lock_stop(pos.entry_price, pos.take_profit_2, pos.max_price, profit_lock_steps, is_long)
+                if _pl is not None:
+                    candidate, progress, lock = _pl
+                    improves = (
+                        pos.trailing_stop is None
+                        or (is_long and candidate > pos.trailing_stop)
+                        or (not is_long and candidate < pos.trailing_stop)
+                    )
+                    not_beyond = (candidate < price) if is_long else (candidate > price)
+                    if improves and not_beyond:
+                        old_stop = pos.trailing_stop
+                        pos.trailing_stop = candidate
+                        pos.updated_at = now
+                        session.add(pos)
+                        logger.info(
+                            "profit_lock_step",
+                            asset=pos.asset,
+                            progress=float(progress),
+                            lock=float(lock),
+                            old_stop=float(old_stop) if old_stop is not None else None,
+                            new_stop=float(candidate),
+                        )
+
             # ── Smart Stop Loss (vende parzialmente prima del SL classico) ──
             if ms.perp_smart_sl_enabled and pos.initial_stop_loss is not None:
                 await self._process_smart_sl(session, pos, price, ms, now)
 
-            # ── Uscite — trailing (se più protettivo) → stop → TP2 → TP1 → time ──
-            if ms.perp_trailing_enabled and pos.trailing_stop is not None and (
+            # ── Uscite — trailing/profit_lock (se più protettivo) → stop → TP2 → TP1 → time ──
+            if (ms.perp_trailing_enabled or prot_mode == "profit_lock") and pos.trailing_stop is not None and (
                 pos.stop_loss is None
                 or (is_long and pos.trailing_stop > pos.stop_loss)
                 or (not is_long and pos.trailing_stop < pos.stop_loss)
             ):
                 if (is_long and price <= pos.trailing_stop) or (not is_long and price >= pos.trailing_stop):
-                    reason = "trailing_stop"
+                    reason = "profit_lock" if prot_mode == "profit_lock" else "trailing_stop"
 
             if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
@@ -2659,6 +2710,24 @@ def _stop_reference_from_signal(signal: dict) -> dict[str, datetime | Decimal | 
     return {"time": parsed_time, "price": parsed_price, "field": field}
 
 
+def _profit_lock_stop(entry: Decimal, tp2: Decimal, extreme: Decimal, steps, is_long: bool):
+    """Profit Lock Ratchet: livello di stop protettivo verso TP2, o None."""
+    span = (tp2 - entry) if is_long else (entry - tp2)
+    if span <= 0:
+        return None
+    fav = (extreme - entry) if is_long else (entry - extreme)
+    progress = max(Decimal("0"), min(Decimal("1"), fav / span))
+    lock = None
+    for pair in steps:
+        thr, lk = Decimal(str(pair[0])), Decimal(str(pair[1]))
+        if progress >= thr:
+            lock = lk
+    if lock is None:
+        return None
+    stop = (entry + lock * (tp2 - entry)) if is_long else (entry - lock * (entry - tp2))
+    return stop, progress, lock
+
+
 def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
     """Prezzo di fill per le chiusure su livello.
 
@@ -2675,7 +2744,7 @@ def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
         # Breakeven comes from stop_loss moved to entry/costs. Trailing keeps
         # reason="trailing_stop", even when the trailing level is profitable.
         level = pos.stop_loss
-    elif reason == "trailing_stop":
+    elif reason in ("trailing_stop", "profit_lock"):
         level = pos.trailing_stop
     elif reason == "take_profit_1":
         level = pos.take_profit_1

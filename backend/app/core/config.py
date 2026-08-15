@@ -639,6 +639,12 @@ class Settings(BaseSettings):
     perp_trailing_base_atr_stretto: float = Field(default=2.5, alias="PERP_TRAILING_BASE_ATR_STRETTO")
     perp_trailing_floor_atr_stretto: float = Field(default=1.5, alias="PERP_TRAILING_FLOOR_ATR_STRETTO")
     perp_trailing_mode: str = Field(default="largo", alias="PERP_TRAILING_MODE")  # largo|stretto
+    perp_protection_mode: str = Field(default="trailing", alias="PERP_PROTECTION_MODE")
+    perp_profit_lock_steps: list[tuple[float, float]] = Field(
+        default_factory=lambda: [(0.60, 0.25), (0.80, 0.50), (0.95, 0.75)],
+        alias="PERP_PROFIT_LOCK_STEPS",
+    )
+    perp_breakeven_min_profit_usd: float = Field(default=0.0, alias="PERP_BREAKEVEN_MIN_PROFIT_USD")
     perp_time_stop_enabled: bool = Field(default=False, alias="PERP_TIME_STOP_ENABLED")
     perp_time_stop_hours: int = Field(default=8, alias="PERP_TIME_STOP_HOURS")
     perp_dynamic_leverage_enabled: bool = Field(default=True, alias="PERP_DYNAMIC_LEVERAGE_ENABLED")
