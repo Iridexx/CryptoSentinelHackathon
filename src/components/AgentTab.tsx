@@ -187,7 +187,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_trailing_mode: 'largo' as const,
   perp_trailing_pnl_pct: 0,
   perp_protection_mode: 'trailing' as const,
-  perp_profit_lock_steps: [[0.6, 0.25], [0.8, 0.5], [0.95, 0.75]] as Array<[number, number]>,
+  perp_profit_lock_steps: [[0.45, 0.25], [0.7, 0.5], [0.9, 0.70]] as Array<[number, number]>,
   perp_breakeven_min_profit_usd: 0,
   perp_tp1_close_pct: 70,
   perp_time_stop_hours: 8,

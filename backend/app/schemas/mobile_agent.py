@@ -106,7 +106,7 @@ class AgentMobileSettings(BaseModel):
     perp_trailing_pnl_pct: float = Field(default=0.0, ge=0.0, le=20.0)
     perp_protection_mode: str | None = Field(default=None)
     perp_profit_lock_steps: list[tuple[float, float]] = Field(
-        default_factory=lambda: [(0.60, 0.25), (0.80, 0.50), (0.95, 0.75)]
+        default_factory=lambda: [(0.45, 0.25), (0.70, 0.50), (0.90, 0.70)]
     )
     perp_tp1_close_pct: float = Field(default=70.0, ge=1.0, le=99.0)
     perp_time_stop_hours: int = Field(default=8, ge=0, le=168)

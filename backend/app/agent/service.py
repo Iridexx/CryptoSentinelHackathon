@@ -1841,7 +1841,7 @@ class AgentService:
                 and pos.take_profit_2
                 and pos.max_price is not None
             ):
-                _pl = _profit_lock_stop(pos.entry_price, pos.take_profit_2, pos.max_price, profit_lock_steps, is_long)
+                _pl = _profit_lock_stop(pos.take_profit_1, pos.take_profit_2, pos.max_price, profit_lock_steps, is_long)
                 if _pl is not None:
                     candidate, progress, lock = _pl
                     improves = (
@@ -2710,12 +2710,14 @@ def _stop_reference_from_signal(signal: dict) -> dict[str, datetime | Decimal | 
     return {"time": parsed_time, "price": parsed_price, "field": field}
 
 
-def _profit_lock_stop(entry: Decimal, tp2: Decimal, extreme: Decimal, steps, is_long: bool):
-    """Profit Lock Ratchet: livello di stop protettivo verso TP2, o None."""
-    span = (tp2 - entry) if is_long else (entry - tp2)
+def _profit_lock_stop(tp1: Decimal, tp2: Decimal, extreme: Decimal, steps, is_long: bool):
+    """Profit Lock Ratchet: livello di stop protettivo nel tratto TP1→TP2, o None."""
+    if tp1 is None:
+        return None
+    span = (tp2 - tp1) if is_long else (tp1 - tp2)
     if span <= 0:
         return None
-    fav = (extreme - entry) if is_long else (entry - extreme)
+    fav = (extreme - tp1) if is_long else (tp1 - extreme)
     progress = max(Decimal("0"), min(Decimal("1"), fav / span))
     lock = None
     for pair in steps:
@@ -2724,7 +2726,7 @@ def _profit_lock_stop(entry: Decimal, tp2: Decimal, extreme: Decimal, steps, is_
             lock = lk
     if lock is None:
         return None
-    stop = (entry + lock * (tp2 - entry)) if is_long else (entry - lock * (entry - tp2))
+    stop = (tp1 + lock * (tp2 - tp1)) if is_long else (tp1 - lock * (tp1 - tp2))
     return stop, progress, lock
 
 
