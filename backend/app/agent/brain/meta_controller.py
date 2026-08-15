@@ -111,18 +111,11 @@ class ClaudeMetaController:
                 reasoning=f"{reason_prefix}; risk blocked: {risk.get('reason')}",
             )
         quality = Decimal(str(signal.get("quality", 0)))
-        if quality >= Decimal("0.85"):
+        if quality >= Decimal("0.6"):
             return BrainDecision(
                 action="approve",
                 confidence=quality,
-                reasoning=f"{reason_prefix}; deterministic dry-run approval.",
-            )
-        if quality >= Decimal("0.65"):
-            return BrainDecision(
-                action="reduce",
-                confidence=quality,
-                size_multiplier=Decimal("0.5"),
-                reasoning=f"{reason_prefix}; deterministic dry-run reduced size.",
+                reasoning=f"{reason_prefix}; deterministic dry-run approval (signal gate).",
             )
         return BrainDecision(
             action="skip",

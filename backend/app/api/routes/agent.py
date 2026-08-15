@@ -189,11 +189,12 @@ async def get_perp_watchlist(_: ReadAccessDep) -> dict:
 @router.put("/watchlist/perp")
 async def set_perp_watchlist(request: AgentWatchlistRequest, _: AdminAccessDep) -> dict:
     service = get_agent_service()
+    previous = set(selected_perp_watchlist(service.settings))
     try:
         selected = set_market_watchlist(service.settings, "perp", request.tokens)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    added = [t for t in selected if t not in set(selected_perp_watchlist(service.settings))]
+    added = [t for t in selected if t not in previous]
     if added:
         asyncio.create_task(warmup_selected_watchlist(service.settings, assets=added))
     return {"selected_tokens": selected, "selected_count": len(selected)}

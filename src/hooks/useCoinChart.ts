@@ -44,10 +44,12 @@ export function useCoinChart(
               close: bar.close,
             });
           }
+          if (ctrl.signal.aborted) return;
           // Always set both so switching mode is instant with no re-fetch.
           setLineData(line);
           setCandleData(candles);
         } catch (e) {
+          if (ctrl.signal.aborted) return;
           if ((e as Error).name !== 'AbortError') setError(true);
         } finally {
           if (!ctrl.signal.aborted) setLoading(false);

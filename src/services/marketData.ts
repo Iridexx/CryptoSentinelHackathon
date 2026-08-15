@@ -64,8 +64,7 @@ export interface ProviderSelectionResponse {
   selection_scope: 'runtime_state';
 }
 
-const BACKEND_URL = (import.meta.env.VITE_BACKEND_API_BASE_URL as string | undefined)?.replace(/\/+$/, '');
-const READ_TOKEN = import.meta.env.VITE_API_READ_TOKEN as string | undefined;
+import { BACKEND_URL, READ_TOKEN } from './http';
 
 function requireBackend(): string {
   if (!BACKEND_URL) throw new Error('Backend market data URL is not configured');
