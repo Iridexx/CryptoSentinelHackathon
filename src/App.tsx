@@ -320,7 +320,7 @@ export default function App() {
         .catch(() => {});
     };
     load();
-    const timer = window.setInterval(load, 45_000);
+    const timer = window.setInterval(() => { if (!document.hidden) load(); }, 45_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
@@ -357,7 +357,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshSupportNotice();
-    const timer = window.setInterval(() => void refreshSupportNotice(), 60_000);
+    const timer = window.setInterval(() => { if (!document.hidden) void refreshSupportNotice(); }, 60_000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refreshSupportNotice();
     };
@@ -764,6 +764,7 @@ export default function App() {
               onSnooze={handleSnoozeUpdate}
               onDismiss={handleUpdateDone}
               onDownloadStart={() => setDlState('downloading')}
+              onDownloadError={() => setDlState('error')}
             />
           )}
 
@@ -999,6 +1000,7 @@ export default function App() {
               dlState={dlState}
               onDownloadStart={() => setDlState('downloading')}
               onDownloadDone={() => setDlState('done')}
+              onDownloadError={() => setDlState('error')}
               currency={currency}
               onCurrencyChange={changeCurrency}
               sliderRange={sliderRange}

@@ -9,9 +9,10 @@ interface Props {
   onSnooze: () => void;
   onDismiss: () => void;
   onDownloadStart: () => void;
+  onDownloadError: () => void;
 }
 
-const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, onDismiss, onDownloadStart }) => {
+const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, onDismiss, onDownloadStart, onDownloadError }) => {
   const [showModal, setShowModal] = useState(false);
 
   const apkUrl = update.downloadUrl ?? APK_PAGES_URL;
@@ -19,7 +20,11 @@ const UpdateNotification: FC<Props> = ({ update, dlState, onIgnore, onSnooze, on
   const handleDownload = async () => {
     setShowModal(false);
     onDownloadStart();
-    await downloadAndInstall(apkUrl);
+    try {
+      await downloadAndInstall(apkUrl);
+    } catch {
+      onDownloadError();
+    }
   };
 
   const handleOpenDownloads = async () => {

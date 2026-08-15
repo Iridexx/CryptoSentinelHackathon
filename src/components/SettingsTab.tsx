@@ -217,6 +217,7 @@ interface Props {
   dlState: 'idle' | 'downloading' | 'done' | 'error';
   onDownloadStart: () => void;
   onDownloadDone: () => void;
+  onDownloadError: () => void;
   currency: Currency;
   onCurrencyChange: (c: Currency) => void;
   sliderRange: number;
@@ -245,6 +246,7 @@ const SettingsTab: FC<Props> = ({
   dlState,
   onDownloadStart,
   onDownloadDone,
+  onDownloadError,
   currency,
   onCurrencyChange,
   sliderRange,
@@ -659,8 +661,12 @@ const SettingsTab: FC<Props> = ({
 
   const handleDownload = async (url: string) => {
     onDownloadStart();
-    await downloadAndInstall(url);
-    onDownloadDone();
+    try {
+      await downloadAndInstall(url);
+      if (!Capacitor.isNativePlatform()) onDownloadDone();
+    } catch {
+      onDownloadError();
+    }
   };
 
   const handleClearFavorites = () => {
@@ -729,11 +735,11 @@ const SettingsTab: FC<Props> = ({
 
           {updateState === 'available' ? (
             <button
-              onClick={() => handleDownload(APK_PAGES_URL)}
+              onClick={() => handleDownload(updateInfo?.downloadUrl ?? APK_PAGES_URL)}
               disabled={dlState === 'downloading'}
               className="w-full py-2.5 bg-accent-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
             >
-              {dlState === 'downloading' ? 'Download in corso…' : 'Scarica e installa'}
+              {dlState === 'downloading' ? 'Download in corso…' : dlState === 'error' ? 'Riprova download' : 'Scarica e installa'}
             </button>
           ) : (
             <button
