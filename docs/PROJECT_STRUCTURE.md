@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-08-14
+Ultimo aggiornamento: 2026-08-16
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
