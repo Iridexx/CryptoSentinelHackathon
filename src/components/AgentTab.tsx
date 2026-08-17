@@ -116,7 +116,7 @@ const defaultSettings: AgentMobileSettings = {
   min_pool_liquidity_usd: 50000,
   market_reversal_filter_enabled: true,
   spot_market_reversal_filter_enabled: true,
-  perp_market_reversal_filter_enabled: false,
+  perp_market_reversal_filter_enabled: true,
   spot_breakeven_enabled: true,
   perp_breakeven_enabled: true,
   spot_trailing_enabled: true,

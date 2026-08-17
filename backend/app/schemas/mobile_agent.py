@@ -19,7 +19,7 @@ class AgentMobileSettings(BaseModel):
     min_pool_liquidity_usd: float = Field(default=50000.0, ge=0.0)
     market_reversal_filter_enabled: bool = True
     spot_market_reversal_filter_enabled: bool = True
-    perp_market_reversal_filter_enabled: bool = False
+    perp_market_reversal_filter_enabled: bool = True
     spot_breakeven_enabled: bool = True
     perp_breakeven_enabled: bool = True
     spot_trailing_enabled: bool = True

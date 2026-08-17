@@ -37,7 +37,7 @@ perp:
   volume_profile_candle_minutes: 5
   # Filtro inversione di mercato sul PERP — default OFF: e' trend-following e sul
   # perp mean-reversion blocca i long quando il prezzo rientra nel value area.
-  market_reversal_filter_enabled: false
+  market_reversal_filter_enabled: true
   # Filtro shock BTC perp: blocca nuove aperture quando BTC mostra trend forte
   # + volatilita' o volume anomali (score >= 2 su 3). Indipendente dal reversal filter.
   trend_shock_enabled: true

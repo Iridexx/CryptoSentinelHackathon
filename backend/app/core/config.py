@@ -599,7 +599,7 @@ class Settings(BaseSettings):
     # guardrail/regimi lo stanno gia' bloccando.
     market_reversal_filter_enabled: bool = Field(default=True, alias="MARKET_REVERSAL_FILTER_ENABLED")
     spot_market_reversal_filter_enabled: bool = Field(default=True, alias="SPOT_MARKET_REVERSAL_FILTER_ENABLED")
-    perp_market_reversal_filter_enabled: bool = Field(default=False, alias="PERP_MARKET_REVERSAL_FILTER_ENABLED")
+    perp_market_reversal_filter_enabled: bool = Field(default=True, alias="PERP_MARKET_REVERSAL_FILTER_ENABLED")
     market_reversal_symbol: str = Field(default="BTCUSDT", alias="MARKET_REVERSAL_SYMBOL")
     market_reversal_interval: str = Field(default="15m", alias="MARKET_REVERSAL_INTERVAL")
     market_reversal_ema_period: int = Field(default=10, alias="MARKET_REVERSAL_EMA_PERIOD")
