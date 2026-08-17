@@ -1504,12 +1504,7 @@ const SetupPane: FC<{
       <section className="space-y-3">
         <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Filtri mercato</h3>
         <ToggleInput
-          label="Filtro inversione mercato — Spot"
-          checked={settings.spot_market_reversal_filter_enabled}
-          onChange={(spot_market_reversal_filter_enabled) => patch({ spot_market_reversal_filter_enabled })}
-        />
-        <ToggleInput
-          label="Filtro inversione mercato — Perp"
+          label="Filtro inversione mercato Perp"
           checked={settings.perp_market_reversal_filter_enabled}
           onChange={(perp_market_reversal_filter_enabled) => patch({ perp_market_reversal_filter_enabled })}
         />
