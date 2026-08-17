@@ -36,6 +36,8 @@ _MOBILE_TO_SETTINGS: dict[str, str] = {
     "drawdown_cap_pct": "risk_max_drawdown_pct",
     "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
     "market_reversal_filter_enabled": "market_reversal_filter_enabled",
+    "spot_market_reversal_filter_enabled": "spot_market_reversal_filter_enabled",
+    "perp_market_reversal_filter_enabled": "perp_market_reversal_filter_enabled",
     "spot_breakeven_enabled": "spot_breakeven_enabled",
     "perp_breakeven_enabled": "perp_breakeven_enabled",
     "spot_sl_mode": "spot_sl_mode",
@@ -104,6 +106,12 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         drawdown_cap_pct=settings.risk_max_drawdown_pct,
         min_pool_liquidity_usd=settings.risk_min_pool_liquidity_usd,
         market_reversal_filter_enabled=settings.market_reversal_filter_enabled,
+        spot_market_reversal_filter_enabled=getattr(
+            settings, "spot_market_reversal_filter_enabled", settings.market_reversal_filter_enabled
+        ),
+        perp_market_reversal_filter_enabled=getattr(
+            settings, "perp_market_reversal_filter_enabled", False
+        ),
         spot_breakeven_enabled=settings.spot_breakeven_enabled,
         perp_breakeven_enabled=settings.perp_breakeven_enabled,
         spot_trailing_enabled=True,

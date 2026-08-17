@@ -216,7 +216,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "market_regime_interval": "spot_market_regime_interval",
         "market_regime_ema_period": "spot_market_regime_ema_period",
         "market_regime_low_lookback": "spot_market_regime_low_lookback",
-        "market_reversal_filter_enabled": "market_reversal_filter_enabled",
+        "market_reversal_filter_enabled": "spot_market_reversal_filter_enabled",
         "market_reversal_symbol": "market_reversal_symbol",
         "market_reversal_interval": "market_reversal_interval",
         "market_reversal_ema_period": "market_reversal_ema_period",
@@ -261,6 +261,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "leverage_atr_baseline_hours": "perp_leverage_atr_baseline_hours",
         "volume_profile_window_hours": "perp_volume_profile_window_hours",
         "volume_profile_candle_minutes": "perp_volume_profile_candle_minutes",
+        "market_reversal_filter_enabled": "perp_market_reversal_filter_enabled",
         "trend_shock_enabled": "perp_trend_shock_enabled",
         "trend_shock_adx_threshold": "perp_trend_shock_adx_threshold",
         "trend_shock_natr_percentile": "perp_trend_shock_natr_percentile",
@@ -597,6 +598,8 @@ class Settings(BaseSettings):
     # short perp contro una risalita confermata. Non sblocca mai lo spot se altri
     # guardrail/regimi lo stanno gia' bloccando.
     market_reversal_filter_enabled: bool = Field(default=True, alias="MARKET_REVERSAL_FILTER_ENABLED")
+    spot_market_reversal_filter_enabled: bool = Field(default=True, alias="SPOT_MARKET_REVERSAL_FILTER_ENABLED")
+    perp_market_reversal_filter_enabled: bool = Field(default=False, alias="PERP_MARKET_REVERSAL_FILTER_ENABLED")
     market_reversal_symbol: str = Field(default="BTCUSDT", alias="MARKET_REVERSAL_SYMBOL")
     market_reversal_interval: str = Field(default="15m", alias="MARKET_REVERSAL_INTERVAL")
     market_reversal_ema_period: int = Field(default=10, alias="MARKET_REVERSAL_EMA_PERIOD")
@@ -691,6 +694,11 @@ class Settings(BaseSettings):
     whale_flow_provider_url: str | None = Field(default=None, alias="WHALE_FLOW_PROVIDER_URL")
 
     eligible_tokens: list[str] = Field(default_factory=list, alias="ELIGIBLE_TOKENS")
+
+    # ── Engine health watchdog ───────────────────────────────────────────────────
+    agent_health_alert_enabled: bool = Field(default=True, alias="AGENT_HEALTH_ALERT_ENABLED")
+    agent_health_alert_error_ratio: float = Field(default=0.5, alias="AGENT_HEALTH_ALERT_ERROR_RATIO")
+    agent_health_alert_throttle_minutes: int = Field(default=30, alias="AGENT_HEALTH_ALERT_THROTTLE_MINUTES")
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",

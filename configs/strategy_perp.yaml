@@ -35,6 +35,9 @@ perp:
   leverage_atr_baseline_hours: 120 # baseline storica per atr_min/atr_max (~5gg, cap 1500 candele)
   volume_profile_window_hours: 24
   volume_profile_candle_minutes: 5
+  # Filtro inversione di mercato sul PERP — default OFF: e' trend-following e sul
+  # perp mean-reversion blocca i long quando il prezzo rientra nel value area.
+  market_reversal_filter_enabled: false
   # Filtro shock BTC perp: blocca nuove aperture quando BTC mostra trend forte
   # + volatilita' o volume anomali (score >= 2 su 3). Indipendente dal reversal filter.
   trend_shock_enabled: true

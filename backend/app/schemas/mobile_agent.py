@@ -18,6 +18,8 @@ class AgentMobileSettings(BaseModel):
     drawdown_cap_pct: float = Field(default=-15.0, ge=-50.0, lt=0.0)
     min_pool_liquidity_usd: float = Field(default=50000.0, ge=0.0)
     market_reversal_filter_enabled: bool = True
+    spot_market_reversal_filter_enabled: bool = True
+    perp_market_reversal_filter_enabled: bool = False
     spot_breakeven_enabled: bool = True
     perp_breakeven_enabled: bool = True
     spot_trailing_enabled: bool = True

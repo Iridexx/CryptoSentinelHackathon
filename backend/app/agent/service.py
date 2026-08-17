@@ -342,7 +342,7 @@ class AgentService:
                 signal["action"] = "skip"
                 signal["reason"] = "market_risk_off"
                 signal.setdefault("components", {})["market_regime"] = regime
-            elif self.settings.market_reversal_filter_enabled:
+            elif self.settings.spot_market_reversal_filter_enabled:
                 reversal = await self._market_reversal_filter()
                 signal.setdefault("components", {})["market_reversal"] = reversal
                 if not reversal.get("risk_on"):
@@ -432,7 +432,10 @@ class AgentService:
         already present and market_risk_off is false; Perp uses it only to block
         shorts against confirmed BTC recovery.
         """
-        if not self.settings.market_reversal_filter_enabled:
+        if not (
+            self.settings.spot_market_reversal_filter_enabled
+            or self.settings.perp_market_reversal_filter_enabled
+        ):
             return {"enabled": False, "risk_on": False}
 
         now = datetime.now(UTC)
@@ -721,7 +724,7 @@ class AgentService:
         if (
             signal.get("action") != "skip"
             and signal.get("side") == "short"
-            and self.settings.market_reversal_filter_enabled
+            and self.settings.perp_market_reversal_filter_enabled
         ):
             reversal = await self._market_reversal_filter()
             signal.setdefault("components", {})["market_reversal"] = reversal
@@ -731,7 +734,7 @@ class AgentService:
         if (
             signal.get("action") != "skip"
             and signal.get("side") == "long"
-            and self.settings.market_reversal_filter_enabled
+            and self.settings.perp_market_reversal_filter_enabled
         ):
             reversal = await self._market_reversal_filter()
             signal.setdefault("components", {})["market_reversal"] = reversal
@@ -2038,17 +2041,27 @@ class AgentService:
         perp_assets = selected_perp_watchlist(self.settings) if "perp" in markets else []
         selected_assets = list(dict.fromkeys([*spot_assets, *perp_assets]))
         scanner_results = []
+        scanned = 0
+        scan_errors: list[str] = []
         for asset in spot_assets:
             if asset.upper() not in SPOT_EXCLUDED_STABLECOINS:
+                scanned += 1
                 try:
                     scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
                 except Exception as exc:
+                    scan_errors.append(str(exc))
                     logger.warning("scanner_spot_asset_error", asset=asset, error=str(exc))
         for asset in perp_assets:
+            scanned += 1
             try:
                 scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
             except Exception as exc:
+                scan_errors.append(str(exc))
                 logger.warning("scanner_perp_asset_error", asset=asset, error=str(exc))
+        try:
+            await self._maybe_alert_engine_health(scanned, scan_errors, _now)
+        except Exception as exc:
+            logger.warning("engine_health_alert_failed", error=str(exc))
         try:
             await self._snapshot_portfolio_hourly(session, _now)
         except Exception as exc:
@@ -2065,6 +2078,58 @@ class AgentService:
             "scanner_results": [_scanner_summary(result) for result in scanner_results],
             "daily_trade_heartbeat": trade_heartbeat,
         }
+
+    _FATAL_SCAN_ERRORS = (
+        "database disk image is malformed",
+        "rolled back",
+        "disk i/o error",
+        "database is locked",
+        "no such table",
+    )
+
+    async def _maybe_alert_engine_health(
+        self, scanned: int, errors: list[str], now: datetime
+    ) -> None:
+        if not getattr(self.settings, "agent_health_alert_enabled", True) or scanned <= 0:
+            return
+        if not errors:
+            self._engine_health_degraded = False
+            return
+
+        joined = " | ".join(errors).lower()
+        fatal = next((sig for sig in self._FATAL_SCAN_ERRORS if sig in joined), None)
+        ratio = len(errors) / scanned
+        min_ratio = float(getattr(self.settings, "agent_health_alert_error_ratio", 0.5) or 0.5)
+        if not fatal and ratio < min_ratio:
+            return
+
+        throttle_min = int(getattr(self.settings, "agent_health_alert_throttle_minutes", 30) or 30)
+        last = getattr(self, "_last_health_alert", None)
+        if last is not None and (now - last).total_seconds() < throttle_min * 60:
+            return
+        self._last_health_alert = now
+        self._engine_health_degraded = True
+
+        event = "storage_error" if fatal else "scan_failures"
+        detail = (
+            f"{len(errors)}/{scanned} asset falliti nel ciclo di scansione"
+            + (f" — {fatal}" if fatal else "")
+            + ". L'agente non sta aprendo posizioni."
+        )
+        logger.error(
+            "engine_health_degraded",
+            event_kind=event,
+            scanned=scanned,
+            failed=len(errors),
+            ratio=round(ratio, 3),
+            fatal=fatal,
+            sample=errors[0][:200],
+        )
+        await get_agent_notifier().notify_agent_critical(
+            user_id=str(self.settings.default_user_id),
+            event=event,
+            detail=detail,
+        )
 
     async def _handle_signal(self, signal: dict, session: AsyncSession) -> dict:
         if signal.get("action") == "skip":

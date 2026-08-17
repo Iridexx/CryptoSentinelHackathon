@@ -115,6 +115,8 @@ const defaultSettings: AgentMobileSettings = {
   drawdown_cap_pct: -15,
   min_pool_liquidity_usd: 50000,
   market_reversal_filter_enabled: true,
+  spot_market_reversal_filter_enabled: true,
+  perp_market_reversal_filter_enabled: false,
   spot_breakeven_enabled: true,
   perp_breakeven_enabled: true,
   spot_trailing_enabled: true,
@@ -1185,8 +1187,9 @@ const CoinsPane: FC<{
         const result = await updatePerpWatchlist([...current], adminToken);
         setPerpData(result);
       }
-    } catch {
-      setMarketError('Errore salvataggio watchlist');
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      setMarketError(`Errore salvataggio watchlist — ${detail}`);
     } finally {
       setMarketSaving(false);
     }
@@ -1501,9 +1504,14 @@ const SetupPane: FC<{
       <section className="space-y-3">
         <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Filtri mercato</h3>
         <ToggleInput
-          label="Filtro inversione mercato"
-          checked={settings.market_reversal_filter_enabled}
-          onChange={(market_reversal_filter_enabled) => patch({ market_reversal_filter_enabled })}
+          label="Filtro inversione mercato — Spot"
+          checked={settings.spot_market_reversal_filter_enabled}
+          onChange={(spot_market_reversal_filter_enabled) => patch({ spot_market_reversal_filter_enabled })}
+        />
+        <ToggleInput
+          label="Filtro inversione mercato — Perp"
+          checked={settings.perp_market_reversal_filter_enabled}
+          onChange={(perp_market_reversal_filter_enabled) => patch({ perp_market_reversal_filter_enabled })}
         />
         <ToggleInput
           label="Breakeven Spot"
