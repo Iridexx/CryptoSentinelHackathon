@@ -607,6 +607,7 @@ export function saveAgentSettings(settings: AgentMobileSettings, adminToken: str
 export function validateOnboarding(adminToken: string): Promise<CredentialValidationResponse> {
   return request<CredentialValidationResponse>('/api/v1/mobile/agent/onboarding/validate', {
     method: 'POST',
+    timeoutMs: 120_000,
     token: adminToken,
   });
 }
@@ -648,6 +649,7 @@ export interface RiskCloseAllResponse extends AgentStatus {
 export function riskCloseAll(adminToken: string): Promise<RiskCloseAllResponse> {
   return request<RiskCloseAllResponse>('/api/v1/agent/risk/close-all', {
     method: 'POST',
+    timeoutMs: 120_000,
     token: adminToken,
   });
 }
@@ -663,6 +665,7 @@ export interface ResetDbResponse {
 export function resetDatabase(backupName: string | null, adminToken: string): Promise<ResetDbResponse> {
   return request<ResetDbResponse>('/api/v1/agent/dev/reset-db', {
     method: 'POST',
+    timeoutMs: 120_000,
     body: { backup_name: backupName },
     token: adminToken,
   });
@@ -680,6 +683,7 @@ export interface EquityAdjustResponse {
 export function adjustEquity(amount: number, note: string | null, adminToken: string): Promise<EquityAdjustResponse> {
   return request<EquityAdjustResponse>('/api/v1/agent/equity/adjust', {
     method: 'POST',
+    timeoutMs: 120_000,
     body: { amount, note },
     token: adminToken,
   });
@@ -710,6 +714,7 @@ export interface AsterConnectionReport {
 export function testAsterConnection(adminToken: string): Promise<AsterConnectionReport> {
   return request<AsterConnectionReport>('/api/v1/aster/connection-test', {
     method: 'POST',
+    timeoutMs: 120_000,
     token: adminToken,
   });
 }

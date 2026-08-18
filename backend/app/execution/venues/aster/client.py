@@ -88,7 +88,7 @@ class AsterClient:
         account_address: str,
         api_wallet_address: str,
         api_wallet_private_key: str,
-        timeout_seconds: float = 15.0,
+        timeout_seconds: float = 10.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._user = account_address
