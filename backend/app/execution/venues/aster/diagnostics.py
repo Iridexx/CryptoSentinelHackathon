@@ -50,23 +50,25 @@ class DiagnosticsReport:
         return data
 
 
-#: Aster answers -1000 on every account/history endpoint of an account that has
-#: never been funded (balance, positionRisk, income, commissionRate, userTrades),
-#: while configuration endpoints keep answering normally. The message it attaches
-#: says "Signature check failed", which is misleading: the same credentials are
-#: accepted on /fapi/v3/agent moments earlier.
-_UNFUNDED_ACCOUNT_CODE = "-1000"
+#: Aster answers -1000 ("Signature check failed") on a fixed set of endpoints —
+#: balance, positionRisk, income, commissionRate, allOrders, userTrades — while
+#: accepting the very same credentials on agent, openOrders, leverageBracket and
+#: the account snapshot. Verified with two distinct API wallets, before and after
+#: the account was funded, and against ~40 signature variants: it is a limitation
+#: on Aster's side, not a credential or signing problem. The message it attaches
+#: blames the signature, which is what makes it worth naming explicitly here.
+_UNSUPPORTED_CODE = "-1000"
 
 
-def _looks_unfunded(exc: AsterError) -> bool:
-    """True when the failure is the one an account without deposits produces."""
-    return (exc.code or "") == _UNFUNDED_ACCOUNT_CODE
+def _is_unsupported(exc: AsterError) -> bool:
+    """True when the failure is Aster's known -1000 on these endpoints."""
+    return (exc.code or "") == _UNSUPPORTED_CODE
 
 
-_UNFUNDED_DETAIL = (
-    "Il conto Aster non ha ancora ricevuto depositi: finché non viene alimentato "
-    "Aster non espone questi dati. Le credenziali sono valide (verificate al passo "
-    "precedente). Esegui di nuovo il test dopo il primo deposito."
+_UNSUPPORTED_DETAIL = (
+    "Aster risponde -1000 su questo endpoint anche con credenziali valide "
+    "(verificate ai passi precedenti): è una limitazione lato Aster, non un problema "
+    "di configurazione. I dati del conto vengono letti da un endpoint alternativo."
 )
 
 
@@ -297,40 +299,42 @@ async def run_connection_test(settings) -> DiagnosticsReport:
                 f"Account confermato: {short_address(match)}.",
             ))
 
-    # 6. Balance
+    # 6. Balance and positions, from the account snapshot.
+    #
+    # /fapi/v3/balance and /fapi/v3/positionRisk answer -1000 for this account
+    # (see _is_unsupported); accountWithJoinMargin carries the same figures and
+    # answers, so it is the source of truth for both checks.
     try:
-        balances = await client.balance()
-        funded = [
-            b for b in (balances if isinstance(balances, list) else [])
-            if _as_float(b.get("balance")) > 0
-        ]
-        detail = f"Saldo leggibile: {len(funded)} asset con disponibilità." if funded else \
-            "Saldo leggibile, al momento nessun asset con disponibilità."
-        checks.append(Check("balance", "Saldo", OK if funded else WARNING, detail))
+        snapshot = await client.account()
     except AsterError as exc:
-        if _looks_unfunded(exc):
-            checks.append(Check("balance", "Saldo", WARNING, _UNFUNDED_DETAIL, exc.code))
+        if _is_unsupported(exc):
+            checks.append(Check("balance", "Saldo", WARNING, _UNSUPPORTED_DETAIL, exc.code))
         else:
             detail, code = _describe(exc)
             checks.append(Check("balance", "Saldo", ERROR, detail, code))
+        snapshot = None
 
-    # 7. Positions
-    try:
-        positions = await client.position_risk()
+    if isinstance(snapshot, dict):
+        funded = [
+            a for a in (snapshot.get("assets") or [])
+            if _as_float(a.get("walletBalance")) > 0
+        ]
+        total = _as_float(snapshot.get("totalWalletBalance"))
+        checks.append(Check(
+            "balance", "Saldo", OK if funded else WARNING,
+            f"Saldo leggibile: {total:.2f} USD su {len(funded)} asset "
+            f"({', '.join(str(a.get('asset', '?')) for a in funded)})." if funded
+            else "Saldo leggibile, al momento nessun asset con disponibilità.",
+        ))
+
         open_positions = [
-            p for p in (positions if isinstance(positions, list) else [])
+            p for p in (snapshot.get("positions") or [])
             if _as_float(p.get("positionAmt")) != 0
         ]
         checks.append(Check(
             "positions", "Posizioni", OK,
             f"Posizioni leggibili: {len(open_positions)} aperte su Aster.",
         ))
-    except AsterError as exc:
-        if _looks_unfunded(exc):
-            checks.append(Check("positions", "Posizioni", WARNING, _UNFUNDED_DETAIL, exc.code))
-        else:
-            detail, code = _describe(exc)
-            checks.append(Check("positions", "Posizioni", ERROR, detail, code))
 
     # 8. Perp access + commission rate
     try:
@@ -343,8 +347,8 @@ async def run_connection_test(settings) -> DiagnosticsReport:
             if maker is not None else "Perpetual accessibile.",
         ))
     except AsterError as exc:
-        if _looks_unfunded(exc):
-            checks.append(Check("perp", "Accesso Perpetual", WARNING, _UNFUNDED_DETAIL, exc.code))
+        if _is_unsupported(exc):
+            checks.append(Check("perp", "Accesso Perpetual", WARNING, _UNSUPPORTED_DETAIL, exc.code))
         else:
             detail, code = _describe(exc)
             checks.append(Check("perp", "Accesso Perpetual", ERROR, detail, code))

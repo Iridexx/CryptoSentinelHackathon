@@ -95,50 +95,44 @@ async def get_wallet_view(settings, *, force_refresh: bool = False) -> AsterWall
         api_wallet_private_key=key,
     )
 
+    # Aster answers -1000 ("Signature check failed") on /fapi/v3/balance and
+    # /fapi/v3/positionRisk for this account, with credentials it accepts on every
+    # other endpoint moments earlier — verified with two distinct API wallets, and
+    # both before and after the account was funded. The account snapshot carries
+    # the same numbers and does answer, so read them from there.
     try:
-        raw_balances = await client.balance()
-        total = 0.0
-        for item in raw_balances if isinstance(raw_balances, list) else []:
-            amount = _as_float(item.get("balance"))
-            if amount <= 0:
-                continue
-            view.balances.append(
-                AsterAssetBalance(
-                    asset=str(item.get("asset", "?")),
-                    balance=str(item.get("balance", "0")),
-                    available=str(item.get("availableBalance", item.get("balance", "0"))),
-                )
-            )
-            if str(item.get("asset", "")).upper() in ("USDT", "USDC"):
-                total += amount
-        view.total_balance_usdt = f"{total:.2f}"
-        view.reachable = True
+        snapshot = await client.account()
     except AsterError as exc:
-        # Aster answers -1000 on the balance endpoint of an account that has never
-        # been funded, with a message that blames the signature. Saying "cannot read
-        # the balance" for what is simply an empty account sends people hunting for a
-        # credential problem that isn't there, so name the likely cause and point at
-        # the diagnostic, which can tell the two apart.
-        if (exc.code or "") == "-1000":
-            view.error = (
-                "Conto Aster senza depositi: Aster non espone il saldo finché il conto "
-                "non viene alimentato. Se hai già depositato, esegui il test connessione "
-                "in Setup > Sistema."
-            )
-        else:
-            view.error = "Impossibile leggere il saldo da Aster in questo momento."
-        logger.warning("aster_wallet_balance_failed", code=exc.code, status=exc.status)
+        view.error = "Impossibile leggere il saldo da Aster in questo momento."
+        logger.warning("aster_wallet_snapshot_failed", code=exc.code, status=exc.status)
         _cache.update(at=now, value=view)
         return view
 
-    try:
-        positions = await client.position_risk()
-        view.open_positions = len(
-            [p for p in (positions if isinstance(positions, list) else [])
-             if _as_float(p.get("positionAmt")) != 0]
+    if not isinstance(snapshot, dict):
+        view.error = "Aster ha restituito una risposta inattesa per il conto."
+        logger.warning("aster_wallet_snapshot_malformed")
+        _cache.update(at=now, value=view)
+        return view
+
+    for item in snapshot.get("assets") or []:
+        amount = _as_float(item.get("walletBalance"))
+        if amount <= 0:
+            continue
+        view.balances.append(
+            AsterAssetBalance(
+                asset=str(item.get("asset", "?")),
+                balance=str(item.get("walletBalance", "0")),
+                available=str(item.get("maxWithdrawAmount", item.get("walletBalance", "0"))),
+            )
         )
-    except AsterError as exc:
-        logger.warning("aster_wallet_positions_failed", code=exc.code, status=exc.status)
+
+    # Aster already values the whole account in USD: summing the asset rows would
+    # mean adding 0.003 BNB to a dollar figure.
+    view.total_balance_usdt = f"{_as_float(snapshot.get('totalWalletBalance')):.2f}"
+    view.open_positions = len(
+        [p for p in (snapshot.get("positions") or []) if _as_float(p.get("positionAmt")) != 0]
+    )
+    view.reachable = True
 
     _cache.update(at=now, value=view)
     return view

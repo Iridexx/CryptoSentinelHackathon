@@ -75,11 +75,12 @@ class _FakeClient:
             "parentAccount": True,
         }])
 
-    async def balance(self):
-        return await self._reply("balance", [{"asset": "USDT", "balance": "100.0"}])
-
-    async def position_risk(self):
-        return await self._reply("position_risk", [])
+    async def account(self):
+        return await self._reply("account", {
+            "totalWalletBalance": "100.0",
+            "assets": [{"asset": "USDT", "walletBalance": "100.0", "maxWithdrawAmount": "100.0"}],
+            "positions": [],
+        })
 
     async def commission_rate(self, symbol):
         return await self._reply(
@@ -192,27 +193,45 @@ async def test_wrong_account_is_critical_and_blocks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unfunded_account_is_a_warning_not_an_error() -> None:
-    """An account that never received a deposit answers -1000 on every asset endpoint.
+async def test_asters_own_minus_1000_is_a_warning_not_an_error() -> None:
+    """Aster answers -1000 on some endpoints with credentials it accepts elsewhere.
 
-    The credentials are fine — auth passed a step earlier — so this must not be
-    reported as a connection failure.
+    Auth passed two steps earlier, so this must not be reported as a connection
+    failure — and the wording must not blame the configuration.
     """
     cfg = _cfg()
-    unfunded = AsterError("Signature check failed", code="-1000", status=400)
-    with _patched(cfg, balance=unfunded, position_risk=unfunded, commission_rate=unfunded):
+    unsupported = AsterError("Signature check failed", code="-1000", status=400)
+    with _patched(cfg, commission_rate=unsupported):
         report = await run_connection_test(cfg)
     assert report.overall == WARNING
     assert report.blocked is False
-    for key in ("balance", "positions", "perp"):
-        assert _check(report, key).status == WARNING
-        assert "depositi" in _check(report, key).detail
+    perp = _check(report, "perp")
+    assert perp.status == WARNING
+    assert "limitazione lato Aster" in perp.detail
 
 
 @pytest.mark.asyncio
-async def test_genuine_balance_failure_is_still_an_error() -> None:
+async def test_balance_and_positions_come_from_the_account_snapshot() -> None:
     cfg = _cfg()
-    with _patched(cfg, balance=AsterError("boom", code="-1021", status=400)):
+    snapshot = {
+        "totalWalletBalance": "1.72",
+        "assets": [
+            {"asset": "BNB", "walletBalance": "0.003", "maxWithdrawAmount": "0.003"},
+            {"asset": "USDT", "walletBalance": "0"},
+        ],
+        "positions": [{"positionAmt": "0.5"}, {"positionAmt": "0"}],
+    }
+    with _patched(cfg, account=snapshot):
+        report = await run_connection_test(cfg)
+    assert _check(report, "balance").status == OK
+    assert "1.72 USD su 1 asset (BNB)" in _check(report, "balance").detail
+    assert "1 aperte" in _check(report, "positions").detail
+
+
+@pytest.mark.asyncio
+async def test_genuine_snapshot_failure_is_still_an_error() -> None:
+    cfg = _cfg()
+    with _patched(cfg, account=AsterError("boom", code="-1021", status=400)):
         report = await run_connection_test(cfg)
     assert report.overall == ERROR
     assert _check(report, "balance").status == ERROR
