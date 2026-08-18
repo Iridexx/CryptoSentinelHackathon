@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 from eth_account import Account
-from eth_account.messages import encode_structured_data
+from eth_account.messages import encode_typed_data
 
 from backend.app.core.logging import get_logger
 
@@ -109,14 +109,10 @@ class AsterClient:
         return derived.lower() == (self._signer or "").lower()
 
     def _sign(self, params: dict[str, Any]) -> str:
-        """Sign the urlencoded parameter string with the API wallet key.
-
-        Uses encode_structured_data (not encode_typed_data) to match the
-        official Aster V3 Python example exactly.
-        """
+        """Sign the urlencoded parameter string with the API wallet key."""
         payload = urllib.parse.urlencode(params)
-        _TYPED_DATA["message"]["msg"] = payload
-        message = encode_structured_data(_TYPED_DATA)
+        typed = {**_TYPED_DATA, "message": {"msg": payload}}
+        message = encode_typed_data(full_message=typed)
         signed = Account.sign_message(message, private_key=self._key)
         return signed.signature.hex()
 
