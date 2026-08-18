@@ -109,23 +109,23 @@ class AsterClient:
         return derived.lower() == (self._signer or "").lower()
 
     def _sign(self, params: dict[str, Any]) -> str:
-        """Sign the urlencoded parameter string with the API wallet key."""
-        payload = urllib.parse.urlencode(params)
+        """Sign the alphabetically-sorted urlencoded parameter string."""
+        payload = urllib.parse.urlencode(sorted(params.items()))
         typed = {**_TYPED_DATA, "message": {"msg": payload}}
         message = encode_typed_data(full_message=typed)
         signed = Account.sign_message(message, private_key=self._key)
         return signed.signature.hex()
 
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        """Signed GET, following the official Aster V3 Python example."""
-        sign_params = dict(params or {})
-        sign_params["nonce"] = str(_next_nonce())
-        sign_params["signer"] = self._signer
-        signature = self._sign(sign_params)
+        """Signed GET. Only read endpoints are ever passed to this method."""
+        query = dict(params or {})
+        query["user"] = self._user
+        query["signer"] = self._signer
+        query["nonce"] = str(_next_nonce())
+        signature = self._sign(query)
         if not signature.startswith("0x"):
             signature = "0x" + signature
-
-        query = {**sign_params, "user": self._user, "signature": signature}
+        query["signature"] = signature
 
         url = f"{self._base_url}{path}"
         try:
