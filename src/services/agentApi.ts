@@ -30,17 +30,37 @@ export interface EligibleTokensResponse {
   tokens: string[];
 }
 
+export interface SymbolRanking {
+  rank: number | null;
+  market_cap: number | null;
+}
+
+export type WatchlistRanking = Record<string, SymbolRanking>;
+
 export interface AgentWatchlistResponse {
   eligible_count: number;
   eligible_tokens: string[];
   selected_count: number;
   selected_tokens: string[];
+  ranking?: WatchlistRanking;
 }
+
+export type VenueAvailabilityStatus = 'available' | 'unavailable' | 'unknown';
+
+export interface VenueAvailability {
+  venue: string;
+  status: VenueAvailabilityStatus;
+  reason?: string;
+}
+
+export type WatchlistAvailability = Record<string, { spot?: VenueAvailability; perp?: VenueAvailability }>;
 
 export interface AgentMarketWatchlistResponse {
   master_tokens: string[];
   selected_tokens: string[];
   selected_count: number;
+  availability?: WatchlistAvailability;
+  ranking?: WatchlistRanking;
 }
 
 export interface SpotPositionView {
@@ -663,4 +683,56 @@ export function adjustEquity(amount: number, note: string | null, adminToken: st
     body: { amount, note },
     token: adminToken,
   });
+}
+
+// ── Diagnostica connessione Aster (sola lettura) ─────────────────────────────
+export type AsterCheckStatus = 'ok' | 'warning' | 'error' | 'critical';
+
+export interface AsterCheck {
+  key: string;
+  label: string;
+  status: AsterCheckStatus;
+  detail: string;
+  technical?: string | null;
+}
+
+export interface AsterConnectionReport {
+  overall: AsterCheckStatus;
+  summary: string;
+  checks: AsterCheck[];
+  started_at: string;
+  duration_ms: number;
+  account: string | null;
+  subaccount_name: string | null;
+  blocked: boolean;
+}
+
+export function testAsterConnection(adminToken: string): Promise<AsterConnectionReport> {
+  return request<AsterConnectionReport>('/api/v1/aster/connection-test', {
+    method: 'POST',
+    token: adminToken,
+  });
+}
+
+// ── Wallet Aster (sola lettura) ──────────────────────────────────────────────
+export interface AsterAssetBalance {
+  asset: string;
+  balance: string;
+  available: string;
+}
+
+export interface AsterWalletView {
+  configured: boolean;
+  subaccount_name: string | null;
+  subaccount_address: string | null;
+  api_wallet_address_short: string | null;
+  balances: AsterAssetBalance[];
+  total_balance_usdt: string | null;
+  open_positions: number | null;
+  reachable: boolean;
+  error: string | null;
+}
+
+export function fetchAsterWallet(): Promise<AsterWalletView> {
+  return request<AsterWalletView>('/api/v1/aster/wallet');
 }

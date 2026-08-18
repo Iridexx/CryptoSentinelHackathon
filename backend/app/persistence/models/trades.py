@@ -49,6 +49,7 @@ class PerpTrade(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     trade_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    position_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     asset: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)  # long / short

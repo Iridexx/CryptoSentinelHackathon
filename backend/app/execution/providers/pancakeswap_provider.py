@@ -93,6 +93,12 @@ class PancakeSwapProvider(ExecutionProvider):
             return Web3.to_checksum_address(self._settings.pancakeswap_wbnb_address_testnet)
         return Web3.to_checksum_address(self._settings.pancakeswap_wbnb_address_mainnet)
 
+    @property
+    def factory_address(self) -> str:
+        if self._settings.bsc_network == "testnet":
+            return Web3.to_checksum_address(self._settings.pancakeswap_factory_address_testnet)
+        return Web3.to_checksum_address(self._settings.pancakeswap_factory_address_mainnet)
+
     # ── Pure helpers (no I/O, fully unit-testable) ─────────────────────────────
 
     def build_path(self, from_asset: str, to_asset: str) -> list[str]:
@@ -188,7 +194,28 @@ class PancakeSwapProvider(ExecutionProvider):
             "chainId": chain_id,
         }
 
+    def encode_get_pair(self, token_a: str, token_b: str) -> str:
+        data = SEL_GET_PAIR + abi_encode(
+            ["address", "address"],
+            [Web3.to_checksum_address(token_a), Web3.to_checksum_address(token_b)],
+        )
+        return "0x" + data.hex()
+
+    @staticmethod
+    def decode_address(result_hex: str) -> str:
+        raw = bytes.fromhex(result_hex.removeprefix("0x"))
+        (address,) = abi_decode(["address"], raw)
+        return Web3.to_checksum_address(address)
+
     # ── Read-only market introspection ────────────────────────────────────────
+
+    async def pair_address(self, token_a: str, token_b: str) -> str:
+        """Factory address of the liquidity pool, or the zero address if none."""
+        result_hex = await self._rpc_client().call(
+            "eth_call",
+            [{"to": self.factory_address, "data": self.encode_get_pair(token_a, token_b)}, "latest"],
+        )
+        return self.decode_address(result_hex)
 
     async def pair_reserves(self, pair: str) -> tuple[str, int, int]:
         """``(token0, reserve0, reserve1)`` of a pool, straight from the pair."""

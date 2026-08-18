@@ -28,6 +28,8 @@ def _settings(**overrides):
         bsc_network="mainnet",
         spot_quote_token_address=USDT,
         spot_token_map={"BTC": BTCB},
+        risk_min_pool_liquidity_usd=50000.0,
+        default_user_id="test-user",
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -263,3 +265,44 @@ async def test_pool_depth_is_none_when_the_reading_fails():
 
     service = _service(spot=_FakeSpot(error=RuntimeError("rpc down")))
     assert await service.spot_pool_liquidity_usd("BTC") is None
+
+
+# ── Liquidity floor gate in _spot_status ─────────────────────────────────────
+
+
+def _depth_service(reserve_wbnb: int, bnb_price: Decimal, floor: float = 50_000.0):
+    """Service whose spot pool has a known depth in USD."""
+    provider = _DepthProvider(POOL, WBNB, reserve_wbnb, 10**18, WBNB)
+    svc = VenueAvailabilityService(
+        _settings(risk_min_pool_liquidity_usd=floor),
+        cache=TTLCache(60.0),
+        aster_client=_FakeAster(_exchange_info("BTC")),
+        spot_provider=provider,
+    )
+    svc._cache.set("pancakeswap:bnb_price_usd", bnb_price)
+    return svc
+
+
+@pytest.mark.asyncio
+async def test_a_pool_below_the_threshold_is_unavailable():
+    # 10 WBNB × 600 $/BNB = 6 000 $ — well under the 50 000 $ floor.
+    service = _depth_service(10 * 10**18, Decimal("600"))
+    result = await service.availability(["BTC"])
+    assert result["BTC"]["spot"]["status"] == UNAVAILABLE
+    assert "liquidità" in result["BTC"]["spot"]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_a_deep_pool_stays_available():
+    # 200 WBNB × 600 $/BNB = 120 000 $ — above the 50 000 $ floor.
+    service = _depth_service(200 * 10**18, Decimal("600"))
+    result = await service.availability(["BTC"])
+    assert result["BTC"]["spot"]["status"] == AVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_an_unmeasurable_depth_does_not_block():
+    """depth=None means we cannot measure — must NOT become unavailable."""
+    service = _service(spot=_FakeSpot(POOL))
+    result = await service.availability(["BTC"])
+    assert result["BTC"]["spot"]["status"] == AVAILABLE

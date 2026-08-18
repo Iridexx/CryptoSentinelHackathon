@@ -7,6 +7,7 @@ import {
   fetchEquityCurve,
   type ClaudeUsageView,
   fetchClaudeUsage,
+  fetchAsterWallet,
   fetchExecutionWallets,
   fetchGlobalView,
   fetchPerpView,
@@ -17,18 +18,22 @@ import {
   riskCloseAll,
   adjustEquity,
   validateOnboarding,
+  fetchAgentWatchlist,
   fetchSpotWatchlist,
   updateSpotWatchlist,
   fetchPerpWatchlist,
   updatePerpWatchlist,
   type AgentDecisionResponse,
   type AgentMarketWatchlistResponse,
+  type VenueAvailability,
+  type WatchlistRanking,
   type AgentMobileSettings,
   type AgentStatus,
   type AssetBreakdownResponse,
   type CredentialValidationResponse,
   type EquityCurveResponse,
   type EquityRange,
+  type AsterWalletView,
   type ExecutionWalletsResponse,
   type GlobalView,
   type KillSwitchState,
@@ -501,21 +506,39 @@ const TokenToggle: FC<{
   selected: boolean;
   disabled: boolean;
   onToggle: (symbol: string) => void;
-}> = ({ symbol, selected, disabled, onToggle }) => (
-  <button
-    type="button"
-    disabled={disabled}
-    onClick={() => { hapticLight(); onToggle(symbol); }}
-    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-45 ${
-      selected
-        ? 'border-accent-yellow/50 bg-accent-yellow/10 text-accent-yellow'
-        : 'border-dark-700 bg-dark-800 text-gray-300'
-    }`}
-  >
-    <span className="min-w-0 truncate text-sm font-semibold">{symbol}</span>
-    <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selected ? 'bg-accent-yellow' : 'bg-gray-600'}`} />
-  </button>
-);
+  availability?: VenueAvailability;
+  rank?: number | null;
+}> = ({ symbol, selected, disabled, onToggle, availability, rank }) => {
+  const status = availability?.status;
+  const blocked = status === 'unavailable' && !selected;
+  const tone = selected
+    ? 'border-accent-yellow/50 bg-accent-yellow/10 text-accent-yellow'
+    : blocked
+      ? 'border-dark-700 bg-dark-800 text-gray-500 opacity-60'
+      : 'border-dark-700 bg-dark-800 text-gray-300';
+  return (
+    <button
+      type="button"
+      disabled={disabled || blocked}
+      onClick={() => { hapticLight(); onToggle(symbol); }}
+      title={availability?.reason}
+      className={`flex flex-col gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-45 ${tone}`}
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          {rank != null && <span className="flex-shrink-0 text-[10px] text-gray-500">#{rank}</span>}
+          <span className={`min-w-0 truncate text-sm font-semibold ${status === 'unavailable' ? 'line-through' : ''}`}>{symbol}</span>
+        </span>
+        <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${selected ? 'bg-accent-yellow' : 'bg-gray-600'}`} />
+      </span>
+      {availability && (
+        <span className={`text-[10px] ${status === 'available' ? 'text-accent-green' : status === 'unavailable' ? 'text-accent-red' : 'text-gray-500'}`}>
+          {status === 'available' ? `✓ ${availability.venue}` : status === 'unavailable' ? `✗ ${availability.venue}` : `? ${availability.venue}`}
+        </span>
+      )}
+    </button>
+  );
+};
 
 const HelpTip: FC<{ text: string }> = ({ text }) => {
   const [open, setOpen] = useState(false);
@@ -1053,6 +1076,15 @@ const WalletPane: FC<{
   const activeWallet = execWallets?.available_wallets.find((w) => w.active)
     ?? execWallets?.available_wallets[0];
 
+  const [aster, setAster] = useState<AsterWalletView | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchAsterWallet()
+      .then((data) => { if (alive) setAster(data); })
+      .catch(() => { if (alive) setAster(null); });
+    return () => { alive = false; };
+  }, []);
+
   return (
     <div className="space-y-4">
 
@@ -1062,6 +1094,51 @@ const WalletPane: FC<{
         <Stat label="Perp" value={String(perp?.open_positions.length ?? 0)} />
         <Stat label="PnL aperto" value={fmtUsd(totalPnl)} tone={totalPnl >= 0 ? 'good' : 'bad'} />
       </div>
+
+      {/* ── ASTER · venue Perp ── */}
+      {aster?.configured && (
+        <section className="space-y-2">
+          <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">
+            Aster · venue Perp{aster.subaccount_name ? ` · ${aster.subaccount_name}` : ''}
+          </h3>
+          <div className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
+            <button
+              onClick={() => aster.subaccount_address && copyAddress(aster.subaccount_address)}
+              className="w-full text-left rounded-lg bg-dark-900 px-3 py-2"
+            >
+              <p className="text-[11px] text-gray-500">Sub-account · qui vanno versati i fondi</p>
+              <p className="font-mono text-xs text-gray-300 break-all leading-relaxed">{aster.subaccount_address}</p>
+              <p className="mt-0.5 text-[11px] text-accent-blue">
+                {copied === aster.subaccount_address ? '✓ Copiato' : 'Tocca per copiare'}
+              </p>
+            </button>
+
+            <div className="flex items-center justify-between rounded-lg bg-dark-900 px-3 py-2">
+              <div>
+                <p className="text-sm font-semibold text-white">Saldo su Aster</p>
+                <p className="text-[11px] text-gray-500">
+                  wallet API {aster.api_wallet_address_short} · solo firma
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-white">
+                  {aster.reachable ? `${aster.total_balance_usdt ?? '0.00'} USDT` : '—'}
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  {aster.open_positions != null ? `${aster.open_positions} posizioni` : ''}
+                </p>
+              </div>
+            </div>
+
+            {aster.reachable && aster.balances.length === 0 && (
+              <p className="text-[11px] text-gray-500 px-1">
+                Nessun asset: il sub-account non è ancora finanziato.
+              </p>
+            )}
+            {aster.error && <p className="text-[11px] text-accent-red px-1">{aster.error}</p>}
+          </div>
+        </section>
+      )}
 
       {/* ── WALLET ATTIVO ── */}
       <section className="space-y-2">
@@ -1224,15 +1301,28 @@ const CoinsPane: FC<{
   const [perpData, setPerpData] = useState<AgentMarketWatchlistResponse | null>(null);
   const [marketSaving, setMarketSaving] = useState(false);
   const [marketError, setMarketError] = useState('');
+  const [ranking, setRanking] = useState<WatchlistRanking>({});
 
   useEffect(() => {
     void fetchSpotWatchlist().then(setSpotData).catch(() => undefined);
     void fetchPerpWatchlist().then(setPerpData).catch(() => undefined);
+    void fetchAgentWatchlist().then((d) => setRanking(d.ranking ?? {})).catch(() => undefined);
   }, []);
 
   const normalizedQuery = query.trim().toUpperCase();
-  const masterTokens = eligibleTokens.filter((s) => selectedAiSymbols.has(s.toUpperCase()));
-  const filteredEligible = eligibleTokens.filter((s) => s.toUpperCase().includes(normalizedQuery));
+  const rankOf = (symbol: string): number | null => ranking[symbol.toUpperCase()]?.rank ?? null;
+  const byMarketCap = (symbols: string[]): string[] =>
+    [...symbols].sort((a, b) => {
+      const ra = rankOf(a);
+      const rb = rankOf(b);
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
+      return a.localeCompare(b);
+    });
+
+  const masterTokens = byMarketCap(eligibleTokens.filter((s) => selectedAiSymbols.has(s.toUpperCase())));
+  const filteredEligible = byMarketCap(eligibleTokens.filter((s) => s.toUpperCase().includes(normalizedQuery)));
 
   const spotSelected = useMemo(() => new Set((spotData?.selected_tokens ?? []).map((s) => s.toUpperCase())), [spotData]);
   const perpSelected = useMemo(() => new Set((perpData?.selected_tokens ?? []).map((s) => s.toUpperCase())), [perpData]);
@@ -1246,12 +1336,12 @@ const CoinsPane: FC<{
         const current = new Set(spotData?.selected_tokens ?? []);
         if (current.has(symbol)) current.delete(symbol); else current.add(symbol);
         const result = await updateSpotWatchlist([...current], adminToken);
-        setSpotData(result);
+        setSpotData((prev) => ({ ...result, availability: result.availability ?? prev?.availability }));
       } else {
         const current = new Set(perpData?.selected_tokens ?? []);
         if (current.has(symbol)) current.delete(symbol); else current.add(symbol);
         const result = await updatePerpWatchlist([...current], adminToken);
-        setPerpData(result);
+        setPerpData((prev) => ({ ...result, availability: result.availability ?? prev?.availability }));
       }
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
@@ -1302,7 +1392,7 @@ const CoinsPane: FC<{
             {masterTokens.length > 0 ? (
               <div className="grid grid-cols-2 gap-2">
                 {masterTokens.map((symbol) => (
-                  <TokenToggle key={`sel-${symbol}`} symbol={symbol} selected disabled={disabled} onToggle={onToggle} />
+                  <TokenToggle key={`sel-${symbol}`} symbol={symbol} selected disabled={disabled} onToggle={onToggle} rank={rankOf(symbol)} />
                 ))}
               </div>
             ) : (
@@ -1322,7 +1412,7 @@ const CoinsPane: FC<{
             />
             <div className="grid grid-cols-2 gap-2">
               {filteredEligible.map((symbol) => (
-                <TokenToggle key={symbol} symbol={symbol} selected={selectedAiSymbols.has(symbol.toUpperCase())} disabled={disabled} onToggle={onToggle} />
+                <TokenToggle key={symbol} symbol={symbol} selected={selectedAiSymbols.has(symbol.toUpperCase())} disabled={disabled} onToggle={onToggle} rank={rankOf(symbol)} />
               ))}
             </div>
             {filteredEligible.length === 0 && <EmptyState title="Nessun token trovato" detail="La ricerca filtra solo l'universo eligible." />}
@@ -1334,11 +1424,26 @@ const CoinsPane: FC<{
         const isSpot = subTab === 'spot';
         const selected = isSpot ? spotSelected : perpSelected;
         const activeMasterTokens = masterTokens.filter((s) => s.toUpperCase().includes(normalizedQuery));
+        const availabilityMap = (isSpot ? spotData : perpData)?.availability;
+        const availabilityFor = (symbol: string): VenueAvailability => {
+          const entry = availabilityMap?.[symbol.toUpperCase()];
+          const value = isSpot ? entry?.spot : entry?.perp;
+          return value ?? { venue: isSpot ? 'pancakeswap' : 'aster', status: 'unknown' };
+        };
+        const blockedCount = activeMasterTokens.filter(
+          (s) => availabilityFor(s).status === 'unavailable' && !selected.has(s.toUpperCase()),
+        ).length;
         return (
           <section className="space-y-2">
             <p className="px-1 text-xs text-gray-500">
               Seleziona le coin dalla master watchlist da assegnare al mercato <span className="font-semibold text-white">{subTab.toUpperCase()}</span>.
+              {' '}Venue: <span className="font-semibold text-white">{isSpot ? 'PancakeSwap' : 'Aster'}</span>.
             </p>
+            {blockedCount > 0 && (
+              <p className="px-1 text-xs text-accent-red">
+                {blockedCount} {blockedCount === 1 ? 'coin non è quotata' : 'coin non sono quotate'} su {isSpot ? 'PancakeSwap' : 'Aster'}: non selezionabili.
+              </p>
+            )}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1357,6 +1462,8 @@ const CoinsPane: FC<{
                     selected={selected.has(symbol.toUpperCase())}
                     disabled={marketDisabled}
                     onToggle={(s) => void handleMarketToggle(s, subTab)}
+                    availability={availabilityFor(symbol)}
+                    rank={rankOf(symbol)}
                   />
                 ))}
               </div>
