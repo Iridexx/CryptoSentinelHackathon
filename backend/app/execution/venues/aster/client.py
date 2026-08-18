@@ -109,8 +109,8 @@ class AsterClient:
         return derived.lower() == (self._signer or "").lower()
 
     def _sign(self, params: dict[str, Any]) -> str:
-        """Sign the alphabetically-sorted urlencoded parameter string."""
-        payload = urllib.parse.urlencode(sorted(params.items()))
+        """Sign the urlencoded parameter string with the API wallet key."""
+        payload = urllib.parse.urlencode(params)
         typed = {**_TYPED_DATA, "message": {"msg": payload}}
         message = encode_typed_data(full_message=typed)
         signed = Account.sign_message(message, private_key=self._key)
