@@ -221,6 +221,9 @@ class AgentService:
         )
 
     def status(self) -> dict:
+        reversal_state = self._market_reversal_state_persisted()
+        shock_state = self._trend_shock_state_persisted()
+        shock_rc = self._trend_shock_recovery_count()
         return {
             "mode": self._ms.mode,
             "markets_enabled": self._ms.markets_enabled,
@@ -233,6 +236,20 @@ class AgentService:
             "watchlist_spot_count": len(selected_spot_watchlist(self.settings)),
             "watchlist_perp_count": len(selected_perp_watchlist(self.settings)),
             "heartbeat": heartbeat.as_dict(),
+            "filters": {
+                "reversal": {
+                    "enabled": self._ms.perp_market_reversal_filter_enabled,
+                    "state": reversal_state,
+                    "blocks_long": reversal_state == "bearish",
+                    "blocks_short": reversal_state == "bullish",
+                },
+                "trend_shock": {
+                    "enabled": self._ms.perp_trend_shock_enabled,
+                    "state": shock_state,
+                    "recovery_count": shock_rc,
+                    "blocks_all": shock_state in ("BLOCKED", "RECOVERING"),
+                },
+            },
         }
 
     def data_coverage(self) -> dict:

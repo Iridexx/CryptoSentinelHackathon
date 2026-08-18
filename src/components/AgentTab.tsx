@@ -2729,6 +2729,32 @@ const AgentTab: FC<AgentTabProps> = ({
           <span className="text-xs text-gray-500">Runtime</span>
           <span className={`text-xs font-semibold ${statusTone}`}>{status?.kill_switch ?? 'loading'}</span>
         </div>
+        {status?.filters && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className={`rounded-lg px-3 py-1.5 text-xs ${
+              !status.filters.reversal?.enabled ? 'bg-dark-900 text-gray-600'
+              : status.filters.reversal?.blocks_long || status.filters.reversal?.blocks_short ? 'bg-accent-red/10 text-accent-red'
+              : 'bg-accent-green/10 text-accent-green'
+            }`}>
+              <span className="font-semibold">Reversal</span>{' '}
+              {!status.filters.reversal?.enabled ? 'off'
+                : status.filters.reversal?.blocks_long ? '⛔ long'
+                : status.filters.reversal?.blocks_short ? '⛔ short'
+                : '✓ ok'}
+            </div>
+            <div className={`rounded-lg px-3 py-1.5 text-xs ${
+              !status.filters.trend_shock?.enabled ? 'bg-dark-900 text-gray-600'
+              : status.filters.trend_shock?.blocks_all ? 'bg-accent-red/10 text-accent-red'
+              : 'bg-accent-green/10 text-accent-green'
+            }`}>
+              <span className="font-semibold">Shock BTC</span>{' '}
+              {!status.filters.trend_shock?.enabled ? 'off'
+                : status.filters.trend_shock?.state === 'BLOCKED' ? '⛔ blocked'
+                : status.filters.trend_shock?.state === 'RECOVERING' ? `⏳ ${status.filters.trend_shock.recovery_count}/3`
+                : '✓ ok'}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-1.5">

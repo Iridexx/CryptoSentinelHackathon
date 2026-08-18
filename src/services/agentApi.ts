@@ -9,6 +9,20 @@ export interface AgentStatus {
   kill_switch: KillSwitchState;
   fast_loop_last_tick: string | null;
   slow_loop_last_tick: string | null;
+  filters?: {
+    reversal?: {
+      enabled: boolean;
+      state: string;
+      blocks_long: boolean;
+      blocks_short: boolean;
+    };
+    trend_shock?: {
+      enabled: boolean;
+      state: string;
+      recovery_count: number;
+      blocks_all: boolean;
+    };
+  };
 }
 
 export interface EligibleTokensResponse {
