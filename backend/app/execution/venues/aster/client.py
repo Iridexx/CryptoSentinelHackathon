@@ -162,7 +162,26 @@ class AsterClient:
             raise AsterError(response.text[:200], status=response.status_code)
         return response.json()
 
+    async def agents(self) -> Any:
+        """Agents registered on the account.
+
+        The only read-only endpoint that actually verifies the signature: it
+        rejects a request whose signature is off by a single byte. Everything
+        else that authenticates is checked against this one.
+        """
+        return await self._get("/fapi/v3/agent")
+
+    async def sub_accounts(self) -> Any:
+        """Accounts reachable with these credentials, master flagged."""
+        return await self._get("/fapi/v3/getSubAccountList")
+
     async def account(self) -> Any:
+        """Account snapshot.
+
+        Warning: Aster answers 200 on this path even when the signature is
+        invalid, returning an all-zero account. Never use it to decide whether
+        the credentials are good — use agents() for that.
+        """
         return await self._get("/fapi/v3/accountWithJoinMargin")
 
     async def balance(self) -> Any:

@@ -50,6 +50,26 @@ class DiagnosticsReport:
         return data
 
 
+#: Aster answers -1000 on every account/history endpoint of an account that has
+#: never been funded (balance, positionRisk, income, commissionRate, userTrades),
+#: while configuration endpoints keep answering normally. The message it attaches
+#: says "Signature check failed", which is misleading: the same credentials are
+#: accepted on /fapi/v3/agent moments earlier.
+_UNFUNDED_ACCOUNT_CODE = "-1000"
+
+
+def _looks_unfunded(exc: AsterError) -> bool:
+    """True when the failure is the one an account without deposits produces."""
+    return (exc.code or "") == _UNFUNDED_ACCOUNT_CODE
+
+
+_UNFUNDED_DETAIL = (
+    "Il conto Aster non ha ancora ricevuto depositi: finché non viene alimentato "
+    "Aster non espone questi dati. Le credenziali sono valide (verificate al passo "
+    "precedente). Esegui di nuovo il test dopo il primo deposito."
+)
+
+
 def _describe(exc: AsterError) -> tuple[str, str]:
     """Translate an Aster failure into something a person can act on."""
     code = (exc.code or "").upper()
@@ -173,10 +193,16 @@ async def run_connection_test(settings) -> DiagnosticsReport:
         checks.append(Check("reachability", "Connessione API", ERROR, detail, code))
         return finish(ERROR, "CONNESSIONE ASTER: ERRORE")
 
-    # 4. Authentication + account identity
-    account_data: Any = None
+    # 4. Authentication — the only read endpoint that really verifies the signature.
+    #
+    # Aster answers 200 on /fapi/v3/accountWithJoinMargin even for a forged
+    # signature, so it cannot tell a valid credential from an invalid one.
+    # /fapi/v3/agent does: it rejects a signature altered by a single byte, and
+    # it also reports whether this API wallet is still registered and what it
+    # is allowed to do.
+    agents: Any = None
     try:
-        account_data = await client.account()
+        agents = await client.agents()
         checks.append(Check(
             "auth", "Autenticazione", OK,
             "Aster ha accettato la firma: le credenziali sono valide.",
@@ -186,33 +212,90 @@ async def run_connection_test(settings) -> DiagnosticsReport:
         checks.append(Check("auth", "Autenticazione", ERROR, detail, code))
         return finish(ERROR, "CONNESSIONE ASTER: ERRORE")
 
-    returned = None
-    if isinstance(account_data, dict):
-        for key in ("user", "account", "address", "tradeAddress"):
-            value = account_data.get(key)
-            if isinstance(value, str) and value.startswith("0x"):
-                returned = value
-                break
-    if returned and returned.lower() != account_address.lower():
+    # 5. The API wallet must be registered, unexpired and allowed to read.
+    entry = None
+    for item in agents if isinstance(agents, list) else []:
+        if str(item.get("agentAddress", "")).lower() == api_wallet.lower():
+            entry = item
+            break
+
+    if entry is None:
         checks.append(Check(
-            "identity", "Identità account", CRITICAL,
-            "L'account restituito da Aster non corrisponde a quello configurato "
-            f"({short_address(returned)} invece di {short_address(account_address)}). "
-            "Le operazioni su Aster restano bloccate finché non viene risolto.",
+            "permissions", "Permessi wallet API", CRITICAL,
+            f"Il wallet API {short_address(api_wallet)} non risulta registrato su questo account "
+            "Aster. Va autorizzato dalla pagina API di Aster, oppure l'indirizzo configurato "
+            "appartiene a un altro account.",
         ))
         return finish(CRITICAL, "CONNESSIONE ASTER: ERRORE CRITICO", blocked=True)
+
+    expired_ms = entry.get("expired")
+    if isinstance(expired_ms, int | float) and expired_ms > 0:
+        expiry = datetime.fromtimestamp(expired_ms / 1000, UTC)
+        if expiry <= datetime.now(UTC):
+            checks.append(Check(
+                "permissions", "Permessi wallet API", CRITICAL,
+                f"Il wallet API è scaduto il {expiry:%d/%m/%Y}. Va rigenerato dalla pagina API di Aster.",
+            ))
+            return finish(CRITICAL, "CONNESSIONE ASTER: ERRORE CRITICO", blocked=True)
+        expiry_note = f" Scadenza: {expiry:%d/%m/%Y}."
+    else:
+        expiry_note = ""
+
+    if not entry.get("canRead", False):
+        checks.append(Check(
+            "permissions", "Permessi wallet API", ERROR,
+            "Il wallet API non ha il permesso di lettura: i dati dell'account restano inaccessibili.",
+        ))
+        return finish(ERROR, "CONNESSIONE ASTER: ERRORE")
+
+    granted = [
+        label
+        for label, flag in (("lettura", "canRead"), ("spot", "canSpotTrade"),
+                            ("perpetual", "canPerpTrade"), ("prelievi", "canWithdraw"))
+        if entry.get(flag, False)
+    ]
     checks.append(Check(
-        "identity", "Identità account", OK if returned else WARNING,
-        f"Account confermato: {short_address(returned)}." if returned
-        else "Aster non restituisce un indirizzo verificabile in questa risposta: "
-             "impossibile confrontarlo con quello configurato.",
+        "permissions", "Permessi wallet API", OK if entry.get("canPerpTrade") else WARNING,
+        f"Wallet API \"{entry.get('agentName', '-')}\" attivo. Permessi: {', '.join(granted)}.{expiry_note}"
+        if entry.get("canPerpTrade") else
+        f"Wallet API \"{entry.get('agentName', '-')}\" attivo ma senza permesso perpetual: "
+        f"il venue perp non potrà operare. Permessi attuali: {', '.join(granted)}.{expiry_note}",
     ))
 
-    # 5. Read permission
-    checks.append(Check(
-        "read", "Permessi di lettura", OK,
-        "I dati dell'account sono leggibili: il permesso READ è attivo.",
-    ))
+    # 5b. Identity: the account Aster resolves must be the one configured.
+    try:
+        accounts = await client.sub_accounts()
+    except AsterError as exc:
+        detail, code = _describe(exc)
+        checks.append(Check("identity", "Identità account", WARNING, detail, code))
+        accounts = None
+
+    if accounts is not None:
+        addresses = [
+            str(a.get("address", ""))
+            for a in (accounts if isinstance(accounts, list) else [])
+            if a.get("address")
+        ]
+        match = next((a for a in addresses if a.lower() == account_address.lower()), None)
+        if not addresses:
+            checks.append(Check(
+                "identity", "Identità account", WARNING,
+                "Aster non restituisce alcun account per queste credenziali: "
+                "impossibile confrontarlo con quello configurato.",
+            ))
+        elif match is None:
+            checks.append(Check(
+                "identity", "Identità account", CRITICAL,
+                "L'account raggiunto da queste credenziali non è quello configurato "
+                f"({short_address(addresses[0])} invece di {short_address(account_address)}). "
+                "Le operazioni su Aster restano bloccate finché non viene risolto.",
+            ))
+            return finish(CRITICAL, "CONNESSIONE ASTER: ERRORE CRITICO", blocked=True)
+        else:
+            checks.append(Check(
+                "identity", "Identità account", OK,
+                f"Account confermato: {short_address(match)}.",
+            ))
 
     # 6. Balance
     try:
@@ -225,8 +308,11 @@ async def run_connection_test(settings) -> DiagnosticsReport:
             "Saldo leggibile, al momento nessun asset con disponibilità."
         checks.append(Check("balance", "Saldo", OK if funded else WARNING, detail))
     except AsterError as exc:
-        detail, code = _describe(exc)
-        checks.append(Check("balance", "Saldo", ERROR, detail, code))
+        if _looks_unfunded(exc):
+            checks.append(Check("balance", "Saldo", WARNING, _UNFUNDED_DETAIL, exc.code))
+        else:
+            detail, code = _describe(exc)
+            checks.append(Check("balance", "Saldo", ERROR, detail, code))
 
     # 7. Positions
     try:
@@ -240,8 +326,11 @@ async def run_connection_test(settings) -> DiagnosticsReport:
             f"Posizioni leggibili: {len(open_positions)} aperte su Aster.",
         ))
     except AsterError as exc:
-        detail, code = _describe(exc)
-        checks.append(Check("positions", "Posizioni", ERROR, detail, code))
+        if _looks_unfunded(exc):
+            checks.append(Check("positions", "Posizioni", WARNING, _UNFUNDED_DETAIL, exc.code))
+        else:
+            detail, code = _describe(exc)
+            checks.append(Check("positions", "Posizioni", ERROR, detail, code))
 
     # 8. Perp access + commission rate
     try:
@@ -254,8 +343,11 @@ async def run_connection_test(settings) -> DiagnosticsReport:
             if maker is not None else "Perpetual accessibile.",
         ))
     except AsterError as exc:
-        detail, code = _describe(exc)
-        checks.append(Check("perp", "Accesso Perpetual", ERROR, detail, code))
+        if _looks_unfunded(exc):
+            checks.append(Check("perp", "Accesso Perpetual", WARNING, _UNFUNDED_DETAIL, exc.code))
+        else:
+            detail, code = _describe(exc)
+            checks.append(Check("perp", "Accesso Perpetual", ERROR, detail, code))
 
     statuses = {c.status for c in checks}
     if CRITICAL in statuses:
@@ -264,6 +356,7 @@ async def run_connection_test(settings) -> DiagnosticsReport:
         return finish(ERROR, "CONNESSIONE ASTER: ERRORE")
     if WARNING in statuses:
         return finish(WARNING, "CONNESSIONE ASTER: OPERATIVA CON AVVISI")
+
     return finish(OK, "CONNESSIONE ASTER: OPERATIVA")
 
 

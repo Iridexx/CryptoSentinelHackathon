@@ -114,7 +114,19 @@ async def get_wallet_view(settings, *, force_refresh: bool = False) -> AsterWall
         view.total_balance_usdt = f"{total:.2f}"
         view.reachable = True
     except AsterError as exc:
-        view.error = "Impossibile leggere il saldo da Aster in questo momento."
+        # Aster answers -1000 on the balance endpoint of an account that has never
+        # been funded, with a message that blames the signature. Saying "cannot read
+        # the balance" for what is simply an empty account sends people hunting for a
+        # credential problem that isn't there, so name the likely cause and point at
+        # the diagnostic, which can tell the two apart.
+        if (exc.code or "") == "-1000":
+            view.error = (
+                "Conto Aster senza depositi: Aster non espone il saldo finché il conto "
+                "non viene alimentato. Se hai già depositato, esegui il test connessione "
+                "in Setup > Sistema."
+            )
+        else:
+            view.error = "Impossibile leggere il saldo da Aster in questo momento."
         logger.warning("aster_wallet_balance_failed", code=exc.code, status=exc.status)
         _cache.update(at=now, value=view)
         return view
