@@ -8,6 +8,7 @@ import {
   type ClaudeUsageView,
   fetchClaudeUsage,
   fetchAsterWallet,
+  testAsterConnection,
   fetchExecutionWallets,
   fetchGlobalView,
   fetchPerpView,
@@ -33,6 +34,7 @@ import {
   type CredentialValidationResponse,
   type EquityCurveResponse,
   type EquityRange,
+  type AsterConnectionReport,
   type AsterWalletView,
   type ExecutionWalletsResponse,
   type GlobalView,
@@ -1527,6 +1529,22 @@ const SetupPane: FC<{
   };
   const h = showHelp;
   const [equityInput, setEquityInput] = useState('');
+  const [asterState, setAsterState] = useState<'idle' | 'testing'>('idle');
+  const [asterReport, setAsterReport] = useState<AsterConnectionReport | null>(null);
+  const [asterError, setAsterError] = useState<string | null>(null);
+  const handleAsterTest = async () => {
+    if (!adminToken || asterState === 'testing') return;
+    setAsterState('testing');
+    setAsterError(null);
+    try {
+      setAsterReport(await testAsterConnection(adminToken));
+    } catch (err: any) {
+      setAsterReport(null);
+      setAsterError(err?.message ?? 'Errore durante il test');
+    } finally {
+      setAsterState('idle');
+    }
+  };
   const equityValue = Number(equityInput);
   const equityValid = equityInput.trim() !== '' && Number.isFinite(equityValue) && equityValue !== 0;
   const [setupTab, setSetupTab] = useState<SetupTab>('generale');
@@ -2012,6 +2030,65 @@ const SetupPane: FC<{
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="rounded-xl bg-dark-800 px-4 py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Connessione Aster</h3>
+              <button
+                onClick={handleAsterTest}
+                disabled={asterState === 'testing' || !adminToken}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-dark-700 text-gray-300 text-xs font-semibold rounded-lg hover:bg-dark-600 transition-colors disabled:opacity-40"
+              >
+                {asterState === 'testing' && (
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>
+                )}
+                {asterState === 'testing' ? 'Test in corso…' : 'Test connessione'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">Verifica la comunicazione con Aster: legge saldo e posizioni, non invia ordini.</p>
+            {asterError && <p className="text-xs text-accent-red">{asterError}</p>}
+            {asterReport && (
+              <div className="space-y-2">
+                <div className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                  asterReport.overall === 'ok' ? 'bg-accent-green/10 text-accent-green'
+                  : asterReport.overall === 'warning' ? 'bg-accent-yellow/10 text-accent-yellow'
+                  : 'bg-accent-red/10 text-accent-red'}`}>
+                  {asterReport.summary}
+                </div>
+                <div className="bg-dark-700 rounded-lg divide-y divide-dark-600">
+                  {asterReport.checks.map((check) => (
+                    <div key={check.key} className="px-3 py-2 space-y-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-gray-400">{check.label}</span>
+                        <span className={`text-xs font-semibold flex-shrink-0 ${
+                          check.status === 'ok' ? 'text-accent-green'
+                          : check.status === 'warning' ? 'text-accent-yellow'
+                          : 'text-accent-red'}`}>
+                          {check.status === 'ok' ? '● OK'
+                            : check.status === 'warning' ? '● ATTENZIONE'
+                            : check.status === 'critical' ? '● CRITICO' : '● ERRORE'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 leading-snug">{check.detail}</p>
+                      {check.technical && (
+                        <p className="text-[10px] text-gray-600 font-mono">codice: {check.technical}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-600">
+                  {new Date(asterReport.started_at).toLocaleString('it-IT')} · {asterReport.duration_ms} ms
+                  {asterReport.account ? ` · ${asterReport.account}` : ''}
+                </p>
+                {asterReport.blocked && (
+                  <p className="text-xs text-accent-red font-semibold">
+                    Operazioni bloccate: l'identità dell'account non corrisponde alla configurazione.
+                  </p>
+                )}
+              </div>
+            )}
+            {!adminToken && <p className="text-xs text-gray-600">Richiede admin token.</p>}
           </section>
 
           <section className="rounded-xl bg-dark-800 px-4 py-3">

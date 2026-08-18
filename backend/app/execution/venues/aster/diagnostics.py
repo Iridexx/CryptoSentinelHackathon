@@ -99,6 +99,16 @@ async def run_connection_test(settings) -> DiagnosticsReport:
             blocked=blocked,
         )
 
+    # 0. Enabled check
+    enabled = getattr(settings, "aster_enabled", False)
+    if not enabled:
+        checks.append(Check(
+            "enabled", "Abilitazione", CRITICAL,
+            "Aster è disabilitato (ASTER_ENABLED=false nel .env). "
+            "Imposta ASTER_ENABLED=true e riavvia il server per attivare il venue perp.",
+        ))
+        return finish(CRITICAL, "Aster disabilitato — imposta ASTER_ENABLED=true nel .env.")
+
     # 1. Configuration
     missing = [
         name

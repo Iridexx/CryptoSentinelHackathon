@@ -54,6 +54,7 @@ def _as_float(value: Any) -> float:
 
 async def get_wallet_view(settings, *, force_refresh: bool = False) -> AsterWalletView:
     """Addresses and balance held on Aster, or an explanation of what is missing."""
+    enabled = getattr(settings, "aster_enabled", False)
     account = getattr(settings, "aster_account_address", "")
     api_wallet = getattr(settings, "aster_api_wallet_address", "")
     key = getattr(settings, "aster_api_wallet_private_key", "")
@@ -64,6 +65,15 @@ async def get_wallet_view(settings, *, force_refresh: bool = False) -> AsterWall
             configured=False,
             subaccount_name=name,
             error="Credenziali Aster non configurate sul server.",
+        )
+
+    if not enabled:
+        return AsterWalletView(
+            configured=True,
+            subaccount_name=name,
+            subaccount_address=account,
+            api_wallet_address_short=short_address(api_wallet),
+            error="Aster è disabilitato (ASTER_ENABLED=false). Abilitalo nel .env per usare il venue perp.",
         )
 
     now = time.monotonic()
