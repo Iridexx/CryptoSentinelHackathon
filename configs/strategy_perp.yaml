@@ -16,6 +16,13 @@ perp:
   breakeven_trigger_atr: 1.0     # a +1×ATR lo SL sale a entry (+costi andata+ritorno)
   breakeven_offset_costs: true
   breakeven_buffer_pct: 0.1      # cuscinetto extra entry+0.1% (copre le fee; 0 = off)
+  # Commissioni Aster perp, VIP 1 al 18/08/2026: taker 4.0 bps, maker 0 bps.
+  # Round-trip taker = 8 bps, contro i 10 bps di breakeven_buffer_pct qui sopra:
+  # margine di 2 bps. Da rivedere se il livello VIP cambia.
+  # Non sono parametri attivi: le fee perp oggi arrivano da execution/perp_fees.py,
+  # tarato su PancakeSwap Perps, e non esiste ancora esecuzione su Aster. Aster non
+  # le espone via API (/fapi/v3/commissionRate risponde -1000 anche con credenziali
+  # valide), quindi quando servirà vanno lette da qui e aggiornate a mano.
   # Trailing: il moltiplicatore ATR scala con la leva del trade (base=leva min,
   # floor=leva max). Più alta la leva → trailing più stretto in prezzo.
   trailing_base_atr_largo: 4.0     # Largo: leva minima
