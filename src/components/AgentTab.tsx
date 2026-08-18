@@ -2153,7 +2153,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
             <TradeCandleChart chart={detail.chart} breakeven={detail.breakeven_price} trailing={detail.trailing_stop} />
             <div className="flex flex-wrap gap-3 text-[10px] text-gray-400">
               <span>⚪ Entry</span>
-              <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.chart.live ? 'Ora' : 'Exit'}</span>
+              <span className={Number(detail.chart.exit_price) >= Number(detail.chart.entry_price) ? 'text-accent-green' : 'text-accent-red'}>● {detail.close_reason ? 'Uscita' : 'Prezzo ora'}</span>
               <span style={{ color: '#fca5a5' }}>- - SL</span>
               {detail.chart.stop_reference && <span className="text-purple-300">- - SL ref</span>}
               {detail.breakeven_price != null && <span style={{ color: '#fcd34d' }}>- - Breakeven</span>}
@@ -2177,7 +2177,7 @@ const TradeDetailScreen: FC<{ detail: TradeDetail; onBack: () => void }> = ({ de
             <Stat label="PnL" value={`${detail.pnl_usd} / ${detail.pnl_pct}%`} tone={Number(detail.pnl_usd) >= 0 ? 'good' : 'bad'} />
             <Stat label="Exposure" value={fmtUsd(detail.exposure_usd)} />
             <Stat label="Entry" value={fmtPriceFull(detail.entry_price)} />
-            <Stat label="Now/Exit" value={fmtPriceFull(detail.current_or_exit_price)} />
+            <Stat label={detail.close_reason ? 'Uscita' : 'Prezzo ora'} value={fmtPriceFull(detail.current_or_exit_price)} />
             <Stat label="Size" value={detail.size} />
             <Stat label="Leverage" value={detail.leverage ? `${detail.leverage.toFixed(2)}x` : '-'} />
           </div>
