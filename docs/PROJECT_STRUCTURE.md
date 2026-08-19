@@ -55,7 +55,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       `-- status.py - status backend autenticato.
 |   |   |-- agent/ - agent autonomous trading.
 |   |   |   |-- heartbeat.py - heartbeat interno in memoria.
-|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata, dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing con breakeven Spot/Perp configurabile e trailing etichettato separatamente dal breakeven, Smart SL Perp con rebuy e ricalcolo TP netto su perdita SSL + delta usando la percentuale reale di chiusura TP1 e costi/funding residui, alert drawdown configurabile, snapshot grafici trade con finestra completa delle 20 candele strutturali SL, stop iniziale separato dallo stop dinamico, runtime settings con margine fisso Perp opzionale e provider execution astratti.
+|   |   |   |-- service.py - orchestratore Step 6/9: segnali, risk, meta-controller, watchlist scanner Spot/Perp, filtro inversione mercato BTC 15m per nuove aperture, slow tick con watchlist combinata e rollback della sessione dopo errori per-asset per evitare cascate "rolled back", dry-run DB, daily Spot heartbeat 20:00-23:30 UTC, chiusure ATR/breakeven/trailing con breakeven Spot/Perp configurabile e trailing etichettato separatamente dal breakeven, Smart SL Perp con rebuy e ricalcolo TP netto su perdita SSL + delta usando la percentuale reale di chiusura TP1 e costi/funding residui, alert drawdown configurabile, alert critico engine health quando troppi asset falliscono nello scan, snapshot grafici trade con finestra completa delle 20 candele strutturali SL, stop iniziale separato dallo stop dinamico, runtime settings con margine fisso Perp opzionale e provider execution astratti.
 |   |   |   |-- watchlist.py - helper RuntimeState per watchlist operativa AI selezionata dall'utente e validata contro `Settings.eligible_tokens`.
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
@@ -122,7 +122,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- observability/ - namespace metriche, health, replay/export futuri.
 |   |   |-- persistence/ - layer persistenza dati Step 5.
 |   |   |   |-- __init__.py - esporta init_db, close_db, get_session, get_session_factory, check_db.
-|   |   |   |-- database.py - engine async aiosqlite, async_sessionmaker, create_all, check_db con SELECT 1 e latency.
+|   |   |   |-- database.py - engine async aiosqlite, async_sessionmaker, create_all, check_db con SELECT 1 e latency, WAL/busy timeout SQLite applicati a ogni connessione async.
 |   |   |   |-- sync_database.py - engine sync sqlite3 per store legacy sincroni; stesso file SQLite, WAL e busy timeout allineato a 5s.
 |   |   |   |-- backup.py - copia SQLite con timestamp UTC, pruning retention, restituisce None se DB assente.
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing, funding e reference stop loss con precisione prezzo micro-token.
@@ -472,6 +472,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Mobile settings runtime | Le impostazioni agente salvate dalla mobile app sono persistite in `RuntimeState` e confermate dal backend; l'applicazione live completa ai loop va validata end-to-end prima della gara. |
 | Dashboard separata | La dashboard Step 8 vive sotto `dashboard/`, usa porta 5176, `envDir` isolato dal root `.env` e token inseriti nel browser; read token e admin token possono persistere localmente per operatività. |
 | Log viewer admin-only | I log backend sono esposti solo tramite endpoint admin con limite righe e redazione pattern sensibili; la dashboard non legge file locali e non espone path reali. |
+| Alert critici agente | Le push FCM di engine health, inclusi `storage_error` e `scan_failures`, sono visibili oggi nel Log Viewer solo se rientrano nel tail recente; l'endpoint log supporta filtro `search`, ma non esiste ancora una inbox dedicata separata dai log. |
 | Data Coverage da cache signal engine | `/api/v1/agent/data-coverage` espone la copertura OHLCV in memoria per Spot/Perp senza scaricare dati a ogni refresh dashboard; lo Spot usa Binance klines 5m perché CMC non fornisce OHLCV 5m completo nel provider attuale. |
 | Wallet dashboard | `/api/v1/execution/wallets` espone solo indirizzi pubblici, saldo BNB live e stato provider/RPC; le modifiche wallet/chain/provider/RPC restano admin-only e gli override vivono in `RuntimeState`. |
 | Daily trade heartbeat | Il loop lento dell'agente verifica solo trade Spot del giorno UTC; se alle 20:00 UTC non esiste almeno un trade, tenta un heartbeat trade minimo e ritenta a ogni slow tick fino alle 23:30 UTC. |

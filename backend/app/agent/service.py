@@ -2117,6 +2117,7 @@ class AgentService:
                 try:
                     scanner_results.append(await self.evaluate_spot(_scanner_payload(asset, "spot"), session))
                 except Exception as exc:
+                    await _rollback_failed_scan_session(session)
                     scan_errors.append(str(exc))
                     logger.warning("scanner_spot_asset_error", asset=asset, error=str(exc))
         for asset in perp_assets:
@@ -2124,6 +2125,7 @@ class AgentService:
             try:
                 scanner_results.append(await self.evaluate_perp(_scanner_payload(asset, "perp"), session))
             except Exception as exc:
+                await _rollback_failed_scan_session(session)
                 scan_errors.append(str(exc))
                 logger.warning("scanner_perp_asset_error", asset=asset, error=str(exc))
         try:
@@ -2978,6 +2980,15 @@ def _scanner_summary(result: dict) -> dict:
         "risk_allowed": risk.get("allowed"),
         "execution_status": execution.get("status"),
     }
+
+
+async def _rollback_failed_scan_session(session: AsyncSession) -> None:
+    """Recover the scanner DB session after a per-asset persistence failure."""
+
+    try:
+        await session.rollback()
+    except Exception as exc:
+        logger.warning("scanner_session_rollback_failed", error=str(exc))
 
 
 def _build_skip_reasoning(signal: dict, settings) -> str:

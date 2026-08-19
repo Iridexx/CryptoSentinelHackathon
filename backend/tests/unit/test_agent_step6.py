@@ -1259,6 +1259,59 @@ async def test_heartbeat_skips_when_eth_already_open(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_slow_tick_rolls_back_after_asset_error_and_continues(monkeypatch) -> None:
+    cfg = settings(
+        markets_enabled="spot",
+        eligible_tokens=["ETH", "BTC"] + [f"TOKEN_{i}" for i in range(147)],
+        agent_health_alert_enabled=False,
+    )
+    service = AgentService(
+        cfg,
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    calls: list[str] = []
+
+    class RollbackSession:
+        def __init__(self) -> None:
+            self.rollbacks = 0
+
+        async def rollback(self) -> None:
+            self.rollbacks += 1
+
+    async def fake_evaluate_spot(payload, session):
+        calls.append(payload["asset"])
+        if payload["asset"] == "ETH":
+            raise RuntimeError("database is locked")
+        return {
+            "signal": {"asset": payload["asset"], "market": "spot", "action": "skip"},
+            "risk": {"allowed": False},
+            "execution": {"status": "skipped", "reason": "test"},
+        }
+
+    async def no_op(*args, **kwargs):
+        return None
+
+    async def fake_daily_trade_heartbeat(*args, **kwargs):
+        return {"status": "skipped", "reason": "test"}
+
+    monkeypatch.setattr("backend.app.agent.service.selected_spot_watchlist", lambda _settings: ["ETH", "BTC"])
+    monkeypatch.setattr(service, "_daily_trade_heartbeat", fake_daily_trade_heartbeat)
+    monkeypatch.setattr(service, "_spot_market_regime", no_op)
+    monkeypatch.setattr(service, "evaluate_spot", fake_evaluate_spot)
+    monkeypatch.setattr(service, "_snapshot_portfolio_hourly", no_op)
+    monkeypatch.setattr(service, "_maybe_send_daily_summary", no_op)
+
+    session = RollbackSession()
+    result = await service.slow_tick(session)
+
+    assert session.rollbacks == 1
+    assert calls == ["ETH", "BTC"]
+    assert len(result["scanner_results"]) == 1
+    assert result["scanner_results"][0]["asset"] == "BTC"
+
+
+@pytest.mark.asyncio
 async def test_agent_service_does_not_run_risk_universe_on_skipped_signal(db) -> None:
     class SkippedSignal:
         async def evaluate(self, payload):

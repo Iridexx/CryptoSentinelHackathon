@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 import structlog
+from sqlalchemy import event
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -28,13 +29,21 @@ async def init_db(database_url: str, *, echo: bool = False) -> None:
     if _engine is not None:
         return
 
-    _engine = create_async_engine(database_url, echo=echo, future=True)
+    connect_args = {"timeout": 30} if database_url.startswith("sqlite") else {}
+    _engine = create_async_engine(database_url, echo=echo, future=True, connect_args=connect_args)
+    if database_url.startswith("sqlite"):
+        @event.listens_for(_engine.sync_engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.close()
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
 
     async with _engine.begin() as conn:
         # WAL mode: allows concurrent reads alongside writes, prevents "database is locked"
         await conn.execute(text("PRAGMA journal_mode=WAL"))
-        await conn.execute(text("PRAGMA busy_timeout=5000"))
+        await conn.execute(text("PRAGMA busy_timeout=30000"))
         await conn.run_sync(Base.metadata.create_all)
         await _apply_column_migrations(conn)
 
