@@ -79,6 +79,14 @@ import type {
 
 type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'analytics' | 'health' | 'wallet' | 'support' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
 type LoadState<T> = { data: T | null; loading: boolean; error: string | null };
+type LogPriorityFilter = 'action' | 'critical' | 'error' | 'warning' | 'info' | 'all';
+type LogCategoryFilter = 'all' | 'agent' | 'storage' | 'risk' | 'execution' | 'notifications' | 'market' | 'api' | 'support';
+type LogFilters = {
+  priority: LogPriorityFilter;
+  category: LogCategoryFilter;
+  query: string;
+  limit: number;
+};
 
 const tabs: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -191,6 +199,7 @@ export default function App() {
   const [wallets, setWallets] = useState<LoadState<ExecutionWalletsResponse>>(emptyState());
   const [coverage, setCoverage] = useState<LoadState<DataCoverageResponse>>(emptyState());
   const [logs, setLogs] = useState<LoadState<LogEntry[]>>(emptyState([]));
+  const [logFilters, setLogFilters] = useState<LogFilters>({ priority: 'action', category: 'all', query: '', limit: 500 });
   const [supportTickets, setSupportTickets] = useState<LoadState<SupportTicketListResponse>>(emptyState({ items: [], total: 0 }));
   const [supportDetail, setSupportDetail] = useState<LoadState<SupportTicketDetail>>(emptyState());
   const [supportNotifications, setSupportNotifications] = useState<LoadState<SupportNotificationResponse>>(emptyState());
@@ -296,7 +305,10 @@ export default function App() {
     }
     setLogs({ data: [], loading: true, error: null });
     try {
-      const response = await fetchLogs(session, { limit: 250 });
+      const response = await fetchLogs(session, {
+        limit: logFilters.limit,
+        search: logFilters.query.trim() || undefined,
+      });
       setLogs({ data: response.entries, loading: false, error: null });
     } catch (error) {
       setLogs({ data: [], loading: false, error: error instanceof Error ? error.message : 'Request failed' });
@@ -693,7 +705,15 @@ export default function App() {
             onStatus={(status) => void updateSupportStatus(status)}
           />
         )}
-        {tab === 'logs' && <LogsPanel logs={logs} onRefresh={() => void refreshLogs()} canAdmin={canAdmin} />}
+        {tab === 'logs' && (
+          <LogsPanel
+            logs={logs}
+            filters={logFilters}
+            onFilters={setLogFilters}
+            onRefresh={() => void refreshLogs()}
+            canAdmin={canAdmin}
+          />
+        )}
         {tab === 'settings' && (
           <div className="grid">
             <SettingsPanel
@@ -2172,19 +2192,165 @@ function SupportPanel({
   );
 }
 
-function LogsPanel({ logs, onRefresh, canAdmin }: { logs: LoadState<LogEntry[]>; onRefresh: () => void; canAdmin: boolean }) {
+type ClassifiedLog = {
+  entry: LogEntry;
+  priority: Exclude<LogPriorityFilter, 'all' | 'action'>;
+  category: Exclude<LogCategoryFilter, 'all'>;
+  action: string;
+};
+
+const LOG_PRIORITY_OPTIONS: { value: LogPriorityFilter; label: string }[] = [
+  { value: 'action', label: 'Actionable' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'error', label: 'Error' },
+  { value: 'warning', label: 'Warning' },
+  { value: 'info', label: 'Info' },
+  { value: 'all', label: 'All' },
+];
+
+const LOG_CATEGORY_OPTIONS: { value: LogCategoryFilter; label: string }[] = [
+  { value: 'all', label: 'All systems' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'storage', label: 'Storage' },
+  { value: 'risk', label: 'Risk' },
+  { value: 'execution', label: 'Execution' },
+  { value: 'notifications', label: 'Notifications' },
+  { value: 'market', label: 'Market data' },
+  { value: 'api', label: 'API' },
+  { value: 'support', label: 'Support' },
+];
+
+const LOG_PRIORITY_RANK: Record<ClassifiedLog['priority'], number> = {
+  critical: 0,
+  error: 1,
+  warning: 2,
+  info: 3,
+};
+
+function classifyLog(entry: LogEntry): ClassifiedLog {
+  const level = (entry.level || '').toLowerCase();
+  const logger = (entry.logger || '').toLowerCase();
+  const message = entry.message.toLowerCase();
+  const haystack = `${level} ${logger} ${message}`;
+
+  let priority: ClassifiedLog['priority'] = 'info';
+  if (
+    level === 'critical'
+    || haystack.includes('engine_health_degraded')
+    || haystack.includes('storage_error')
+    || haystack.includes('hard_stop')
+    || haystack.includes('database is locked')
+    || haystack.includes('rolled back')
+  ) {
+    priority = 'critical';
+  } else if (level === 'error' || haystack.includes('failed') || haystack.includes('unavailable')) {
+    priority = 'error';
+  } else if (level === 'warning' || level === 'warn' || haystack.includes('degraded')) {
+    priority = 'warning';
+  }
+
+  let category: ClassifiedLog['category'] = 'api';
+  if (haystack.includes('agent') || haystack.includes('scanner') || haystack.includes('slow_tick')) category = 'agent';
+  if (haystack.includes('sqlite') || haystack.includes('database') || haystack.includes('storage') || haystack.includes('rollback')) category = 'storage';
+  if (haystack.includes('risk') || haystack.includes('guardrail') || haystack.includes('drawdown') || haystack.includes('kill_switch')) category = 'risk';
+  if (haystack.includes('execution') || haystack.includes('venue') || haystack.includes('wallet') || haystack.includes('twak') || haystack.includes('swap')) category = 'execution';
+  if (haystack.includes('notification') || haystack.includes('fcm') || haystack.includes('notifier')) category = 'notifications';
+  if (haystack.includes('market') || haystack.includes('provider') || haystack.includes('ohlcv') || haystack.includes('klines') || haystack.includes('cmc')) category = 'market';
+  if (haystack.includes('support')) category = 'support';
+
+  let action = 'Monitor';
+  if (priority === 'critical') action = 'Investigate now';
+  else if (priority === 'error') action = 'Check before trading';
+  else if (priority === 'warning') action = 'Review';
+
+  return { entry, priority, category, action };
+}
+
+function filterLogs(items: ClassifiedLog[], filters: LogFilters): ClassifiedLog[] {
+  const query = filters.query.trim().toLowerCase();
+  return items
+    .filter((item) => filters.priority === 'all' || (filters.priority === 'action' ? item.priority !== 'info' : item.priority === filters.priority))
+    .filter((item) => filters.category === 'all' || item.category === filters.category)
+    .filter((item) => !query || `${item.entry.timestamp || ''} ${item.entry.level || ''} ${item.entry.logger || ''} ${item.entry.message}`.toLowerCase().includes(query))
+    .sort((a, b) => LOG_PRIORITY_RANK[a.priority] - LOG_PRIORITY_RANK[b.priority]);
+}
+
+function LogsPanel({
+  logs,
+  filters,
+  onFilters,
+  onRefresh,
+  canAdmin,
+}: {
+  logs: LoadState<LogEntry[]>;
+  filters: LogFilters;
+  onFilters: (filters: LogFilters) => void;
+  onRefresh: () => void;
+  canAdmin: boolean;
+}) {
+  const classified = useMemo(() => (logs.data ?? []).map(classifyLog), [logs.data]);
+  const filtered = useMemo(() => filterLogs(classified, filters), [classified, filters]);
+  const counts = useMemo(() => ({
+    critical: classified.filter((item) => item.priority === 'critical').length,
+    error: classified.filter((item) => item.priority === 'error').length,
+    warning: classified.filter((item) => item.priority === 'warning').length,
+    info: classified.filter((item) => item.priority === 'info').length,
+  }), [classified]);
+
   return (
     <Panel title="Log Viewer" action={<button onClick={onRefresh}>Load logs</button>} className="wide">
       {!canAdmin && <Empty title="Admin token required" detail="Logs are admin-only and redacted by the backend." />}
+      <div className="log-summary">
+        <div className="log-metric critical"><strong>{counts.critical}</strong><span>Critical</span></div>
+        <div className="log-metric error"><strong>{counts.error}</strong><span>Errors</span></div>
+        <div className="log-metric warning"><strong>{counts.warning}</strong><span>Warnings</span></div>
+        <div className="log-metric info"><strong>{counts.info}</strong><span>Info</span></div>
+      </div>
+      <div className="log-toolbar">
+        <select
+          value={filters.priority}
+          onChange={(event) => onFilters({ ...filters, priority: event.target.value as LogPriorityFilter })}
+        >
+          {LOG_PRIORITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <select
+          value={filters.category}
+          onChange={(event) => onFilters({ ...filters, category: event.target.value as LogCategoryFilter })}
+        >
+          {LOG_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <input
+          type="search"
+          value={filters.query}
+          placeholder="Search event, asset, request id"
+          onChange={(event) => onFilters({ ...filters, query: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') onRefresh();
+          }}
+        />
+        <select
+          value={String(filters.limit)}
+          onChange={(event) => onFilters({ ...filters, limit: Number(event.target.value) })}
+        >
+          <option value="100">100 rows</option>
+          <option value="250">250 rows</option>
+          <option value="500">500 rows</option>
+        </select>
+      </div>
       <StateBlock state={logs} empty="No logs loaded" />
-      {logs.data && logs.data.length > 0 && (
+      {logs.data && logs.data.length > 0 && filtered.length === 0 && (
+        <Empty title="No matching logs" detail="Change priority, category, search text, or load a larger tail." />
+      )}
+      {filtered.length > 0 && (
         <div className="log-list">
-          {logs.data.map((entry, index) => (
-            <div className="log-line" key={`${entry.timestamp || 'line'}-${index}`}>
-              <span>{entry.timestamp ? shortDate(entry.timestamp) : '--'}</span>
-              <strong>{entry.level || 'LOG'}</strong>
-              <em>{entry.logger || 'backend'}</em>
-              <p>{entry.message}</p>
+          {filtered.map((item, index) => (
+            <div className={`log-line ${item.priority}`} key={`${item.entry.timestamp || 'line'}-${index}`}>
+              <span>{item.entry.timestamp ? shortDate(item.entry.timestamp) : '--'}</span>
+              <strong>{item.priority}</strong>
+              <em>{item.category}</em>
+              <em>{item.entry.logger || 'backend'}</em>
+              <b>{item.action}</b>
+              <p>{item.entry.message}</p>
             </div>
           ))}
         </div>

@@ -103,7 +103,7 @@ def _parse_line(raw_line: str) -> LogEntry:
     return LogEntry(
         timestamp=_string_or_none(payload.get("timestamp") or payload.get("time") or payload.get("asctime")),
         level=_string_or_none(payload.get("level") or payload.get("levelname") or payload.get("severity")),
-        logger=_string_or_none(payload.get("logger") or payload.get("name") or payload.get("module")),
+        logger=_string_or_none(payload.get("component") or payload.get("logger") or payload.get("name") or payload.get("module")),
         message=_sanitize(str(message)),
     )
 
