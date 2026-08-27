@@ -184,9 +184,13 @@ const defaultSettings: AgentMobileSettings = {
   spot_volatility_trigger_pct: 3,
   spot_relative_volume_threshold: 1.8,
   spot_atr_stop_multiplier: 1.5,
+  spot_tp1_atr_multiplier: 2.5,
+  spot_tp2_atr_multiplier: 4.5,
+  spot_breakeven_trigger_atr: 1.2,
+  spot_trailing_atr_multiplier: 1.5,
   spot_trailing_distance_pct: 2,
   spot_partial_take_profit_pct: 50,
-  spot_tp1_close_pct: 50,
+  spot_tp1_close_pct: 60,
   spot_time_stop_hours: 6,
   perp_direction_mode: 'long_short',
   perp_min_leverage: 4,
@@ -1689,6 +1693,10 @@ const SetupPane: FC<{
               <NumberInput label="Vol trigger %" showHelp={h} help={'Movimento minimo di prezzo perché una situazione venga considerata un\'occasione. Sotto questa soglia il mercato è troppo fermo per operare.'} value={settings.spot_volatility_trigger_pct} onChange={(spot_volatility_trigger_pct) => patch({ spot_volatility_trigger_pct })} />
               <NumberInput label="Rel volume" showHelp={h} help="Quante volte il volume deve superare la sua media per confermare il segnale. A 1.5 serve volume una volta e mezza il normale: filtra i movimenti senza partecipazione." value={settings.spot_relative_volume_threshold} step={0.1} onChange={(spot_relative_volume_threshold) => patch({ spot_relative_volume_threshold })} />
               <NumberInput label="ATR stop" showHelp={h} help={'Distanza dello stop loss dall\'ingresso, misurata in ATR (la volatilità media). Più alto significa stop più largo: meno stop presi per caso, ma perdite più grandi quando scatta.'} value={settings.spot_atr_stop_multiplier} step={0.1} onChange={(spot_atr_stop_multiplier) => patch({ spot_atr_stop_multiplier })} />
+              <NumberInput label="TP1 (ATR)" showHelp={h} help={'Primo target: a quanti ATR dall\'ingresso chiudere la prima parte della posizione. Es. 2.5 = chiudi il 30% quando il guadagno raggiunge 2.5× la volatilità media.'} value={settings.spot_tp1_atr_multiplier} step={0.1} onChange={(spot_tp1_atr_multiplier) => patch({ spot_tp1_atr_multiplier })} />
+              <NumberInput label="TP2 (ATR)" showHelp={h} help={'Secondo target: a quanti ATR dall\'ingresso chiudere il resto della posizione. Deve essere più alto di TP1 per lasciare correre i trade vincenti.'} value={settings.spot_tp2_atr_multiplier} step={0.1} onChange={(spot_tp2_atr_multiplier) => patch({ spot_tp2_atr_multiplier })} />
+              <NumberInput label="Breakeven ATR" showHelp={h} help={'A quanti ATR di guadagno spostare lo stop al prezzo d\'ingresso (breakeven). Più alto = dai più respiro al trade prima di proteggere. Più basso = proteggi prima ma rischi uscite premature.'} value={settings.spot_breakeven_trigger_atr} step={0.1} onChange={(spot_breakeven_trigger_atr) => patch({ spot_breakeven_trigger_atr })} />
+              <NumberInput label="Trailing ATR" showHelp={h} help={'Distanza del trailing stop dal prezzo massimo raggiunto, in ATR. Più basso = proteggi il profitto prima ma esci sui rimbalzi. Più alto = lasci correre ma restituisci di più.'} value={settings.spot_trailing_atr_multiplier} step={0.1} onChange={(spot_trailing_atr_multiplier) => patch({ spot_trailing_atr_multiplier })} />
               <NumberInput label="Buffer Min20 %" showHelp={h} help="Cuscinetto sotto il minimo delle ultime candele, quando lo stop è di tipo strutturale. Serve a non farsi prendere lo stop per un soffio." value={settings.spot_structural_stop_buffer_pct} step={0.1} onChange={(spot_structural_stop_buffer_pct) => patch({ spot_structural_stop_buffer_pct })} />
               <NumberInput label="Chiudi a TP1 %" showHelp={h} help="Quanta parte della posizione chiudere al primo obiettivo. Al 50% incassi metà e lasci correre il resto." value={settings.spot_tp1_close_pct} step={5} onChange={(spot_tp1_close_pct) => patch({ spot_tp1_close_pct })} />
               <NumberInput label="Time Stop ore" showHelp={h} help="Dopo quante ore chiudere una posizione che non è andata né a target né a stop. Libera capitale bloccato in operazioni che non si muovono." value={settings.spot_time_stop_hours} step={1} onChange={(spot_time_stop_hours) => patch({ spot_time_stop_hours: Math.round(spot_time_stop_hours) })} />

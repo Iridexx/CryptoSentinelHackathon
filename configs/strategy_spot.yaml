@@ -8,15 +8,15 @@ spot:
   sl_mode: atr                    # "atr" | "lowest"; lowest usa minimo strutturale
   structural_stop_lookback_candles: 20
   structural_stop_buffer_pct: 1.10 # lowest: stop = minimo_20 * (1 - 1.10/100)
-  tp1_atr_multiplier: 2.0         # B (v3): TP1 = entry + ATR*2.0
-  tp2_atr_multiplier: 3.5         # B (v3): TP2 = entry + ATR*3.5 (target trailing finale)
+  tp1_atr_multiplier: 2.5         # B (v3): TP1 = entry + ATR*2.5
+  tp2_atr_multiplier: 4.5         # B (v3): TP2 = entry + ATR*4.5 (target trailing finale)
   breakeven_enabled: true
-  breakeven_trigger_atr: 0.6      # C (v3): a +0.6*ATR sposta lo stop a breakeven (protegge i pump piccoli)
+  breakeven_trigger_atr: 1.2      # C (v3): a +1.2*ATR sposta lo stop a breakeven
   breakeven_offset_costs: true    # C (v3): breakeven = entry + costi andata+ritorno (fee/slippage)
   breakeven_buffer_pct: 0.1       # cuscinetto extra: stop a entry+0.1% quando il prezzo l'ha superato (copre le fee; 0 = off)
-  trailing_atr_multiplier: 2.5    # C (v3): trailing = max_price - ATR*2.5
+  trailing_atr_multiplier: 1.5    # C (v3): trailing = max_price - ATR*1.5
   trailing_active_from_start: true # C (v3): trailing attivo PRIMA di TP1
-  tp1_close_fraction: 0.30        # D (v3): a TP1 chiude il 30% (era 50%), lascia correre il resto
+  tp1_close_fraction: 0.60        # D (v3): a TP1 chiude il 60%, lascia correre il 40% fino a TP2
   # E (v3): scaling-in a favore (mai al ribasso) — add solo su nuovo HH con stop a breakeven
   scale_in_enabled: true
   scale_in_size_fraction: 0.50    # add = 50% del notional corrente
