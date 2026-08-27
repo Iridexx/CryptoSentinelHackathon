@@ -411,6 +411,10 @@ export interface AgentMobileSettings {
   spot_volatility_trigger_pct: number;
   spot_relative_volume_threshold: number;
   spot_atr_stop_multiplier: number;
+  spot_tp1_atr_multiplier: number;
+  spot_tp2_atr_multiplier: number;
+  spot_breakeven_trigger_atr: number;
+  spot_trailing_atr_multiplier: number;
   spot_trailing_distance_pct: number;
   spot_partial_take_profit_pct: number;
   spot_tp1_close_pct: number;
