@@ -53,6 +53,8 @@ class SpotView(BaseModel):
     trade_count: int
     trade_count_today: int = 0
     bot_active_days: int = 0
+    volume_total_usd: Decimal = Decimal("0")
+    volume_today_usd: Decimal = Decimal("0")
     # Regime mercato: True se i nuovi ingressi spot sono bloccati (BTC in downtrend forte).
     market_risk_off: bool = False
 
@@ -116,6 +118,8 @@ class PerpView(BaseModel):
     trade_count: int
     trade_count_today: int = 0
     bot_active_days: int = 0
+    volume_total_usd: Decimal = Decimal("0")
+    volume_today_usd: Decimal = Decimal("0")
 
 
 class ClaudeUsageView(BaseModel):
@@ -168,5 +172,7 @@ class GlobalView(BaseModel):
     trades_today: int
     open_spot_positions: int
     open_perp_positions: int
+    volume_total_usd: Decimal = Decimal("0")
+    volume_today_usd: Decimal = Decimal("0")
     risk_guardrail: RiskGuardrailView | None = None
     pnl_history: list[PnlPoint]

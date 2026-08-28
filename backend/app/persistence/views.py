@@ -101,6 +101,8 @@ class ViewService:
         spot_trade_count_tot = await trade_repo.count_closed(user_id)
         spot_trade_count_today = await trade_repo.count_closed(user_id, since=day_start_spot)
         bot_active_days = await self._bot_active_days(user_id)
+        volume_total = await trade_repo.sum_volume(user_id)
+        volume_today = await trade_repo.sum_volume(user_id, since=day_start_spot)
         return SpotView(
             market_risk_off=_market_risk_off(user_id),
             open_positions=[
@@ -150,6 +152,8 @@ class ViewService:
             trade_count=spot_trade_count_tot,
             trade_count_today=spot_trade_count_today,
             bot_active_days=bot_active_days,
+            volume_total_usd=volume_total,
+            volume_today_usd=volume_today,
         )
 
     async def perp_view(self, user_id: str) -> PerpView:
@@ -167,6 +171,8 @@ class ViewService:
         trade_count_tot = await trade_repo.count_closed(user_id)
         trade_count_today = await trade_repo.count_closed(user_id, since=day_start)
         bot_active_days = await self._bot_active_days(user_id)
+        perp_volume_total = await trade_repo.sum_volume(user_id)
+        perp_volume_today = await trade_repo.sum_volume(user_id, since=day_start)
         return PerpView(
             open_positions=[
                 PerpPositionView(
@@ -232,6 +238,8 @@ class ViewService:
             trade_count=trade_count_tot,
             trade_count_today=trade_count_today,
             bot_active_days=bot_active_days,
+            volume_total_usd=perp_volume_total,
+            volume_today_usd=perp_volume_today,
         )
 
     async def global_view(self, user_id: str) -> GlobalView:
@@ -265,6 +273,15 @@ class ViewService:
         fees_perp = await perp_trade_repo.sum_fees(user_id)
         total_fees_usd = fees_spot + fees_perp
 
+        from datetime import UTC, datetime as _dt
+        day_start = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        vol_spot_total = await spot_trade_repo.sum_volume(user_id)
+        vol_spot_today = await spot_trade_repo.sum_volume(user_id, since=day_start)
+        vol_perp_total = await perp_trade_repo.sum_volume(user_id)
+        vol_perp_today = await perp_trade_repo.sum_volume(user_id, since=day_start)
+        volume_total = vol_spot_total + vol_perp_total
+        volume_today = vol_spot_today + vol_perp_today
+
         if portfolio is None:
             base_equity = self._base_equity_usd
             return GlobalView(
@@ -290,6 +307,8 @@ class ViewService:
                 trades_today=0,
                 open_spot_positions=len(open_spot),
                 open_perp_positions=len(open_perp),
+                volume_total_usd=volume_total,
+                volume_today_usd=volume_today,
                 risk_guardrail=None,
                 pnl_history=[],
             )
@@ -328,6 +347,8 @@ class ViewService:
             trades_today=portfolio.trades_today,
             open_spot_positions=len(open_spot),
             open_perp_positions=len(open_perp),
+            volume_total_usd=volume_total,
+            volume_today_usd=volume_today,
             risk_guardrail=_risk_guardrail(
                 total_equity=total_equity,
                 drawdown_pct=portfolio.drawdown_pct,

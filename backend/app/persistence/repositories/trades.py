@@ -141,6 +141,18 @@ class SpotTradeRepository:
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
 
+    async def sum_volume(self, user_id: str, *, since: datetime | None = None) -> Decimal:
+        stmt = (
+            select(func.sum(SpotTrade.amount_quote))
+            .where(SpotTrade.user_id == user_id)
+            .where(SpotTrade.amount_quote.is_not(None))
+        )
+        if since is not None:
+            stmt = stmt.where(SpotTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
+        val = result.scalar_one_or_none()
+        return Decimal(str(val)) if val is not None else Decimal("0")
+
     async def last_timestamp_for_asset(self, user_id: str, asset: str) -> datetime | None:
         """Timestamp del trade spot piu' recente sull'asset (per cooldown)."""
         result = await self._session.execute(
@@ -244,6 +256,19 @@ class PerpTradeRepository:
             .where(PerpTrade.user_id == user_id)
             .where(PerpTrade.fees_quote.is_not(None))
             .where(PerpTrade.direction == "open")
+        )
+        if since is not None:
+            stmt = stmt.where(PerpTrade.timestamp_utc >= since)
+        result = await self._session.execute(stmt)
+        val = result.scalar_one_or_none()
+        return Decimal(str(val)) if val is not None else Decimal("0")
+
+    async def sum_volume(self, user_id: str, *, since: datetime | None = None) -> Decimal:
+        stmt = (
+            select(func.sum(PerpTrade.size * PerpTrade.price))
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.size.is_not(None))
+            .where(PerpTrade.price.is_not(None))
         )
         if since is not None:
             stmt = stmt.where(PerpTrade.timestamp_utc >= since)

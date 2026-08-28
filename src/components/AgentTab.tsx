@@ -839,6 +839,8 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
         <Stat label="Trade Tot" value={String(data?.trade_count ?? 0)} />
         <Stat label="Trade Day" value={String(data?.trade_count_today ?? 0)} />
+        <Stat label="Vol Tot" value={fmtUsd(Number(data?.volume_total_usd ?? 0))} />
+        <Stat label="Vol Day" value={fmtUsd(Number(data?.volume_today_usd ?? 0))} />
         <Stat label="Bot Day" value={String(data?.bot_active_days ?? 0)} />
       </div>
       {!hasActivity && (
@@ -909,6 +911,8 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
         <Stat label="Open" value={String(data?.open_positions.length ?? 0)} />
         <Stat label="Trade Tot" value={String(data?.trade_count ?? 0)} />
         <Stat label="Trade Day" value={String(data?.trade_count_today ?? 0)} />
+        <Stat label="Vol Tot" value={fmtUsd(Number(data?.volume_total_usd ?? 0))} />
+        <Stat label="Vol Day" value={fmtUsd(Number(data?.volume_today_usd ?? 0))} />
         <Stat label="Bot Day" value={String(data?.bot_active_days ?? 0)} />
       </div>
       {!hasActivity && (
@@ -1001,6 +1005,8 @@ const GlobalPane: FC<{
         <Stat label="Exposure" value={fmtPct(data?.exposure_pct)} />
         <Stat label="Trades UTC" value={String(data?.trades_today ?? 0)} />
         <Stat label="Kill switch" value={status?.kill_switch ?? data?.agent_status ?? 'idle'} />
+        <Stat label="Vol Tot" value={fmtUsd(Number(data?.volume_total_usd ?? 0))} />
+        <Stat label="Vol Day" value={fmtUsd(Number(data?.volume_today_usd ?? 0))} />
         <Stat label="Fee pagate" value={fmtUsd(data?.total_fees_usd ?? '0')} tone="bad" />
         <Stat
           label="API Claude"

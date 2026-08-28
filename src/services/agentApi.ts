@@ -107,6 +107,8 @@ export interface SpotView {
   trade_count: number;
   trade_count_today: number;
   bot_active_days: number;
+  volume_total_usd: string;
+  volume_today_usd: string;
   market_risk_off?: boolean;
 }
 
@@ -167,6 +169,8 @@ export interface PerpView {
   trade_count: number;
   trade_count_today: number;
   bot_active_days: number;
+  volume_total_usd: string;
+  volume_today_usd: string;
 }
 
 export interface PnlPoint {
@@ -191,6 +195,8 @@ export interface GlobalView {
   trades_today: number;
   open_spot_positions: number;
   open_perp_positions: number;
+  volume_total_usd: string;
+  volume_today_usd: string;
   total_fees_usd: string;
   daily_pnl_net_pct: number;
   pnl_total_net_pct: number;
