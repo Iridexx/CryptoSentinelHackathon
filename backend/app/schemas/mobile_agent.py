@@ -20,6 +20,8 @@ class AgentMobileSettings(BaseModel):
     market_reversal_filter_enabled: bool = True
     spot_market_reversal_filter_enabled: bool = True
     perp_market_reversal_filter_enabled: bool = True
+    # Filtro regime (freno d'emergenza): blocca i nuovi buy spot quando BTC crolla. Solo spot.
+    spot_market_regime_filter_enabled: bool = True
     spot_breakeven_enabled: bool = True
     perp_breakeven_enabled: bool = True
     spot_trailing_enabled: bool = True

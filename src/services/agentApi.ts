@@ -354,6 +354,7 @@ export interface AgentMobileSettings {
   market_reversal_filter_enabled: boolean;
   spot_market_reversal_filter_enabled: boolean;
   perp_market_reversal_filter_enabled: boolean;
+  spot_market_regime_filter_enabled: boolean;
   spot_breakeven_enabled: boolean;
   perp_breakeven_enabled: boolean;
   spot_trailing_enabled: boolean;

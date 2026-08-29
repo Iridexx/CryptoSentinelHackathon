@@ -124,6 +124,7 @@ const defaultSettings: AgentMobileSettings = {
   market_reversal_filter_enabled: true,
   spot_market_reversal_filter_enabled: true,
   perp_market_reversal_filter_enabled: true,
+  spot_market_regime_filter_enabled: true,
   spot_breakeven_enabled: true,
   perp_breakeven_enabled: true,
   spot_trailing_enabled: true,
@@ -1651,6 +1652,12 @@ const SetupPane: FC<{
 
           <section className="space-y-3">
             <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Filtri mercato</h3>
+            <ToggleInput
+              label="Filtro regime mercato Spot"
+              showHelp={h} help={'Freno d\'emergenza: blocca i nuovi acquisti spot quando BTC (15m) è in crollo forte — sotto la EMA50 e a nuovi minimi. Riparte solo quando BTC richiude sopra la EMA50. Interviene solo nei ribassi seri, il resto del tempo lascia passare.'}
+              checked={settings.spot_market_regime_filter_enabled}
+              onChange={(spot_market_regime_filter_enabled) => patch({ spot_market_regime_filter_enabled })}
+            />
             <ToggleInput
               label="Filtro inversione mercato Spot"
               showHelp={h} help="Blocca i nuovi acquisti spot finché BTC (15m) non conferma una salita: 2 candele verdi sopra la EMA10. Più selettivo — entra solo con BTC in ripresa confermata — ma riduce parecchio le operazioni, soprattutto quando BTC è laterale. Si somma al filtro regime (crolli): tenerli entrambi è quasi ridondante."

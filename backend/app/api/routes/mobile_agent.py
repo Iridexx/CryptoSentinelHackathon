@@ -37,6 +37,7 @@ _MOBILE_TO_SETTINGS: dict[str, str] = {
     "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
     "market_reversal_filter_enabled": "market_reversal_filter_enabled",
     "spot_market_reversal_filter_enabled": "spot_market_reversal_filter_enabled",
+    "spot_market_regime_filter_enabled": "spot_market_regime_filter_enabled",
     "perp_market_reversal_filter_enabled": "perp_market_reversal_filter_enabled",
     "spot_breakeven_enabled": "spot_breakeven_enabled",
     "perp_breakeven_enabled": "perp_breakeven_enabled",
@@ -116,6 +117,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_market_reversal_filter_enabled=getattr(
             settings, "perp_market_reversal_filter_enabled", False
         ),
+        spot_market_regime_filter_enabled=getattr(settings, "spot_market_regime_filter_enabled", True),
         spot_breakeven_enabled=settings.spot_breakeven_enabled,
         perp_breakeven_enabled=settings.perp_breakeven_enabled,
         spot_trailing_enabled=True,
