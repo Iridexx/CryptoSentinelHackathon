@@ -11,7 +11,7 @@ spot:
   tp1_atr_multiplier: 2.5         # B (v3): TP1 = entry + ATR*2.5
   tp2_atr_multiplier: 4.5         # B (v3): TP2 = entry + ATR*4.5 (target trailing finale)
   breakeven_enabled: true
-  breakeven_trigger_atr: 1.2      # C (v3): a +1.2*ATR sposta lo stop a breakeven
+  breakeven_trigger_atr: 1.5      # C (v3): a +1.5*ATR sposta lo stop a breakeven (era 1.2; più respiro pre-TP1)
   breakeven_offset_costs: true    # C (v3): breakeven = entry + costi andata+ritorno (fee/slippage)
   breakeven_buffer_pct: 0.1       # cuscinetto extra: stop a entry+0.1% quando il prezzo l'ha superato (copre le fee; 0 = off)
   trailing_atr_multiplier: 1.5    # C (v3): trailing = max_price - ATR*1.5

@@ -96,7 +96,7 @@ class AgentMobileSettings(BaseModel):
     spot_atr_stop_multiplier: float = Field(default=1.5, gt=0.0, le=20.0)
     spot_tp1_atr_multiplier: float = Field(default=2.5, gt=0.0, le=20.0)
     spot_tp2_atr_multiplier: float = Field(default=4.5, gt=0.0, le=20.0)
-    spot_breakeven_trigger_atr: float = Field(default=1.2, gt=0.0, le=10.0)
+    spot_breakeven_trigger_atr: float = Field(default=1.5, gt=0.0, le=10.0)
     spot_trailing_atr_multiplier: float = Field(default=1.5, gt=0.0, le=20.0)
     spot_trailing_distance_pct: float = Field(default=2.0, ge=0.0, le=100.0)
     spot_partial_take_profit_pct: float = Field(default=50.0, ge=0.0, le=100.0)

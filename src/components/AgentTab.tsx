@@ -189,7 +189,7 @@ const defaultSettings: AgentMobileSettings = {
   spot_atr_stop_multiplier: 1.5,
   spot_tp1_atr_multiplier: 2.5,
   spot_tp2_atr_multiplier: 4.5,
-  spot_breakeven_trigger_atr: 1.2,
+  spot_breakeven_trigger_atr: 1.5,
   spot_trailing_atr_multiplier: 1.5,
   spot_trailing_distance_pct: 2,
   spot_partial_take_profit_pct: 50,
