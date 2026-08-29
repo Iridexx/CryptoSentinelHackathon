@@ -620,7 +620,11 @@ class AgentService:
         natr_history = natr_vals[-BTC_TREND_SHOCK_15M_BARS:] if natr_vals else []
         natr_pct = percentile_rank(natr_history[:-1], natr_current) if natr_current is not None and len(natr_history) > 1 else None
 
-        rel_vol = calc_relative_volume(candles_5m, lookback=BTC_TREND_SHOCK_5M_VOL_LOOKBACK)
+        # Scarta l'ultima candela 5m (ancora IN FORMAZIONE su Binance): il suo volume è
+        # parziale, quindi rel_vol risulterebbe ~0 e la gamba "volume" del rilevatore di
+        # shock non scatterebbe mai. Calcola sul dato CHIUSO.
+        candles_5m_closed = candles_5m[:-1] if len(candles_5m) > 2 else candles_5m
+        rel_vol = calc_relative_volume(candles_5m_closed, lookback=BTC_TREND_SHOCK_5M_VOL_LOOKBACK)
 
         score = 0
         adx_triggered = adx_value is not None and adx_value >= adx_threshold
