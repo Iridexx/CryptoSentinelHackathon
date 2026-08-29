@@ -1320,10 +1320,16 @@ const CoinsPane: FC<{
   const [ranking, setRanking] = useState<WatchlistRanking>({});
 
   useEffect(() => {
-    void fetchSpotWatchlist().then(setSpotData).catch(() => undefined);
-    void fetchPerpWatchlist().then(setPerpData).catch(() => undefined);
     void fetchAgentWatchlist().then((d) => setRanking(d.ranking ?? {})).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    // Ricarica spot/perp quando cambia la master: rimuovendo un token dal master il
+    // backend lo elimina (prune) anche da spot/perp, ma senza questo refresh i conteggi
+    // client resterebbero fermi ai valori vecchi (es. spot 40 invece di 38).
+    void fetchSpotWatchlist().then(setSpotData).catch(() => undefined);
+    void fetchPerpWatchlist().then(setPerpData).catch(() => undefined);
+  }, [selectedAiSymbols]);
 
   const normalizedQuery = query.trim().toUpperCase();
   const rankOf = (symbol: string): number | null => ranking[symbol.toUpperCase()]?.rank ?? null;
