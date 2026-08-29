@@ -1335,7 +1335,14 @@ const CoinsPane: FC<{
       return a.localeCompare(b);
     });
 
-  const masterTokens = byMarketCap(eligibleTokens.filter((s) => selectedAiSymbols.has(s.toUpperCase())));
+  // La master arriva dallo stato App-level (selectedAiSymbols), popolato da un solo fetch
+  // al mount di App: se quella singola chiamata fallisce (cold start, timeout) il catch la
+  // azzera senza retry, e spot/perp mostrerebbero "Master vuota" pur avendo l'agente 40 coin.
+  // Fallback robusto: usa la master autorevole (master_tokens) che gli endpoint spot/perp —
+  // ri-fetchati a ogni apertura della scheda — restituiscono già.
+  const masterFromState = eligibleTokens.filter((s) => selectedAiSymbols.has(s.toUpperCase()));
+  const masterFromApi = spotData?.master_tokens ?? perpData?.master_tokens ?? [];
+  const masterTokens = byMarketCap(masterFromState.length > 0 ? masterFromState : masterFromApi);
   const filteredEligible = byMarketCap(eligibleTokens.filter((s) => s.toUpperCase().includes(normalizedQuery)));
 
   const spotSelected = useMemo(() => new Set((spotData?.selected_tokens ?? []).map((s) => s.toUpperCase())), [spotData]);

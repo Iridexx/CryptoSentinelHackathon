@@ -290,18 +290,27 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAgentWatchlist()
-      .then((response) => {
+    // La master watchlist alimenta selectedAiSymbols (icone AI + editor coin). Un singolo
+    // fetch al mount che fallisce al cold-start lasciava la selezione vuota per sempre: la
+    // scheda coin mostrava "Master vuota" pur avendo l'agente 40 coin assegnate. Riproviamo
+    // con backoff e, su errore definitivo, NON azzeriamo la selezione (evita anche che
+    // l'editor master, partendo da un set vuoto, riscriva la watchlist a un solo token).
+    const loadWatchlist = async (attempt = 0): Promise<void> => {
+      try {
+        const response = await fetchAgentWatchlist();
         if (cancelled) return;
         setEligibleTokens(response.eligible_tokens.length > 0 ? response.eligible_tokens : FALLBACK_ELIGIBLE_SYMBOLS);
         setSelectedAiSymbols(toEligibleSymbolSet(response.selected_tokens));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setEligibleTokens(FALLBACK_ELIGIBLE_SYMBOLS);
-          setSelectedAiSymbols(new Set());
+      } catch {
+        if (cancelled) return;
+        if (attempt < 3) {
+          window.setTimeout(() => void loadWatchlist(attempt + 1), 1500 * (attempt + 1));
+          return;
         }
-      });
+        setEligibleTokens((prev) => (prev.length > 0 ? prev : FALLBACK_ELIGIBLE_SYMBOLS));
+      }
+    };
+    void loadWatchlist();
     return () => {
       cancelled = true;
     };
