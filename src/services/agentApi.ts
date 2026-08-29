@@ -397,6 +397,8 @@ export interface AgentMobileSettings {
   spot_max_exposure_pct: number;
   spot_cooldown_minutes: number;
   spot_max_slippage_pct: number;
+  spot_max_stop_distance_filter_enabled: boolean;
+  spot_max_stop_distance_pct: number;
   // Perp
   perp_capital_per_trade_pct: number;
   perp_per_trade_pct: number;

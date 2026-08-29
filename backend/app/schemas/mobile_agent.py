@@ -67,6 +67,9 @@ class AgentMobileSettings(BaseModel):
     spot_max_exposure_pct: float = Field(default=30.0, gt=0.0, le=100.0)
     spot_cooldown_minutes: int = Field(default=30, ge=0, le=1440)
     spot_max_slippage_pct: float = Field(default=1.0, gt=0.0, le=20.0)
+    # Filtro volatilità assoluta: salta gli ingressi con stop troppo largo in % (taglia i micro-cap ad ATR mostruoso).
+    spot_max_stop_distance_filter_enabled: bool = True
+    spot_max_stop_distance_pct: float = Field(default=4.0, gt=0.0, le=50.0)
 
     # --- Parametri PERP ---
     perp_capital_per_trade_pct: float = Field(default=4.0, gt=0.0, le=100.0)

@@ -117,6 +117,8 @@ const settingFields = [
   'spot_max_exposure_pct',
   'spot_cooldown_minutes',
   'spot_max_slippage_pct',
+  'spot_max_stop_distance_filter_enabled',
+  'spot_max_stop_distance_pct',
   'perp_capital_per_trade_pct',
   'perp_per_trade_pct',
   'perp_max_open_positions',

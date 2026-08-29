@@ -166,6 +166,8 @@ const defaultSettings: AgentMobileSettings = {
   spot_max_exposure_pct: 30,
   spot_cooldown_minutes: 30,
   spot_max_slippage_pct: 1,
+  spot_max_stop_distance_filter_enabled: true,
+  spot_max_stop_distance_pct: 4.0,
   perp_capital_per_trade_pct: 4,
   perp_per_trade_pct: 1.5,
   perp_max_open_positions: 5,
@@ -1706,6 +1708,7 @@ const SetupPane: FC<{
               <NumberInput label="Buffer Min20 %" showHelp={h} help="Cuscinetto sotto il minimo delle ultime candele, quando lo stop è di tipo strutturale. Serve a non farsi prendere lo stop per un soffio." value={settings.spot_structural_stop_buffer_pct} step={0.1} onChange={(spot_structural_stop_buffer_pct) => patch({ spot_structural_stop_buffer_pct })} />
               <NumberInput label="Chiudi a TP1 %" showHelp={h} help="Quanta parte della posizione chiudere al primo obiettivo. Al 50% incassi metà e lasci correre il resto." value={settings.spot_tp1_close_pct} step={5} onChange={(spot_tp1_close_pct) => patch({ spot_tp1_close_pct })} />
               <NumberInput label="Time Stop ore" showHelp={h} help="Dopo quante ore chiudere una posizione che non è andata né a target né a stop. Libera capitale bloccato in operazioni che non si muovono." value={settings.spot_time_stop_hours} step={1} onChange={(spot_time_stop_hours) => patch({ spot_time_stop_hours: Math.round(spot_time_stop_hours) })} />
+              <NumberInput label="Max stop dist %" showHelp={h} help={'Soglia del filtro volatilità: se lo stop dista dall\'ingresso più di questa percentuale, l\'operazione viene saltata. Taglia i token ad altissima volatilità (stop -5/-12%) che passano gli altri filtri ma cancellano decine di vincite. Più basso = più selettivo. Richiede il toggle "Filtro volatilità" attivo.'} value={settings.spot_max_stop_distance_pct} step={0.5} onChange={(spot_max_stop_distance_pct) => patch({ spot_max_stop_distance_pct })} />
               <SelectInput label="Fee mode (dry-run)" showHelp={h} help={'Quali costi simulare nel dry run:\n\nSwap fee + Slippage — realistico, 0.15%\nNessuna — strategia lorda, senza costi'} value={settings.spot_fee_mode} onChange={(v) => patch({ spot_fee_mode: v as 'all' | 'none' })} options={[
                 { value: 'all', label: 'Swap fee + Slippage — 0.15%' },
                 { value: 'none', label: 'Nessuna (strategia lorda)' },
@@ -1753,6 +1756,12 @@ const SetupPane: FC<{
               showHelp={h} help="Attiva la chiusura per tempo scaduto. Le ore si impostano nella sezione strategia."
               checked={settings.spot_time_stop_enabled}
               onChange={(spot_time_stop_enabled) => patch({ spot_time_stop_enabled })}
+            />
+            <ToggleInput
+              label="Filtro volatilità Spot"
+              showHelp={h} help={'Salta gli ingressi sui token troppo volatili, dove lo stop dista più della soglia "Max stop dist %". Blocca i micro-cap ad ATR mostruoso (perdite -5/-12%) che passano liquidità e anti-spike ma mangiano tutte le vincite. Agisce sul singolo trade, non blocca l\'intero token.'}
+              checked={settings.spot_max_stop_distance_filter_enabled}
+              onChange={(spot_max_stop_distance_filter_enabled) => patch({ spot_max_stop_distance_filter_enabled })}
             />
           </section>
         </>

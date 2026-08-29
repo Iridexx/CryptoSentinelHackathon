@@ -138,6 +138,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         spot_max_exposure_pct=exposure,
         spot_cooldown_minutes=cooldown,
         spot_max_slippage_pct=slippage,
+        spot_max_stop_distance_filter_enabled=getattr(settings, "spot_max_stop_distance_filter_enabled", True),
+        spot_max_stop_distance_pct=getattr(settings, "spot_max_stop_distance_pct", 4.0),
         # Parametri perp (default = valore condiviso dal YAML)
         perp_capital_per_trade_pct=cap,
         perp_per_trade_pct=per_trade,

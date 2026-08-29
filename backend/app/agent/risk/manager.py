@@ -140,6 +140,22 @@ class RiskManager:
         risk_amount = equity * Decimal(str(per_trade_pct)) / Decimal("100")
         if intent.stop_loss is not None and intent.price > Decimal("0"):
             stop_distance_pct = abs(intent.price - intent.stop_loss) / intent.price
+            # Filtro volatilità assoluta (solo spot): salta gli ingressi il cui stop è
+            # troppo largo in %. Prende i micro-cap ad ATR strutturalmente mostruoso che
+            # passano liquidità e spike-filter ma chiudono a -5/-12%. Per-trade, non blacklist.
+            if not is_perp:
+                if ms is not None:
+                    vol_filter_on = ms.spot_max_stop_distance_filter_enabled
+                    vol_max_pct = ms.spot_max_stop_distance_pct
+                else:
+                    vol_filter_on = getattr(self.settings, "spot_max_stop_distance_filter_enabled", True)
+                    vol_max_pct = getattr(self.settings, "spot_max_stop_distance_pct", 4.0)
+                if vol_filter_on and stop_distance_pct * Decimal("100") > Decimal(str(vol_max_pct)):
+                    return RiskDecision(
+                        False,
+                        "max_stop_distance_guard",
+                        exposure_after_pct=stop_distance_pct * Decimal("100"),
+                    )
             if stop_distance_pct > 0:
                 risk_size = min(nominal_size, risk_amount / stop_distance_pct)
         if is_perp and ms is not None and ms.perp_fixed_margin_enabled:

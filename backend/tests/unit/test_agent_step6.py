@@ -110,6 +110,10 @@ def settings(**overrides):
         spot_spike_atr_avg_period=50,
         spot_spike_action="skip",
         spot_spike_reduced_size_fraction=0.5,
+        # Filtro volatilità assoluta disattivato nel fixture: i test di sizing usano stop larghi
+        # (es. 5%/50%) e devono restare isolati dal filtro, testato a parte.
+        spot_max_stop_distance_filter_enabled=False,
+        spot_max_stop_distance_pct=4.0,
         spot_market_regime_filter_enabled=False,
         spot_market_regime_symbol="BTCUSDT",
         spot_market_regime_interval="15m",
@@ -438,6 +442,43 @@ def test_risk_engine_size_cap() -> None:
 
     assert decision.allowed is True
     assert decision.size_quote == Decimal("30.00")
+
+
+def test_risk_engine_max_stop_distance_filter_blocks_wide_spot_stop() -> None:
+    # Filtro volatilità assoluta: uno stop spot oltre la soglia (qui 8% > 4%) viene saltato.
+    ms = AgentMobileSettings(
+        spot_max_stop_distance_filter_enabled=True,
+        spot_max_stop_distance_pct=4.0,
+    )
+    blocked = RiskManager(settings()).evaluate(
+        _intent(price=Decimal("100"), stop_loss=Decimal("92")),  # stop a -8%
+        portfolio=_portfolio(),
+        open_spot_positions=[],
+        open_perp_positions=[],
+        ms=ms,
+    )
+    assert blocked.allowed is False
+    assert blocked.reason == "max_stop_distance_guard"
+
+    # Uno stop stretto (qui 3% < 4%) passa il filtro.
+    allowed = RiskManager(settings()).evaluate(
+        _intent(price=Decimal("100"), stop_loss=Decimal("97")),
+        portfolio=_portfolio(),
+        open_spot_positions=[],
+        open_perp_positions=[],
+        ms=ms,
+    )
+    assert allowed.allowed is True
+
+    # Il filtro è spot-only: lo stesso stop largo sul perp NON viene bloccato da questo guard.
+    perp = RiskManager(settings()).evaluate(
+        _intent(market="perp", price=Decimal("100"), stop_loss=Decimal("92")),
+        portfolio=_portfolio(),
+        open_spot_positions=[],
+        open_perp_positions=[],
+        ms=ms,
+    )
+    assert perp.reason != "max_stop_distance_guard"
 
 
 def test_risk_engine_uses_200_dry_run_capital_for_natural_size() -> None:
