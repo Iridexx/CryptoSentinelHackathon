@@ -203,8 +203,21 @@ class FakeSpotFeed:
 
 @pytest.mark.asyncio
 async def test_spot_momentum_signal_enters_on_volume_momentum() -> None:
+    # Realistico: l'ultima candela è quella IN FORMAZIONE (volume parziale). Lo spike di
+    # volume+prezzo è sull'ultima CHIUSA (fixture candles()). Il segnale deve calcolare
+    # rel_volume sulla candela chiusa, non su quella parziale.
+    base = candles()
+    last = base[-1]
+    forming = Candle(
+        timestamp=last.timestamp + timedelta(minutes=5),
+        open=last.close,
+        high=last.close + 0.8,
+        low=last.close - 0.2,
+        close=last.close + 0.7,   # prosegue il rialzo (current = prezzo live)
+        volume=60.0,              # volume parziale della candela in formazione
+    )
     signal = await SpotMomentumSignal(settings()).evaluate(
-        {"asset": "BTC", "candles": candles(), "btc_context_score": 0.7, "sentiment_score": 0.7}
+        {"asset": "BTC", "candles": base + [forming], "btc_context_score": 0.7, "sentiment_score": 0.7}
     )
 
     assert signal["action"] == "enter_long"
@@ -1712,7 +1725,16 @@ async def test_spot_small_pump_below_one_atr_locks_breakeven_not_loss(db) -> Non
 @pytest.mark.asyncio
 async def test_spot_spike_filter_rejects_signal() -> None:
     """§5.3: quando ATR_now supera la soglia (ratio_max) il segnale è rifiutato."""
-    base = candles()
+    # Ultima candela IN FORMAZIONE (scartata dal segnale): lo spike resta l'ultima chiusa.
+    _base = candles()
+    _last = _base[-1]
+    base = _base + [
+        Candle(
+            timestamp=_last.timestamp + timedelta(minutes=5),
+            open=_last.close, high=_last.close + 0.8, low=_last.close - 0.2,
+            close=_last.close + 0.7, volume=60.0,
+        )
+    ]
     # Baseline senza filtro: lo stesso scenario entra.
     enter = await SpotMomentumSignal(settings(spot_spike_filter_enabled=False)).evaluate(
         {"asset": "BTC", "candles": base, "btc_context_score": 0.7, "sentiment_score": 0.7}

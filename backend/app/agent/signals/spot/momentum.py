@@ -52,6 +52,14 @@ class SpotMomentumSignal(SignalModule[SignalPayload, SignalResult]):
                 "components": {"candle_count": len(candles), "required_candles": MIN_SPOT_CANDLES},
             }
 
+        # Il segnale valuta su candele CHIUSE. Binance restituisce come ultima candela
+        # quella ANCORA IN FORMAZIONE: volume e prezzo sono parziali, quindi il volume
+        # relativo risulterebbe ~0 (ingressi spot quasi sempre bloccati) e la volatilità
+        # sarebbe misurata sulla candela incompleta. Scartiamo l'ultima candela quando ne
+        # abbiamo abbastanza per restare sopra il minimo richiesto.
+        if len(candles) > MIN_SPOT_CANDLES:
+            candles = candles[:-1]
+
         closes = [candle.close for candle in candles]
         current = candles[-1].close
         previous = candles[-2].close
