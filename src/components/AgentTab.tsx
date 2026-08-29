@@ -1652,6 +1652,12 @@ const SetupPane: FC<{
           <section className="space-y-3">
             <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Filtri mercato</h3>
             <ToggleInput
+              label="Filtro inversione mercato Spot"
+              showHelp={h} help="Blocca i nuovi acquisti spot finché BTC (15m) non conferma una salita: 2 candele verdi sopra la EMA10. Più selettivo — entra solo con BTC in ripresa confermata — ma riduce parecchio le operazioni, soprattutto quando BTC è laterale. Si somma al filtro regime (crolli): tenerli entrambi è quasi ridondante."
+              checked={settings.spot_market_reversal_filter_enabled}
+              onChange={(spot_market_reversal_filter_enabled) => patch({ spot_market_reversal_filter_enabled })}
+            />
+            <ToggleInput
               label="Filtro inversione mercato Perp"
               showHelp={h} help="Blocca le nuove entrate quando il mercato sta girando contro la direzione del segnale. Meno operazioni, ma evita di entrare proprio mentre il trend si ribalta."
               checked={settings.perp_market_reversal_filter_enabled}
