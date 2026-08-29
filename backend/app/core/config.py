@@ -195,6 +195,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "breakeven_buffer_pct": "spot_breakeven_buffer_pct",
         "trailing_atr_multiplier": "spot_trailing_atr_multiplier",
         "trailing_active_from_start": "spot_trailing_active_from_start",
+        "trailing_only_after_tp1": "spot_trailing_only_after_tp1",
         "tp1_close_fraction": "spot_tp1_close_fraction",
         "scale_in_enabled": "spot_scale_in_enabled",
         "scale_in_size_fraction": "spot_scale_in_size_fraction",
@@ -588,6 +589,7 @@ class Settings(BaseSettings):
     spot_breakeven_buffer_pct: float = Field(default=0.1, alias="SPOT_BREAKEVEN_BUFFER_PCT")
     spot_trailing_atr_multiplier: float = Field(default=2.5, alias="SPOT_TRAILING_ATR_MULTIPLIER")
     spot_trailing_active_from_start: bool = Field(default=True, alias="SPOT_TRAILING_ACTIVE_FROM_START")
+    spot_trailing_only_after_tp1: bool = Field(default=True, alias="SPOT_TRAILING_ONLY_AFTER_TP1")
     spot_tp1_close_fraction: float = Field(default=0.30, alias="SPOT_TP1_CLOSE_FRACTION")
     spot_scale_in_enabled: bool = Field(default=True, alias="SPOT_SCALE_IN_ENABLED")
     spot_scale_in_size_fraction: float = Field(default=0.50, alias="SPOT_SCALE_IN_SIZE_FRACTION")

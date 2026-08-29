@@ -120,6 +120,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_breakeven_enabled=settings.perp_breakeven_enabled,
         spot_trailing_enabled=True,
         perp_trailing_enabled=True,
+        spot_trailing_only_after_tp1=getattr(settings, "spot_trailing_only_after_tp1", True),
         spot_time_stop_enabled=getattr(settings, "spot_time_stop_enabled", False),
         perp_time_stop_enabled=getattr(settings, "perp_time_stop_enabled", False),
         spot_breakeven_mode="atr",

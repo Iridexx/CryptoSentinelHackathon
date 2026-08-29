@@ -1736,22 +1736,42 @@ class AgentService:
                         pos.stop_loss = be_stop
                         pos.updated_at = now
                         session.add(pos)
-                # C (v3): trailing ATR attivo DA SUBITO (max_price - ATR*mult), solo verso l'alto.
-                # Il moltiplicatore è cappato al TP1: così l'attivazione del trailing
-                # (≈ entry + mult*ATR) non supera mai il TP1, altrimenti il trailing si
-                # accenderebbe oltre il primo take-profit (inutile).
-                if self._ms.spot_trailing_enabled and self.settings.spot_trailing_active_from_start:
-                    trail_mult = min(
-                        Decimal(str(self.settings.spot_trailing_atr_multiplier)),
-                        Decimal(str(self.settings.spot_tp1_atr_multiplier)),
-                    )
-                    trail = (pos.max_price or price) - atr_v * trail_mult
-                    # Guard: il trailing spot si attiva solo quando supera l'entry
-                    # (non deve sostituire lo stop con uno più stretto ma in perdita).
-                    if trail >= pos.entry_price and (pos.trailing_stop is None or trail > pos.trailing_stop):
-                        pos.trailing_stop = trail
-                        pos.updated_at = now
-                        session.add(pos)
+                # Trailing spot — due modalità (toggle UI spot_trailing_only_after_tp1):
+                # - only_after_tp1 (default): il trailing si attiva SOLO dopo il TP1. Prima
+                #   il trade respira, protetto solo da stop/breakeven, e può correre fino al
+                #   TP2 senza essere strozzato. Prima del TP1 azzeriamo l'eventuale trailing
+                #   iniziale del segnale (entry - mult*ATR) così non fa da stop più stretto.
+                # - storica (toggle off): trailing attivo DA SUBITO se trailing_active_from_start,
+                #   col moltiplicatore cappato al TP1 per non accendersi oltre il primo target.
+                if self._ms.spot_trailing_enabled:
+                    only_after_tp1 = getattr(self._ms, "spot_trailing_only_after_tp1", True)
+                    if only_after_tp1:
+                        if pos.tp1_reached:
+                            trail = (pos.max_price or price) - atr_v * Decimal(
+                                str(self.settings.spot_trailing_atr_multiplier)
+                            )
+                            # Guard: solo verso l'alto e mai sotto l'entry.
+                            if trail >= pos.entry_price and (pos.trailing_stop is None or trail > pos.trailing_stop):
+                                pos.trailing_stop = trail
+                                pos.updated_at = now
+                                session.add(pos)
+                        elif pos.trailing_stop is not None:
+                            # Prima del TP1 nessun trailing attivo: neutralizza il livello iniziale.
+                            pos.trailing_stop = None
+                            pos.updated_at = now
+                            session.add(pos)
+                    elif self.settings.spot_trailing_active_from_start:
+                        trail_mult = min(
+                            Decimal(str(self.settings.spot_trailing_atr_multiplier)),
+                            Decimal(str(self.settings.spot_tp1_atr_multiplier)),
+                        )
+                        trail = (pos.max_price or price) - atr_v * trail_mult
+                        # Guard: il trailing spot si attiva solo quando supera l'entry
+                        # (non deve sostituire lo stop con uno più stretto ma in perdita).
+                        if trail >= pos.entry_price and (pos.trailing_stop is None or trail > pos.trailing_stop):
+                            pos.trailing_stop = trail
+                            pos.updated_at = now
+                            session.add(pos)
 
             # E (v3): scaling-in a favore (solo HH + stop a breakeven; mai in perdita).
             await self._maybe_scale_in_spot(session, pos, price, prev_max, now)

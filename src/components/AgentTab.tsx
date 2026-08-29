@@ -128,6 +128,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_breakeven_enabled: true,
   spot_trailing_enabled: true,
   perp_trailing_enabled: true,
+  spot_trailing_only_after_tp1: true,
   spot_time_stop_enabled: false,
   perp_time_stop_enabled: false,
   perp_trend_shock_enabled: true,
@@ -1757,6 +1758,12 @@ const SetupPane: FC<{
               showHelp={h} help="Fa salire lo stop dietro al prezzo mentre il trade guadagna, per proteggere il profitto già maturato. Lo stop non scende mai."
               checked={settings.spot_trailing_enabled}
               onChange={(spot_trailing_enabled) => patch({ spot_trailing_enabled })}
+            />
+            <ToggleInput
+              label="Trailing solo dopo TP1"
+              showHelp={h} help={'Se attivo: il trailing parte SOLO dopo aver raggiunto il primo obiettivo (TP1). Prima il trade respira, protetto solo da stop e pareggio, e può correre fino al TP2 senza essere strozzato sui piccoli rimbalzi. Se disattivo: il trailing è attivo da subito (comportamento storico), più protettivo ma taglia prima le vincite.'}
+              checked={settings.spot_trailing_only_after_tp1}
+              onChange={(spot_trailing_only_after_tp1) => patch({ spot_trailing_only_after_tp1 })}
             />
             <ToggleInput
               label="Time Stop Spot"

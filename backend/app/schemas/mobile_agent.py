@@ -24,6 +24,8 @@ class AgentMobileSettings(BaseModel):
     perp_breakeven_enabled: bool = True
     spot_trailing_enabled: bool = True
     perp_trailing_enabled: bool = True
+    # Se true (default): il trailing spot si attiva solo dopo il TP1 (il trade respira fino al TP2).
+    spot_trailing_only_after_tp1: bool = True
     spot_time_stop_enabled: bool = False
     perp_time_stop_enabled: bool = False
     spot_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")

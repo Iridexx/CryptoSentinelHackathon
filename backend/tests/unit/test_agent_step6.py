@@ -2348,6 +2348,7 @@ async def test_spot_trailing_above_entry_labeled_trailing_stop(db) -> None:
         swap_fee_usd=Decimal("0"),
         slippage_usd=Decimal("0"),
         scale_in_count=0,
+        tp1_reached=True,  # col default only_after_tp1 il trailing è attivo solo dopo il TP1
         status="open",
         opened_at=now,
         updated_at=now,
@@ -2358,6 +2359,43 @@ async def test_spot_trailing_above_entry_labeled_trailing_stop(db) -> None:
         trades = await SpotTradeRepository(session).list_for_user(str(USER_ID))
         closes = [t for t in trades if t.trade_id.startswith("cls_")]
         assert closes and "auto_close:trailing_stop" in (closes[0].notes or "")
+
+
+@pytest.mark.asyncio
+async def test_spot_trailing_only_after_tp1_does_not_trail_before_tp1(db) -> None:
+    """Con only_after_tp1 (default), prima del TP1 il trailing non è attivo: un livello
+    di trailing iniziale viene neutralizzato e non chiude il trade (respira fino al TP1)."""
+    service = AgentService(
+        settings(spot_scale_in_enabled=False),
+        spot_registry=SimpleNamespace(),
+        perp_registry=SimpleNamespace(),
+    )
+    now = datetime.now(UTC)
+    pos = SpotPosition(
+        position_id="p-no-trail",
+        user_id=str(USER_ID),
+        asset="ETH",
+        size=Decimal("1"),
+        entry_price=Decimal("100"),
+        current_price=Decimal("104"),
+        stop_loss=Decimal("95"),
+        trailing_stop=Decimal("104"),  # livello iniziale: NON deve chiudere prima del TP1
+        take_profit_1=Decimal("130"),
+        take_profit_2=Decimal("140"),
+        entry_atr=Decimal("10"),
+        max_price=Decimal("115"),
+        swap_fee_usd=Decimal("0"),
+        slippage_usd=Decimal("0"),
+        scale_in_count=0,
+        tp1_reached=False,
+        status="open",
+        opened_at=now,
+        updated_at=now,
+    )
+    async with get_session_factory()() as session:
+        await service._check_sl_tp(session, [pos], [], now)
+        assert pos.status == "open"          # resta aperto: nessun trailing pre-TP1
+        assert pos.trailing_stop is None     # il livello iniziale è stato neutralizzato
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,11 @@ spot:
   breakeven_offset_costs: true    # C (v3): breakeven = entry + costi andata+ritorno (fee/slippage)
   breakeven_buffer_pct: 0.1       # cuscinetto extra: stop a entry+0.1% quando il prezzo l'ha superato (copre le fee; 0 = off)
   trailing_atr_multiplier: 1.5    # C (v3): trailing = max_price - ATR*1.5
-  trailing_active_from_start: true # C (v3): trailing attivo PRIMA di TP1
+  trailing_active_from_start: true # C (v3): trailing attivo PRIMA di TP1 (usato solo se trailing_only_after_tp1=false)
+  # Se true (default): il trailing si attiva SOLO dopo il TP1 — prima il trade respira,
+  # protetto solo da stop/breakeven, e può correre fino al TP2 senza essere strozzato.
+  # Se false: comportamento storico (trailing da subito via trailing_active_from_start).
+  trailing_only_after_tp1: true
   tp1_close_fraction: 0.60        # D (v3): a TP1 chiude il 60%, lascia correre il 40% fino a TP2
   # E (v3): scaling-in a favore (mai al ribasso) — add solo su nuovo HH con stop a breakeven
   scale_in_enabled: true

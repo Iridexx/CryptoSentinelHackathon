@@ -358,6 +358,7 @@ export interface AgentMobileSettings {
   perp_breakeven_enabled: boolean;
   spot_trailing_enabled: boolean;
   perp_trailing_enabled: boolean;
+  spot_trailing_only_after_tp1: boolean;
   spot_time_stop_enabled: boolean;
   perp_time_stop_enabled: boolean;
   perp_trend_shock_enabled: boolean;

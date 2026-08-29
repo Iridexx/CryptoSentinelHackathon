@@ -137,6 +137,7 @@ const settingFields = [
   'post_close_candles',
   'spot_trailing_enabled',
   'perp_trailing_enabled',
+  'spot_trailing_only_after_tp1',
   'spot_time_stop_enabled',
   'spot_time_stop_hours',
   'perp_time_stop_enabled',
