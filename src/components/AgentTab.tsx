@@ -700,6 +700,7 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   smart_sl_rebuy_l1: { label: 'Smart SL Rebuy L1', className: 'text-sky-400' },
   smart_sl_rebuy_l2: { label: 'Smart SL Rebuy L2', className: 'text-sky-400' },
   smart_sl_rebuy_all: { label: 'Smart SL Rebuy All', className: 'text-sky-400' },
+  profit_lock: { label: 'Profit Lock', className: 'text-accent-green' },
 };
 
 const TradeHistoryList: FC<{
