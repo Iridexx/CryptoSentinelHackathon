@@ -2835,17 +2835,17 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
   const emptyReserve = value < 0.01 && Number(view.cash_usd) < 0.01;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-white">🏦 Riserva di Valore</h3>
-        {view.frozen && <span className="rounded-full bg-accent-blue/15 px-2 py-0.5 text-[11px] font-semibold text-accent-blue">congelata</span>}
+        <h3 className="text-base font-bold text-white">🏦 Riserva di Valore</h3>
+        {view.frozen && <span className="rounded-full bg-accent-blue/15 px-2 py-0.5 text-xs font-semibold text-accent-blue">congelata</span>}
       </div>
 
       <div className="rounded-xl border border-accent-yellow/20 bg-gradient-to-b from-accent-yellow/10 to-transparent px-4 py-3">
-        <p className="text-[11px] uppercase text-gray-500">Valore riserva</p>
-        <p className="text-2xl font-bold tabular-nums text-white">{fmtUsd(value)}</p>
+        <p className="text-xs uppercase text-gray-400">Valore riserva</p>
+        <p className="text-3xl font-bold tabular-nums text-white">{fmtUsd(value)}</p>
         <p className={`text-sm tabular-nums ${pnl >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-          {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)} · {fmtSignedPct(view.pnl_pct)} <span className="text-gray-500">· {view.portfolio_pct.toFixed(1)}% del portafoglio</span>
+          {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)} · {fmtSignedPct(view.pnl_pct)} <span className="text-gray-400">· {view.portfolio_pct.toFixed(1)}% del portafoglio</span>
         </p>
       </div>
 
@@ -2865,7 +2865,7 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
         />
       ) : (
         <>
-          <div className="rounded-xl bg-dark-800 px-3 py-3">
+          <div className="rounded-xl bg-dark-800 px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
               <div className="flex gap-1">
                 {(['24h', '7d', 'all'] as EquityRange[]).map((r) => (
@@ -2881,8 +2881,8 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
             <BankChart history={history} mode={chartMode} />
           </div>
 
-          <div className="rounded-xl bg-dark-800 px-3 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Pesi · corrente vs target</p>
+          <div className="rounded-xl bg-dark-800 px-4 py-3">
+            <p className="mb-2 text-xs font-semibold uppercase text-gray-400">Pesi · corrente vs target</p>
             <div className="space-y-2.5">
               {view.holdings.map((h) => (
                 <div key={h.asset}>
@@ -2899,13 +2899,13 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
           </div>
 
           {hasAssets && (
-            <div className="rounded-xl bg-dark-800 px-3 py-2">
-              <p className="mb-1 px-1 text-xs font-semibold uppercase text-gray-500">Posizioni</p>
+            <div className="rounded-xl bg-dark-800 px-4 py-3">
+              <p className="mb-1 text-xs font-semibold uppercase text-gray-400">Posizioni</p>
               {view.holdings.filter((h) => Number(h.value_usd) > 0).map((h) => (
-                <div key={h.asset} className="flex items-center justify-between border-b border-dark-700 py-2 text-sm last:border-0">
+                <div key={h.asset} className="flex items-center justify-between border-b border-dark-700 py-2.5 text-sm last:border-0">
                   <div>
                     <span className="font-semibold text-white">{h.asset}</span>
-                    <span className="ml-2 text-xs text-gray-500">{Number(h.quantity).toPrecision(4)} · costo {fmtPrice(h.avg_cost_usd)}</span>
+                    <span className="ml-2 text-xs text-gray-400">{Number(h.quantity).toPrecision(4)} · costo {fmtPrice(h.avg_cost_usd)}</span>
                   </div>
                   <div className="text-right">
                     <div className="tabular-nums text-white">{fmtUsd(Number(h.value_usd))}</div>
@@ -2921,13 +2921,13 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
       )}
 
       {txns && txns.items.length > 0 && (
-        <div className="rounded-xl bg-dark-800 px-3 py-2">
-          <p className="mb-1 px-1 text-xs font-semibold uppercase text-gray-500">Movimenti</p>
+        <div className="rounded-xl bg-dark-800 px-4 py-3">
+          <p className="mb-1 text-xs font-semibold uppercase text-gray-400">Movimenti</p>
           {txns.items.map((t) => (
-            <div key={t.id} className="flex items-center justify-between gap-2 border-b border-dark-700 py-2 text-sm last:border-0">
+            <div key={t.id} className="flex items-center justify-between gap-2 border-b border-dark-700 py-2.5 text-sm last:border-0">
               <span className="text-gray-300">
                 {t.type === 'sweep' ? 'Sweep profitti' : t.type === 'deploy_buy' ? `Acquisto ${t.asset}` : t.type === 'transfer_in' ? 'Versamento' : t.type === 'transfer_out' ? 'Prelievo' : t.type.startsWith('rebalance') ? 'Ribilancio' : t.type}
-                <span className="ml-2 text-xs text-gray-600">{new Date(t.created_at).toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="ml-2 text-xs text-gray-500">{new Date(t.created_at).toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
               </span>
               <span className="tabular-nums text-gray-200">{fmtUsd(Number(t.value_usd))}{Number(t.fee_usd) > 0 && <span className="text-xs text-gray-600"> · fee {fmtUsd(Number(t.fee_usd))}</span>}</span>
             </div>
@@ -2937,7 +2937,7 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
 
       {adminToken ? (
         <div className="rounded-xl bg-dark-800 px-4 py-3 space-y-3">
-          <p className="text-xs font-semibold uppercase text-gray-500">Azioni</p>
+          <p className="text-xs font-semibold uppercase text-gray-400">Azioni</p>
           {err && <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red">{err}</p>}
           <input
             type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)}
