@@ -14,8 +14,29 @@ from backend.app.persistence.models.archives import ArchivedRun
 from backend.app.persistence.models.decisions import AgentDecision
 from backend.app.persistence.models.pnl import PnlSnapshot, PortfolioState
 from backend.app.persistence.models.positions import PerpPosition, SpotPosition
+from backend.app.persistence.models.reserve import (
+    ReserveHolding,
+    ReserveSnapshot,
+    ReserveTransaction,
+)
 from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
+
+
+def _clear_reserve_counters(portfolio: PortfolioState | None, when: datetime) -> None:
+    """Zero the reserve accounting on ``portfolio_state`` after the reserve rows go.
+
+    Leaving ``reserve_transferred_net_usd`` pointing at a reserve that no longer
+    holds anything would corrupt ``tradable_equity``.
+    """
+    if portfolio is None:
+        return
+    portfolio.reserve_cash_usd = Decimal("0")
+    portfolio.reserve_transferred_net_usd = Decimal("0")
+    portfolio.last_swept_realized_pnl_usd = Decimal("0")
+    portfolio.last_deploy_at = None
+    portfolio.reserve_frozen = False
+    portfolio.updated_at = when
 
 
 DEFAULT_ARCHIVE_LABEL = "pre_500_reset_2026_06_20"
@@ -36,6 +57,9 @@ async def archive_dry_run_records(
     perp_trades = await _scalars(session, _perp_dry_run_select(user_id))
     decisions = await _scalars(session, _decision_dry_run_select(user_id))
     snapshots = await _scalars(session, select(PnlSnapshot).where(PnlSnapshot.user_id == user_id))
+    r_holdings = await _scalars(session, select(ReserveHolding).where(ReserveHolding.user_id == user_id))
+    r_txns = await _scalars(session, select(ReserveTransaction).where(ReserveTransaction.user_id == user_id))
+    r_snaps = await _scalars(session, select(ReserveSnapshot).where(ReserveSnapshot.user_id == user_id))
     portfolio = (
         await session.execute(select(PortfolioState).where(PortfolioState.user_id == user_id))
     ).scalar_one_or_none()
@@ -44,6 +68,9 @@ async def archive_dry_run_records(
         "perp_trades": [_model_payload(row) for row in perp_trades],
         "agent_decisions": [_model_payload(row) for row in decisions],
         "pnl_snapshots": [_model_payload(row) for row in snapshots],
+        "reserve_holdings": [_model_payload(row) for row in r_holdings],
+        "reserve_transactions": [_model_payload(row) for row in r_txns],
+        "reserve_snapshots": [_model_payload(row) for row in r_snaps],
         "portfolio_state": [_model_payload(portfolio)] if portfolio is not None else [],
     }
     archive = ArchivedRun(
@@ -61,6 +88,11 @@ async def archive_dry_run_records(
         await session.execute(delete(PerpTrade).where(PerpTrade.id.in_([row.id for row in perp_trades])))
         await session.execute(delete(AgentDecision).where(AgentDecision.id.in_([row.id for row in decisions])))
         await session.execute(delete(PnlSnapshot).where(PnlSnapshot.id.in_([row.id for row in snapshots])))
+        # The reserve is fully simulated in this phase → archive and clear it all.
+        await session.execute(delete(ReserveHolding).where(ReserveHolding.user_id == user_id))
+        await session.execute(delete(ReserveTransaction).where(ReserveTransaction.user_id == user_id))
+        await session.execute(delete(ReserveSnapshot).where(ReserveSnapshot.user_id == user_id))
+        _clear_reserve_counters(portfolio, archived_at)
         if portfolio is not None and reset_portfolio_capital_usd is not None:
             portfolio.total_equity_usd = reset_portfolio_capital_usd
             portfolio.initial_equity_usd = reset_portfolio_capital_usd
@@ -102,6 +134,9 @@ async def reset_all_data(
     spot_positions = await _scalars(session, select(SpotPosition).where(SpotPosition.user_id == user_id))
     perp_positions = await _scalars(session, select(PerpPosition).where(PerpPosition.user_id == user_id))
     charts = await _scalars(session, select(TradeChartSnapshot).where(TradeChartSnapshot.user_id == user_id))
+    r_holdings = await _scalars(session, select(ReserveHolding).where(ReserveHolding.user_id == user_id))
+    r_txns = await _scalars(session, select(ReserveTransaction).where(ReserveTransaction.user_id == user_id))
+    r_snaps = await _scalars(session, select(ReserveSnapshot).where(ReserveSnapshot.user_id == user_id))
     portfolio = (
         await session.execute(select(PortfolioState).where(PortfolioState.user_id == user_id))
     ).scalar_one_or_none()
@@ -114,6 +149,9 @@ async def reset_all_data(
         "spot_positions": len(spot_positions),
         "perp_positions": len(perp_positions),
         "trade_chart_snapshots": len(charts),
+        "reserve_holdings": len(r_holdings),
+        "reserve_transactions": len(r_txns),
+        "reserve_snapshots": len(r_snaps),
         "portfolio_state": 1 if portfolio is not None else 0,
     }
 
@@ -126,6 +164,9 @@ async def reset_all_data(
             "pnl_snapshots": [_model_payload(row) for row in snapshots],
             "spot_positions": [_model_payload(row) for row in spot_positions],
             "perp_positions": [_model_payload(row) for row in perp_positions],
+            "reserve_holdings": [_model_payload(row) for row in r_holdings],
+            "reserve_transactions": [_model_payload(row) for row in r_txns],
+            "reserve_snapshots": [_model_payload(row) for row in r_snaps],
             "portfolio_state": [_model_payload(portfolio)] if portfolio is not None else [],
         }
         archive = ArchivedRun(
@@ -146,6 +187,9 @@ async def reset_all_data(
     await session.execute(delete(SpotPosition).where(SpotPosition.user_id == user_id))
     await session.execute(delete(PerpPosition).where(PerpPosition.user_id == user_id))
     await session.execute(delete(TradeChartSnapshot).where(TradeChartSnapshot.user_id == user_id))
+    await session.execute(delete(ReserveHolding).where(ReserveHolding.user_id == user_id))
+    await session.execute(delete(ReserveTransaction).where(ReserveTransaction.user_id == user_id))
+    await session.execute(delete(ReserveSnapshot).where(ReserveSnapshot.user_id == user_id))
     await session.execute(delete(PortfolioState).where(PortfolioState.user_id == user_id))
     if reset_portfolio_capital_usd is not None:
         session.add(
