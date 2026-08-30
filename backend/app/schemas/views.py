@@ -137,6 +137,20 @@ class PnlPoint(BaseModel):
     drawdown_pct: Decimal
 
 
+class VolatilityBudgetView(BaseModel):
+    """D28 — how much the "Bank" reserve dampens portfolio volatility/drawdown.
+
+    ``status`` is ``insufficient_data`` until there are enough daily snapshots
+    (same threshold as the Sharpe ratio), then ``ready``.
+    """
+
+    status: str = "insufficient_data"
+    trading_daily_vol_pct: float | None = None
+    total_daily_vol_pct: float | None = None
+    trading_max_drawdown_pct: float | None = None
+    total_max_drawdown_pct: float | None = None
+
+
 class RiskGuardrailView(BaseModel):
     blocked: bool = False
     reason: str | None = None
@@ -178,6 +192,7 @@ class GlobalView(BaseModel):
     tradable_equity_usd: Decimal = Decimal("0")          # total_equity − reserve_cost_basis
     total_portfolio_equity_usd: Decimal = Decimal("0")   # tradable + reserve_value
     total_portfolio_pnl_pct: float = 0.0                 # combined, on initial_equity
+    volatility_budget: "VolatilityBudgetView | None" = None  # D28
     agent_status: str
     trades_today: int
     open_spot_positions: int

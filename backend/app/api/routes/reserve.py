@@ -77,23 +77,64 @@ async def get_history(
     session: SessionDep,
     range: Literal["24h", "7d", "all"] = Query("7d"),
 ) -> dict:
+    from sqlalchemy import select
+
+    from backend.app.api.routes.views import _btc_benchmark
+    from backend.app.persistence.models.pnl import PnlSnapshot
+
     repo = ReserveRepository(session)
     days = _RANGE_DAYS[range]
     if days is None:
         rows = list(reversed(await repo.recent_snapshots(_user_id(), limit=2000)))
     else:
         rows = await repo.snapshots_since(_user_id(), datetime.now(UTC) - timedelta(days=days))
-    items = [
-        {
-            "timestamp_utc": s.timestamp_utc.isoformat(),
+
+    # D27: benchmark lines. reserve = cumulative % from the first point; btc reuses
+    # the equity-curve helper; trading is the PnlSnapshot series over the same window.
+    btc = await _btc_benchmark(rows) if len(rows) >= 2 else {}
+    trading: dict[str, Decimal] = {}
+    if len(rows) >= 2:
+        pnl_rows = list(
+            (await session.execute(
+                select(PnlSnapshot)
+                .where(PnlSnapshot.user_id == _user_id())
+                .where(PnlSnapshot.timestamp_utc >= rows[0].timestamp_utc)
+                .where(PnlSnapshot.timestamp_utc <= rows[-1].timestamp_utc)
+                .order_by(PnlSnapshot.timestamp_utc.asc())
+            )).scalars().all()
+        )
+        if pnl_rows:
+            base = Decimal(str(pnl_rows[0].total_equity_usd))
+            first_ts = pnl_rows[0].timestamp_utc
+            for s in rows:
+                offset = int(round((s.timestamp_utc - first_ts).total_seconds() / 3600))
+                idx = max(0, min(offset, len(pnl_rows) - 1))
+                cur = Decimal(str(pnl_rows[idx].total_equity_usd))
+                trading[s.timestamp_utc.isoformat()] = (
+                    (cur / base - Decimal("1")) * Decimal("100") if base > 0 else Decimal("0")
+                )
+
+    first_value = Decimal(str(rows[0].total_value_usd)) if rows else Decimal("0")
+    items = []
+    for s in rows:
+        key = s.timestamp_utc.isoformat()
+        item = {
+            "timestamp_utc": key,
             "total_value_usd": str(s.total_value_usd),
             "cash_usd": str(s.cash_usd),
             "cost_basis_usd": str(s.cost_basis_usd),
             "pnl_usd": str(s.pnl_usd),
             "fees_cumulative_usd": str(s.fees_cumulative_usd),
         }
-        for s in rows
-    ]
+        if first_value > 0:
+            item["reserve_pct"] = str(
+                (Decimal(str(s.total_value_usd)) / first_value - Decimal("1")) * Decimal("100")
+            )
+        if key in btc:
+            item["btc_hold_pct"] = str(btc[key])
+        if key in trading:
+            item["trading_pct"] = str(trading[key])
+        items.append(item)
     return {"range": range, "items": items, "count": len(items)}
 
 

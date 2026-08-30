@@ -33,6 +33,7 @@ from backend.app.schemas.views import (
     SpotPositionView,
     SpotTradeView,
     SpotView,
+    VolatilityBudgetView,
 )
 
 
@@ -426,6 +427,7 @@ class ViewService:
             tradable_equity_usd=tradable_equity,
             total_portfolio_equity_usd=total_portfolio_equity,
             total_portfolio_pnl_pct=round(total_portfolio_pnl_pct, 2),
+            volatility_budget=_volatility_budget(snapshots),
         )
 
 
@@ -583,6 +585,50 @@ def _is_spot_dry_run(trade) -> bool:
 
 def _is_perp_dry_run(trade) -> bool:
     return trade.trade_id.startswith("dry_") or trade.venue == "dry_run" or "dry_run" in (trade.notes or "")
+
+
+def _volatility_budget(snapshots) -> VolatilityBudgetView:
+    """D28: daily volatility + max drawdown, trading-only vs total portfolio."""
+    if len(snapshots) < 2:
+        return VolatilityBudgetView()
+    rows = sorted(snapshots, key=lambda r: r.timestamp_utc)
+
+    def _daily(attr: str) -> list[Decimal]:
+        series: OrderedDict[str, Decimal] = OrderedDict()
+        for s in rows:
+            raw = getattr(s, attr, None)
+            value = Decimal(str(raw)) if raw is not None else Decimal(str(s.total_equity_usd))
+            series[s.timestamp_utc.date().isoformat()] = value
+        return list(series.values())
+
+    def _metrics(values: list[Decimal]) -> tuple[float, float] | None:
+        returns = [
+            float((cur - prev) / prev)
+            for prev, cur in zip(values, values[1:], strict=False)
+            if prev > 0
+        ]
+        if len(returns) < 7:
+            return None
+        vol = stdev(returns) if len(returns) > 1 else 0.0
+        peak = values[0]
+        mdd = Decimal("0")
+        for v in values:
+            peak = max(peak, v)
+            if peak > 0:
+                mdd = max(mdd, (peak - v) / peak * Decimal("100"))
+        return round(vol * 100, 2), round(float(mdd), 2)
+
+    trading = _metrics(_daily("total_equity_usd"))
+    total = _metrics(_daily("total_portfolio_equity_usd"))
+    if trading is None or total is None:
+        return VolatilityBudgetView()
+    return VolatilityBudgetView(
+        status="ready",
+        trading_daily_vol_pct=trading[0],
+        total_daily_vol_pct=total[0],
+        trading_max_drawdown_pct=trading[1],
+        total_max_drawdown_pct=total[1],
+    )
 
 
 def _daily_sharpe(snapshots) -> dict[str, str | None]:
