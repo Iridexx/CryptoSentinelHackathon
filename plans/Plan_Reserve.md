@@ -187,10 +187,13 @@ slow-tick `valuate`/`snapshot` non modifica holdings, solo legge + scrive snapsh
 Adapter unico per gli acquisti/vendite. **R2–R9 consegnano solo il ramo simulato**:
 - `execution_mode == dry_run` (default): registra al prezzo live del market-data,
   fee = `spot_fees.estimate(...)`. Nessuna tx on-chain.
-- `execution_mode == live`: **stub che solleva `NotImplementedError` fino a R10**
-  (gli indirizzi in `reserve.yaml` sono mainnet, il live è gated a testnet →
-  serve prima la storia indirizzi/rete). Il ramo delegherà a `PancakeSwapProvider`
-  riusando `gas.py` / `approvals.py`.
+- `execution_mode == live` (**R10 scaffold, testnet-gated**): il ramo delega a
+  `PancakeSwapReserveBackend` (`domain/reserve/live_backend.py`) → `PancakeSwapProvider`
+  riusando `gas.py` / `approvals.py` / reconciliation. Gate hard:
+  `bsc_network == "testnet"` (oltre al guard di config). Senza backend →
+  `ReserveExecutionError` (fail-closed, non più `NotImplementedError`).
+  Live mainnet resta da fare: verifica indirizzi BEP20, liquidità peg SOL/TRX,
+  rimozione gate.
 
 ### Repository `ReserveRepository` (`persistence/repositories/reserve.py`)
 CRUD holdings, append transaction, save/list snapshot, get/set saldo e target
@@ -600,7 +603,7 @@ che si risolvono in implementazione:
 | ~~R7b~~ | **FATTO** 2026-08-30 — `BankSettingsPane` (sotto-scheda Setup › Bank: pesi target + check somma 100, sweep/deploy/cooldown/toggle, salva via `saveReserveSettings`); `GlobalPane` card Bank (tradabile vs totale, volatility budget quando `ready`); `EquityChart` toggle "Solo trading / Portafoglio totale" (usa `portfolio_pnl_pct`). `reserve_events` è backend-only (nessuna UI preferenze notifiche esistente nell'app — task separato). tsc OK, eslint invariato. Report `report_reserve_r7b_setup_global.md`. |
 | ~~R8~~ | **FATTO** 2026-08-30 — verifica startup (`import backend.app.main` OK, 8 route reserve registrate), guardrail hard invariati (148 eligible token, somma pesi 100), 70 test riserva verdi, `ruff` pulito. `PROJECT_STRUCTURE.md` STATO STEP aggiornato. Report `report_reserve_r8_summary.md`. |
 | ~~R9~~ | **FATTO** 2026-08-30 — `dashboard/`: tipi riserva + `GlobalView`/`NotificationPreferences` estesi; client `api.ts` (fetch/transactions/settings/transfer/deploy/rebalance); tab **Bank** + `BankPanel` (metriche, posizioni/pesi, movimenti, azioni admin, form impostazioni); `GlobalPanel` con metriche riserva + volatility budget; `NotificationPrefsPanel` toggle `reserve_events`. tsc OK; eslint dashboard 6 vs 5 (+1 stessa categoria del debito React esistente). Report `report_reserve_r9_dashboard.md`. |
-| R10 | *(futuro)* Esecuzione live riserva su PancakeSwap — fuori scope R2–R9 |
+| R10 | **Scaffold fatto (testnet-gated)**: `PancakeSwapReserveBackend` + wiring executor/factory + 7 test. Live mainnet (verifica indirizzi, liquidità peg SOL/TRX, rimozione gate) resta futuro. |
 
 Ogni step: implementa → verifica → documenta → report, con approvazione prima del
 successivo (AGENTS.md).

@@ -47,6 +47,17 @@ def price_source_from_map(
     return _src
 
 
+def _live_enabled(settings: Settings) -> bool:
+    """Live reserve execution only when the agent runs live *and* on BSC testnet.
+
+    ``execution_mode == "live"`` already forces testnet at config load; the extra
+    check keeps the reserve fail-closed if that guard is ever relaxed.
+    """
+    if not settings.reserve.execution_mode_inherit:
+        return False
+    return settings.execution_mode == "live" and settings.bsc_network == "testnet"
+
+
 async def build_reserve_service(
     session: AsyncSession,
     settings: Settings,
@@ -55,7 +66,21 @@ async def build_reserve_service(
     now_fn=None,
 ) -> ReserveService:
     table = await fetch_reserve_prices(settings, feed=feed)
-    executor = ReserveExecutor(settings, price_source=price_source_from_map(table))
+    live = _live_enabled(settings)
+    live_backend = None
+    if live:
+        from backend.app.domain.reserve.live_backend import PancakeSwapReserveBackend
+
+        async def _bnb_price() -> Decimal | None:
+            return table.get("BNB")
+
+        live_backend = PancakeSwapReserveBackend(settings, bnb_price_source=_bnb_price)
+    executor = ReserveExecutor(
+        settings,
+        price_source=price_source_from_map(table),
+        live=live,
+        live_backend=live_backend,
+    )
     kwargs: dict = {"executor": executor, "settings": settings}
     if now_fn is not None:
         kwargs["now_fn"] = now_fn

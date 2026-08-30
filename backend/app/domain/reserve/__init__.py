@@ -1,6 +1,7 @@
 """Domain package for the "Bank" store-of-value reserve."""
 
 from backend.app.domain.reserve.executor import ReserveExecutionError, ReserveExecutor
+from backend.app.domain.reserve.live_backend import PancakeSwapReserveBackend
 from backend.app.domain.reserve.service import ReserveError, ReserveService
 from backend.app.domain.reserve.settings import (
     RESERVE_SETTINGS_KEY,
@@ -10,6 +11,7 @@ from backend.app.domain.reserve.settings import (
 
 __all__ = [
     "RESERVE_SETTINGS_KEY",
+    "PancakeSwapReserveBackend",
     "ReserveError",
     "ReserveExecutionError",
     "ReserveExecutor",
