@@ -1,0 +1,54 @@
+# Versioned functional defaults for the "Bank" / Store-of-Value reserve.
+# See plans/Plan_Reserve.md. These are DEFAULTS: the user-tunable subset
+# (weights, drift band, sweep, cooldown, toggles) can be overridden at runtime
+# from the Setup > Bank screen and persisted in runtime_state.
+#
+# The asset list, addresses and Aster spot symbols are NOT user-editable.
+#
+# NOTE: pancakeswap_address values are only used by LIVE execution (gated to BSC
+# testnet by a hard guardrail); the simulated phase marks-to-market with the
+# market-data provider and never touches them. They must still be verified
+# on-chain before any live use (see R1b report).
+
+reserve:
+  enabled: true
+  execution_mode_inherit: true          # follow Settings.execution_mode
+  auto_rebalance: true
+  drift_band_pct: 5.0                    # rebalance when |weight - target| > this
+  min_transfer_usd: 10.0
+  rebalance_min_trade_usd: 5.0
+  snapshot_interval_minutes: 60
+  withdrawal_cooldown_minutes: 1440      # 24h anti "drain the reserve in a panic"
+  block_withdrawal_during_drawdown_guard: true
+  # Automatic profit sweep (profit ratchet)
+  sweep_enabled: true
+  sweep_pct: 20.0
+  sweep_interval_hours: 24
+  sweep_min_tradable_equity_usd: 50.0
+  # 100% hard assets — no stablecoin sleeve (the stable ballast is the trading wallet).
+  assets:
+    - symbol: BTC
+      target_weight_pct: 40.0
+      pancakeswap_address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c"   # BTCB (verify on-chain before live)
+      decimals: 18
+      aster_spot_symbol: BTCUSDT
+    - symbol: ETH
+      target_weight_pct: 30.0
+      pancakeswap_address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8"   # Binance-Peg ETH (verify)
+      decimals: 18
+      aster_spot_symbol: ETHUSDT
+    - symbol: BNB
+      target_weight_pct: 20.0
+      pancakeswap_address: "WBNB"                                        # resolved by PancakeSwapProvider
+      decimals: 18
+      aster_spot_symbol: BNBUSDT
+    - symbol: SOL
+      target_weight_pct: 5.0
+      pancakeswap_address: "0x570A5D26f7765Ecb712C0924E4De545B89fD43dF"   # Binance-Peg SOL (verify)
+      decimals: 18
+      aster_spot_symbol: SOLUSDT
+    - symbol: TRX
+      target_weight_pct: 5.0
+      pancakeswap_address: "0xCE7de646e7208a4Ef112cb6ed5038FA6cC6b12e3"   # Binance-Peg TRX (verify); no Aster spot
+      decimals: 18
+      aster_spot_symbol: null

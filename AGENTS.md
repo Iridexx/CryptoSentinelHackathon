@@ -58,6 +58,7 @@ Operational rules for AI agents working on CryptoSentinelHackathon.
   - `configs/strategy_spot.yaml`
   - `configs/strategy_perp.yaml`
   - `configs/eligible_tokens.yaml`
+  - `configs/reserve.yaml`
 
 ## Hard Guardrails
 

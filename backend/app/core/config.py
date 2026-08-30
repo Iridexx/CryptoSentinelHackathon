@@ -9,7 +9,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 import yaml
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -27,7 +27,11 @@ FUNCTIONAL_CONFIG_FILES = (
     "strategy_spot.yaml",
     "strategy_perp.yaml",
     "eligible_tokens.yaml",
+    "reserve.yaml",
 )
+
+#: Reserve target weights must add up to 100% within this tolerance (points).
+RESERVE_WEIGHT_SUM_TOLERANCE = 0.01
 
 SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
     "app": {
@@ -334,6 +338,11 @@ def _flatten_config(payload: dict[str, Any]) -> dict[str, Any]:
         if section == "eligible_tokens":
             flattened["eligible_tokens"] = values
             continue
+        if section == "reserve":
+            # Structured sub-config (scalars + asset list): handed to the typed
+            # ReserveConfig model rather than flattened field by field.
+            flattened["reserve"] = values
+            continue
         if not isinstance(values, dict):
             continue
         field_map = SECTION_FIELD_MAP.get(section, {})
@@ -359,6 +368,83 @@ def load_yaml_settings(config_dir: Path | None = None) -> dict[str, Any]:
         merged = _merge_dicts(merged, _load_yaml(root / file_name))
     merged = _merge_dicts(merged, _load_yaml(root / "instance.yaml"))
     return _flatten_config(merged)
+
+
+class ReserveAssetConfig(BaseModel):
+    """One hard asset held by the reserve.
+
+    ``pancakeswap_address`` and ``aster_spot_symbol`` are execution metadata used
+    only by the LIVE path; the simulated phase marks-to-market via the
+    market-data provider and needs only ``symbol``.
+    """
+
+    symbol: str
+    target_weight_pct: float = 0.0
+    pancakeswap_address: str | None = None
+    decimals: int = 18
+    aster_spot_symbol: str | None = None
+
+    @field_validator("symbol", mode="before")
+    @classmethod
+    def _upper_symbol(cls, value: str) -> str:
+        return str(value).strip().upper()
+
+
+class ReserveConfig(BaseModel):
+    """Versioned defaults for the "Bank" store-of-value reserve.
+
+    The user-tunable subset is mirrored by ``schemas.reserve.ReserveSettings`` and
+    can be overridden at runtime; the asset list stays here only.
+    """
+
+    enabled: bool = False
+    execution_mode_inherit: bool = True
+    auto_rebalance: bool = True
+    drift_band_pct: float = 5.0
+    min_transfer_usd: float = 10.0
+    rebalance_min_trade_usd: float = 5.0
+    snapshot_interval_minutes: int = 60
+    withdrawal_cooldown_minutes: int = 1440
+    block_withdrawal_during_drawdown_guard: bool = True
+    sweep_enabled: bool = True
+    sweep_pct: float = 20.0
+    sweep_interval_hours: int = 24
+    sweep_min_tradable_equity_usd: float = 50.0
+    assets: list[ReserveAssetConfig] = Field(default_factory=list)
+
+    @property
+    def symbols(self) -> list[str]:
+        return [asset.symbol for asset in self.assets]
+
+    @model_validator(mode="after")
+    def _validate_internal_consistency(self) -> "ReserveConfig":
+        if not 0.0 <= self.sweep_pct <= 100.0:
+            raise ValueError("reserve.sweep_pct must be between 0 and 100")
+        if self.sweep_interval_hours < 1:
+            raise ValueError("reserve.sweep_interval_hours must be at least 1")
+        if self.drift_band_pct <= 0:
+            raise ValueError("reserve.drift_band_pct must be positive")
+        if self.min_transfer_usd < 0 or self.sweep_min_tradable_equity_usd < 0:
+            raise ValueError("reserve USD thresholds must not be negative")
+        if self.withdrawal_cooldown_minutes < 0:
+            raise ValueError("reserve.withdrawal_cooldown_minutes must not be negative")
+
+        if not self.enabled:
+            return self
+
+        if not self.assets:
+            raise ValueError("reserve is enabled but no assets are configured")
+        symbols = [asset.symbol for asset in self.assets]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("reserve asset symbols must be unique")
+        if any(asset.target_weight_pct < 0 for asset in self.assets):
+            raise ValueError("reserve asset target_weight_pct must not be negative")
+        weight_sum = sum(asset.target_weight_pct for asset in self.assets)
+        if abs(weight_sum - 100.0) > RESERVE_WEIGHT_SUM_TOLERANCE:
+            raise ValueError(
+                f"reserve target weights must sum to 100 (got {weight_sum:.2f})"
+            )
+        return self
 
 
 class Settings(BaseSettings):
@@ -716,6 +802,10 @@ class Settings(BaseSettings):
     whale_flow_provider_url: str | None = Field(default=None, alias="WHALE_FLOW_PROVIDER_URL")
 
     eligible_tokens: list[str] = Field(default_factory=list, alias="ELIGIBLE_TOKENS")
+
+    # "Bank" store-of-value reserve. Structured sub-config; user-tunable subset is
+    # overridable at runtime via schemas.reserve.ReserveSettings.
+    reserve: ReserveConfig = Field(default_factory=ReserveConfig, alias="RESERVE")
 
     # ── Engine health watchdog ───────────────────────────────────────────────────
     agent_health_alert_enabled: bool = Field(default=True, alias="AGENT_HEALTH_ALERT_ENABLED")

@@ -23,7 +23,8 @@ Runtime precedence is explicit:
 2. `configs/instance.yaml`.
 3. Versioned functional defaults:
    `configs/risk.yaml`, `configs/strategy_spot.yaml`,
-   `configs/strategy_perp.yaml`, and `configs/eligible_tokens.yaml`.
+   `configs/strategy_perp.yaml`, `configs/eligible_tokens.yaml`, and
+   `configs/reserve.yaml`.
 4. Pydantic field defaults inside `Settings`.
 
 ## Hard Guardrails
