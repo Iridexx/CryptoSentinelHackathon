@@ -46,12 +46,15 @@ import {
   fetchReserve,
   fetchReserveHistory,
   fetchReserveTransactions,
+  fetchReserveSettings,
+  saveReserveSettings,
   reserveTransfer,
   reserveDeploy,
   reserveRebalance,
   type ReserveView,
   type ReserveHistoryResponse,
   type ReserveTransactionsResponse,
+  type ReserveSettings,
 } from '../services/agentApi';
 import { hapticLight } from '../utils/haptics';
 
@@ -367,11 +370,17 @@ const EquityChart: FC<{
   equity: EquityCurveResponse | null;
   range: EquityRange;
   onRange: (r: EquityRange) => void;
-}> = ({ equity, range, onRange }) => {
+  view?: 'trading' | 'portfolio';
+  onView?: (v: 'trading' | 'portfolio') => void;
+}> = ({ equity, range, onRange, view = 'trading', onView }) => {
   const items = equity?.items ?? [];
   const n = items.length;
 
-  const pnl = items.map((i) => Number(i.pnl_pct));
+  const hasPortfolio = items.some((i) => i.portfolio_pnl_pct != null);
+  const showPortfolio = view === 'portfolio' && hasPortfolio;
+  const pnl = items.map((i) =>
+    Number(showPortfolio ? (i.portfolio_pnl_pct ?? i.pnl_pct) : i.pnl_pct),
+  );
   const btc = items.map((i) => (i.btc_pct != null ? Number(i.btc_pct) : null));
   const hasBtc = (equity?.benchmark_available ?? false) && btc.some((v) => v != null);
 
@@ -421,7 +430,16 @@ const EquityChart: FC<{
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase text-gray-500">PnL cumulato</h3>
+        {hasPortfolio && onView ? (
+          <button
+            onClick={() => { hapticLight(); onView(showPortfolio ? 'trading' : 'portfolio'); }}
+            className="text-xs font-semibold uppercase text-gray-500"
+          >
+            {showPortfolio ? 'Portafoglio totale ▾' : 'Solo trading ▾'}
+          </button>
+        ) : (
+          <h3 className="text-xs font-semibold uppercase text-gray-500">PnL cumulato</h3>
+        )}
         <div className="flex gap-1">
           {EQUITY_RANGES.map((r) => (
             <button
@@ -443,7 +461,7 @@ const EquityChart: FC<{
             {fmtSignedPct(lastPnl)}
           </div>
           <div className="text-[11px] text-gray-400">
-            <span style={{ color: PNL_COLOR }}>●</span> PnL cumulato
+            <span style={{ color: PNL_COLOR }}>●</span> {showPortfolio ? 'PnL portafoglio' : 'PnL trading'}
           </div>
         </div>
         {hasBtc && lastBtc != null && (
@@ -1002,6 +1020,7 @@ const GlobalPane: FC<{
   assetBreakdown: AssetBreakdownResponse | null;
   claudeUsage: ClaudeUsageView | null;
 }> = ({ data, status, equity, equityRange, onEquityRange, decisions, assetBreakdown, claudeUsage }) => {
+  const [equityView, setEquityView] = useState<'trading' | 'portfolio'>('trading');
   const hasHistory = (data?.pnl_history.length ?? 0) > 0;
   const hasPortfolio = Number(data?.total_equity_usd ?? 0) > 0 || Number(data?.initial_equity_usd ?? 0) > 0;
   const hasTradesToday = Number(data?.trades_today ?? 0) > 0;
@@ -1032,6 +1051,32 @@ const GlobalPane: FC<{
           tone={claudeUsage == null ? 'neutral' : claudeUsage.budget_pct >= 90 ? 'bad' : claudeUsage.budget_pct >= 70 ? 'neutral' : 'good'}
         />
       </div>
+      {Number(data?.reserve_value_usd ?? 0) > 0.01 && (
+        <div className="rounded-xl border border-accent-yellow/20 bg-dark-800 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase text-gray-500">🏦 Bank · Riserva</span>
+            <span className={`text-xs font-bold tabular-nums ${Number(data?.reserve_pnl_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+              {fmtUsd(data?.reserve_value_usd)} · {fmtSignedPct(Number(data?.reserve_pnl_pct ?? 0))}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-gray-400">
+            <span>Tradabile <b className="block text-gray-200">{fmtUsd(data?.tradable_equity_usd)}</b></span>
+            <span>Totale <b className="block text-gray-200">{fmtUsd(data?.total_portfolio_equity_usd)}</b></span>
+            <span>P&amp;L totale <b className={`block ${Number(data?.total_portfolio_pnl_pct ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>{fmtSignedPct(Number(data?.total_portfolio_pnl_pct ?? 0))}</b></span>
+          </div>
+          {data?.volatility_budget?.status === 'ready' && (
+            <div className="mt-3 border-t border-dark-700 pt-2">
+              <p className="text-[11px] font-semibold uppercase text-gray-500">Volatility budget</p>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-[11px] text-gray-400">
+                <span>Max DD trading <b className="block text-accent-red">{(data.volatility_budget.trading_max_drawdown_pct ?? 0).toFixed(1)}%</b></span>
+                <span>Max DD totale <b className="block text-accent-yellow">{(data.volatility_budget.total_max_drawdown_pct ?? 0).toFixed(1)}%</b></span>
+                <span>Vol giornaliera <b className="block text-accent-red">{(data.volatility_budget.trading_daily_vol_pct ?? 0).toFixed(1)}%</b></span>
+                <span>Vol con riserva <b className="block text-accent-yellow">{(data.volatility_budget.total_daily_vol_pct ?? 0).toFixed(1)}%</b></span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {!hasPortfolio && !hasHistory && (
         <EmptyState title="In attesa dello stato globale" detail="Equity, drawdown ed esposizione saranno visibili al primo snapshot." />
       )}
@@ -1040,7 +1085,7 @@ const GlobalPane: FC<{
       )}
       {hasHistory ? (
         <div className="rounded-xl bg-dark-800 px-4 py-3">
-          <EquityChart equity={equity} range={equityRange} onRange={onEquityRange} />
+          <EquityChart equity={equity} range={equityRange} onRange={onEquityRange} view={equityView} onView={setEquityView} />
         </div>
       ) : hasPortfolio && (
         <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
@@ -1521,13 +1566,92 @@ const CoinsPane: FC<{
   );
 };
 
-type SetupTab = 'generale' | 'spot' | 'perp' | 'sistema';
+type SetupTab = 'generale' | 'spot' | 'perp' | 'sistema' | 'bank';
 const SETUP_TABS: Array<{ id: SetupTab; label: string }> = [
   { id: 'generale', label: 'Generale' },
   { id: 'spot', label: 'Spot' },
   { id: 'perp', label: 'Perp' },
+  { id: 'bank', label: 'Bank' },
   { id: 'sistema', label: 'Sistema' },
 ];
+
+const BankSettingsPane: FC<{ adminToken: string }> = ({ adminToken }) => {
+  const [s, setS] = useState<ReserveSettings | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetchReserveSettings().then((r) => setS(r.settings)).catch(() => setMsg('Caricamento impostazioni non riuscito'));
+  }, []);
+
+  if (!s) return <div className="py-6 text-center text-xs text-gray-500">{msg || 'Caricamento…'}</div>;
+
+  const patch = (p: Partial<ReserveSettings>) => { setS({ ...s, ...p }); setDirty(true); };
+  const setWeight = (symbol: string, weight_pct: number) => {
+    patch({ target_weights: s.target_weights.map((w) => (w.symbol === symbol ? { ...w, weight_pct } : w)) });
+  };
+  const weightSum = s.target_weights.reduce((acc, w) => acc + Number(w.weight_pct || 0), 0);
+  const weightsOk = Math.abs(weightSum - 100) < 0.5;
+
+  const save = async () => {
+    if (!adminToken || !weightsOk) return;
+    setSaving(true); setMsg('');
+    try {
+      const r = await saveReserveSettings(s, adminToken);
+      setS(r.settings); setDirty(false); setMsg('Salvato');
+    } catch {
+      setMsg('Salvataggio non riuscito');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <ToggleInput label="Riserva attiva" checked={s.enabled} onChange={(enabled) => patch({ enabled })} />
+      <ToggleInput label="Ribilanciamento automatico" checked={s.auto_rebalance} onChange={(auto_rebalance) => patch({ auto_rebalance })} />
+      <ToggleInput label="Sweep profitti automatico" checked={s.sweep_enabled} onChange={(sweep_enabled) => patch({ sweep_enabled })} />
+
+      <section className="rounded-xl bg-dark-800 px-4 py-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase text-gray-500">Pesi target</h4>
+          <span className={`text-[11px] font-semibold ${weightsOk ? 'text-accent-green' : 'text-accent-red'}`}>somma {weightSum.toFixed(0)}%</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {s.target_weights.map((w) => (
+            <NumberInput key={w.symbol} label={`${w.symbol} %`} value={Number(w.weight_pct)} step={1} onChange={(v) => setWeight(w.symbol, v)} />
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-dark-800 px-4 py-3 grid grid-cols-2 gap-2">
+        <NumberInput label="Sweep %" value={s.sweep_pct} step={1} onChange={(sweep_pct) => patch({ sweep_pct })} />
+        <NumberInput label="Sweep ogni (ore)" value={s.sweep_interval_hours} step={1} onChange={(sweep_interval_hours) => patch({ sweep_interval_hours })} />
+        <NumberInput label="Deploy ogni (giorni)" value={s.deploy_interval_days} step={1} onChange={(deploy_interval_days) => patch({ deploy_interval_days })} />
+        <NumberInput label="Deploy se cash ≥ $" value={s.deploy_min_cash_usd} step={5} onChange={(deploy_min_cash_usd) => patch({ deploy_min_cash_usd })} />
+        <NumberInput label="Banda drift %" value={s.drift_band_pct} step={0.5} onChange={(drift_band_pct) => patch({ drift_band_pct })} />
+        <NumberInput label="Transfer minimo $" value={s.min_transfer_usd} step={1} onChange={(min_transfer_usd) => patch({ min_transfer_usd })} />
+        <NumberInput label="Cooldown prelievi (ore)" value={Math.round(s.withdrawal_cooldown_minutes / 60)} step={1} onChange={(v) => patch({ withdrawal_cooldown_minutes: Math.max(0, Math.round(v)) * 60 })} />
+      </section>
+      <ToggleInput
+        label="Blocca prelievi durante blocco drawdown"
+        checked={s.block_withdrawal_during_drawdown_guard}
+        onChange={(block_withdrawal_during_drawdown_guard) => patch({ block_withdrawal_during_drawdown_guard })}
+      />
+
+      {msg && <p className={`text-xs ${msg === 'Salvato' ? 'text-accent-green' : 'text-accent-red'}`}>{msg}</p>}
+      <button
+        onClick={save}
+        disabled={!adminToken || saving || !dirty || !weightsOk}
+        className="w-full rounded-lg bg-accent-yellow px-3 py-2.5 text-sm font-bold text-dark-900 disabled:opacity-40"
+      >
+        {saving ? 'Salvataggio…' : 'Salva impostazioni Bank'}
+      </button>
+      {!adminToken && <p className="text-xs text-gray-600">Richiede admin token salvato.</p>}
+    </div>
+  );
+};
 
 const SetupPane: FC<{
   settings: AgentMobileSettings;
@@ -1632,7 +1756,7 @@ const SetupPane: FC<{
       </section>
 
       {/* Tab bar */}
-      <div className="grid grid-cols-4 gap-1">
+      <div className="grid grid-cols-5 gap-1">
         {SETUP_TABS.map((t) => (
           <button
             key={t.id}
@@ -1645,6 +1769,9 @@ const SetupPane: FC<{
           </button>
         ))}
       </div>
+
+      {/* Tab: Bank */}
+      {setupTab === 'bank' && <BankSettingsPane adminToken={adminToken} />}
 
       {/* Tab: Generale */}
       {setupTab === 'generale' && (

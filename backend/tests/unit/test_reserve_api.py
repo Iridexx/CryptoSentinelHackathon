@@ -142,6 +142,17 @@ async def test_target_weights_validation(app) -> None:
 
 
 @pytest.mark.asyncio
+async def test_transactions_endpoint(app) -> None:
+    await _seed(profit="200")
+    c = TestClient(app)
+    c.post("/api/v1/agent/reserve/transfer", json={"amount_usd": 40, "direction": "in"})
+    r = c.get("/api/v1/agent/reserve/transactions")
+    assert r.status_code == 200
+    types = {t["type"] for t in r.json()["items"]}
+    assert "transfer_in" in types and "deploy_buy" in types
+
+
+@pytest.mark.asyncio
 async def test_deploy_and_rebalance_and_history(app) -> None:
     await _seed(profit="200")
     c = TestClient(app)
