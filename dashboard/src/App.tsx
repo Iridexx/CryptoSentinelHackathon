@@ -918,10 +918,16 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
   const [settings, setSettings] = useState<ReserveSettings | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [amount, setAmount] = useState('');
+  const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return;  // never overlap a poll with a manual Refresh
+    loadingRef.current = true;
+    setLoading(true);
     try {
       const [v, t, s] = await Promise.all([
         fetchReserve(session),
@@ -932,8 +938,12 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
       setTxns(t.items);
       if (!dirty) setSettings(s.settings);
       setErr('');
+      setLastLoadedAt(Date.now());
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Errore di caricamento');
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
     }
   }, [session, dirty]);
 
@@ -968,7 +978,23 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
   };
 
   return (
-    <Panel title="Bank · Riserva di Valore" className="wide" action={<button onClick={() => void load()}>Refresh</button>}>
+    <Panel
+      title="Bank · Riserva di Valore"
+      className="wide"
+      action={
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {(loading || busy) && <span className="muted" style={{ fontSize: '0.8rem' }}>aggiornamento…</span>}
+          {!loading && !busy && lastLoadedAt && (
+            <span className="muted" style={{ fontSize: '0.8rem' }}>
+              agg. {new Date(lastLoadedAt).toLocaleTimeString('it-IT')}
+            </span>
+          )}
+          <button onClick={() => void load()} disabled={loading || busy}>
+            {loading ? '…' : 'Refresh'}
+          </button>
+        </span>
+      }
+    >
       {err && <p className="muted" style={{ color: 'var(--bad, #f0616d)' }}>{err}</p>}
       {!view ? (
         <Empty title="Riserva non caricata" detail="Attendi il prossimo aggiornamento o premi Refresh." />

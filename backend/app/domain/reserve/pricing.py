@@ -8,6 +8,8 @@ Shared by the API routes (R5) and the slow tick (R6).
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
 
@@ -21,21 +23,44 @@ from backend.app.domain.reserve.service import ReserveService
 
 logger = get_logger("domain.reserve.pricing")
 
+#: The reserve is read on every dashboard/app poll (~2/min) plus the slow tick.
+#: A short shared cache collapses those into ~3 upstream calls/min and keeps a
+#: slow or geo-blocked Binance ticker (which then fans out to CEX fallbacks) from
+#: stalling the API. Stale-on-error: a failed refresh serves the last good table.
+_PRICE_CACHE_TTL_S = 20.0
+_PRICE_FETCH_TIMEOUT_S = 6.0
+_price_cache: dict[str, tuple[float, dict[str, Decimal | None]]] = {}
+
 
 async def fetch_reserve_prices(
-    settings: Settings, *, feed: BinanceKlineFeed | None = None
+    settings: Settings, *, feed: BinanceKlineFeed | None = None, use_cache: bool = True
 ) -> dict[str, Decimal | None]:
     """Current USD price per configured reserve asset (``{ "BTC": Decimal, ... }``)."""
     assets = [a.symbol for a in settings.reserve.assets]
     if not assets:
         return {}
+    key = ",".join(sorted(assets))
+    now = time.monotonic()
+    cached = _price_cache.get(key)
+    if use_cache and cached is not None and now - cached[0] < _PRICE_CACHE_TTL_S:
+        return dict(cached[1])
+
     feed = feed or BinanceKlineFeed()
     try:
-        got = await feed.fetch_prices(symbols=[f"{s}USDT" for s in assets], market="spot")
-    except Exception as exc:  # noqa: BLE001 - degrade to "no price"
+        got = await asyncio.wait_for(
+            feed.fetch_prices(symbols=[f"{s}USDT" for s in assets], market="spot"),
+            timeout=_PRICE_FETCH_TIMEOUT_S,
+        )
+    except Exception as exc:  # noqa: BLE001 - degrade to cached / "no price"
         logger.warning("reserve_prices_unavailable", error_type=type(exc).__name__)
+        if cached is not None:
+            return dict(cached[1])
         got = {}
-    return {s: got.get(f"{s}USDT") for s in assets}
+
+    table = {s: got.get(f"{s}USDT") for s in assets}
+    if any(v is not None for v in table.values()):
+        _price_cache[key] = (now, table)
+    return table
 
 
 def price_source_from_map(

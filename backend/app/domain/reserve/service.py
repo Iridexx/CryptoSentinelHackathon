@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
-from backend.app.domain.reserve.executor import ReserveExecutor
+from backend.app.domain.reserve.executor import ReserveExecutionError, ReserveExecutor
 from backend.app.domain.reserve.settings import load_reserve_settings
 from backend.app.persistence.models.reserve import ReserveSnapshot, ReserveTransaction
 from backend.app.persistence.repositories.pnl import PnlRepository
@@ -144,15 +144,28 @@ class ReserveService:
 
     # ── valuation ────────────────────────────────────────────────────────────
 
-    async def _asset_mtm(self, user_id: str) -> tuple[dict[str, dict], Decimal]:
-        """Per-asset {qty, price, value, avg_cost} and the total asset value."""
+    async def _asset_mtm(
+        self, user_id: str, *, strict: bool = True
+    ) -> tuple[dict[str, dict], Decimal]:
+        """Per-asset {qty, price, value, avg_cost} and the total asset value.
+
+        ``strict=False`` (read paths) marks a holding at its average cost when the
+        price feed is unavailable, so the view still renders instead of 503-ing.
+        Mutating paths (deploy/rebalance/transfer_out) keep ``strict=True``.
+        """
         out: dict[str, dict] = {}
         total = _ZERO
         for h in await self._repo.list_holdings(user_id):
             qty = Decimal(str(h.quantity))
             if qty <= 0:
                 continue
-            price = await self._executor.price(h.asset)
+            try:
+                price = await self._executor.price(h.asset)
+            except ReserveExecutionError:
+                if strict:
+                    raise
+                price = Decimal(str(h.avg_cost_usd))
+                logger.warning("reserve_mtm_at_cost", user_id=user_id, asset=h.asset)
             value = qty * price
             out[h.asset] = {
                 "qty": qty,
@@ -502,7 +515,7 @@ class ReserveService:
     async def snapshot(self, user_id: str) -> ReserveSnapshot | None:
         fields = await self._fields(user_id)
         cash = Decimal(str(fields["reserve_cash_usd"]))
-        mtm, asset_total = await self._asset_mtm(user_id)
+        mtm, asset_total = await self._asset_mtm(user_id, strict=False)
         if cash <= 0 and asset_total <= 0:
             return None
         cost_basis = Decimal(str(fields["reserve_transferred_net_usd"]))
@@ -531,7 +544,7 @@ class ReserveService:
     async def valuate(self, user_id: str) -> Decimal:
         """Current mark-to-market value of the reserve (cash + assets)."""
         fields = await self._fields(user_id)
-        _mtm, asset_total = await self._asset_mtm(user_id)
+        _mtm, asset_total = await self._asset_mtm(user_id, strict=False)
         return Decimal(str(fields["reserve_cash_usd"])) + asset_total
 
     # ── view ─────────────────────────────────────────────────────────────────
@@ -544,7 +557,7 @@ class ReserveService:
         drift_band = Decimal(str(cfg.drift_band_pct))
 
         cash = Decimal(str(fields["reserve_cash_usd"]))
-        mtm, asset_total = await self._asset_mtm(user_id)
+        mtm, asset_total = await self._asset_mtm(user_id, strict=False)
         value = cash + asset_total
         cost_basis = Decimal(str(fields["reserve_transferred_net_usd"]))
         pnl = value - cost_basis
