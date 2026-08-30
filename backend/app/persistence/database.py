@@ -65,6 +65,7 @@ async def _apply_column_migrations(conn) -> None:
         ("portfolio_state", "last_swept_realized_pnl_usd", "NUMERIC(20,8) NOT NULL DEFAULT 0"),
         ("portfolio_state", "last_deploy_at", "DATETIME"),
         ("portfolio_state", "reserve_frozen", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("pnl_snapshots", "total_portfolio_equity_usd", "NUMERIC(20,8)"),
     ]
     for table, column, col_type in new_columns:
         try:

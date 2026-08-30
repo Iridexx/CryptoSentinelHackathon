@@ -27,6 +27,9 @@ class PnlSnapshot(Base):
     open_spot_positions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     open_perp_positions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     bnb_balance: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+    # Trading equity + "Bank" reserve value (D31). NULL on pre-reserve rows;
+    # equals total_equity_usd when there is no reserve.
+    total_portfolio_equity_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
 
 
 class PortfolioState(Base):

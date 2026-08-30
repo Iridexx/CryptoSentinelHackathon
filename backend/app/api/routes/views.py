@@ -124,6 +124,16 @@ async def equity_curve(
             "pnl_pct": _signed(_q2(pnl_pct)),
             "drawdown_pct": _signed(_q2(snapshot.drawdown_pct)),
         }
+        # D31: total-portfolio equity (trading + reserve) for the "Solo Trading /
+        # Portafoglio Totale" toggle. Only on the global view.
+        if market == "global" and snapshot.total_portfolio_equity_usd is not None:
+            pf_equity = Decimal(str(snapshot.total_portfolio_equity_usd))
+            item["portfolio_equity_usd"] = _q2(pf_equity)
+            pf_pnl = pf_equity - contributed
+            item["portfolio_pnl_usd"] = _signed(_q2(pf_pnl))
+            item["portfolio_pnl_pct"] = _signed(
+                _q2((pf_pnl / contributed * Decimal("100")) if contributed > 0 else Decimal("0"))
+            )
         btc_pct = benchmark.get(snapshot.timestamp_utc.isoformat())
         if btc_pct is not None:
             item["btc_pct"] = _signed(_q2(btc_pct))

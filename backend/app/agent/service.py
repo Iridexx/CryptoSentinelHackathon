@@ -36,6 +36,7 @@ from backend.app.persistence.repositories.api_usage import ApiUsageRepository
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
 from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.positions import PerpPositionRepository, SpotPositionRepository
+from backend.app.persistence.repositories.reserve import ReserveRepository
 from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.repositories.trades import PerpTradeRepository, SpotTradeRepository
@@ -2034,6 +2035,10 @@ class AgentService:
         realized_perp = await perp_repo.sum_realized_pnl(user_id)
         realized = realized_spot + realized_perp
         total = portfolio.initial_equity_usd + realized + unrealized
+        # D31: capitale spostato nella riserva "Bank" non e' a rischio. Esposizione
+        # e guardia daily-loss si misurano sull'equity tradabile, come il risk manager.
+        reserve_offset = Decimal(str(portfolio.reserve_transferred_net_usd or 0))
+        tradable = total - reserve_offset
 
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         daily_realized_spot = await spot_repo.sum_realized_pnl(user_id, since=day_start)
@@ -2041,7 +2046,7 @@ class AgentService:
         daily_pnl = daily_realized_spot + daily_realized_perp + unrealized
         # % di PnL giornaliero sull'equity (negativo in perdita) per la guardia daily_loss_limit.
         daily_loss_limit_used_pct = (
-            (daily_pnl / total * 100).quantize(Decimal("0.01")) if total > 0 else Decimal("0")
+            (daily_pnl / tradable * 100).quantize(Decimal("0.01")) if tradable > 0 else Decimal("0")
         )
 
         # Esposizione = capitale impegnato (margine), non il nozionale: per il perp
@@ -2052,7 +2057,7 @@ class AgentService:
             (p.entry_price * p.size / Decimal(max(int(p.leverage or 1), 1)) for p in perp_positions),
             Decimal("0"),
         )
-        raw_exposure_pct = (spot_exposure + perp_exposure) / total * 100 if total > 0 else Decimal("0")
+        raw_exposure_pct = (spot_exposure + perp_exposure) / tradable * 100 if tradable > 0 else Decimal("0")
         exposure_pct = raw_exposure_pct.quantize(Decimal("0.01"))
 
         peak = max(portfolio.peak_equity_usd, total)
@@ -2095,6 +2100,21 @@ class AgentService:
         spot_equity = sum((p.entry_price * p.size for p in open_spot), Decimal("0"))
         perp_equity = sum((p.entry_price * p.size for p in open_perp), Decimal("0"))
 
+        # D31: total portfolio = tradable trading equity + reserve value. Until the
+        # slow tick writes hourly ReserveSnapshots (R6), the reserve is valued at
+        # cost, so this equals total_equity_usd when there is no reserve P&L yet.
+        reserve_repo = ReserveRepository(session)
+        rfields = await reserve_repo.get_reserve_fields(user_id)
+        reserve_at_cost = Decimal(str(rfields["reserve_cash_usd"])) + sum(
+            (Decimal(str(h.quantity)) * Decimal(str(h.avg_cost_usd))
+             for h in await reserve_repo.list_holdings(user_id)),
+            Decimal("0"),
+        )
+        tradable = Decimal(str(portfolio.total_equity_usd)) - Decimal(
+            str(rfields["reserve_transferred_net_usd"])
+        )
+        total_portfolio_equity = tradable + reserve_at_cost
+
         snapshot = PnlSnapshot(
             user_id=user_id,
             timestamp_utc=now.replace(minute=0, second=0, microsecond=0),
@@ -2107,6 +2127,7 @@ class AgentService:
             daily_pnl_usd=portfolio.daily_pnl_usd,
             open_spot_positions=len(open_spot),
             open_perp_positions=len(open_perp),
+            total_portfolio_equity_usd=total_portfolio_equity,
         )
         await pnl_repo.save_snapshot(snapshot)
 

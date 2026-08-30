@@ -140,7 +140,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc/block_timestamp_utc separati, prezzi a 18 decimali, PnL, fee, slippage e funding snapshot.
 |   |   |   |   |-- positions.py - SpotPosition e PerpPosition con prezzi/livelli a 18 decimali, livelli SL/TP/trailing, ATR entry, candela riferimento stop loss, fee/slippage/funding, margin e stato TP1.
 |   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
-|   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert); PortfolioState include i contatori riserva "Bank" (reserve_cash_usd, reserve_transferred_net_usd, last_swept_realized_pnl_usd, last_deploy_at, reserve_frozen).
+|   |   |   |   |-- pnl.py - PnlSnapshot (orari, con total_portfolio_equity_usd = trading + riserva per il toggle "Solo Trading/Portafoglio Totale", D31) e PortfolioState (una riga per utente, upsert); PortfolioState include i contatori riserva "Bank" (reserve_cash_usd, reserve_transferred_net_usd, last_swept_realized_pnl_usd, last_deploy_at, reserve_frozen).
 |   |   |   |   |-- reserve.py - modelli scheda "Bank" (R2 piano Riserva): ReserveHolding (posizione per asset, unique user+asset), ReserveTransaction (audit: transfer_in/out, sweep, deploy_buy, rebalance_*; fee_usd, cash_usd_delta), ReserveSnapshot (valore orario per grafico/benchmark).
 |   |   |   |   |-- archives.py - ArchivedRun: snapshot JSON dei dati dry-run simulati esclusi dalle viste live.
 |   |   |   |   |-- equity_adjustments.py - versamenti/prelievi manuali separati dal PnL per non rebaselinare la performance storica.
