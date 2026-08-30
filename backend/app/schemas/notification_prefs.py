@@ -11,6 +11,7 @@ class NotificationPreferences(BaseModel):
     risk_alerts: bool = True
     daily_summary: bool = True
     critical: bool = True
+    reserve_events: bool = True  # "Bank" reserve: sweep / deploy / rebalance / transfer
 
 
 class NotificationPreferencesResponse(BaseModel):

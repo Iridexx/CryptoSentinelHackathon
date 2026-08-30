@@ -2100,20 +2100,24 @@ class AgentService:
         spot_equity = sum((p.entry_price * p.size for p in open_spot), Decimal("0"))
         perp_equity = sum((p.entry_price * p.size for p in open_perp), Decimal("0"))
 
-        # D31: total portfolio = tradable trading equity + reserve value. Until the
-        # slow tick writes hourly ReserveSnapshots (R6), the reserve is valued at
-        # cost, so this equals total_equity_usd when there is no reserve P&L yet.
+        # D31: total portfolio = tradable trading equity + reserve value. Value from
+        # the latest ReserveSnapshot (written just above by _reserve_tick, R6);
+        # before the first one, assets are valued at cost.
         reserve_repo = ReserveRepository(session)
         rfields = await reserve_repo.get_reserve_fields(user_id)
-        reserve_at_cost = Decimal(str(rfields["reserve_cash_usd"])) + sum(
-            (Decimal(str(h.quantity)) * Decimal(str(h.avg_cost_usd))
-             for h in await reserve_repo.list_holdings(user_id)),
-            Decimal("0"),
-        )
+        r_recent = await reserve_repo.recent_snapshots(user_id, limit=1)
+        if r_recent:
+            reserve_value = Decimal(str(r_recent[0].total_value_usd))
+        else:
+            reserve_value = Decimal(str(rfields["reserve_cash_usd"])) + sum(
+                (Decimal(str(h.quantity)) * Decimal(str(h.avg_cost_usd))
+                 for h in await reserve_repo.list_holdings(user_id)),
+                Decimal("0"),
+            )
         tradable = Decimal(str(portfolio.total_equity_usd)) - Decimal(
             str(rfields["reserve_transferred_net_usd"])
         )
-        total_portfolio_equity = tradable + reserve_at_cost
+        total_portfolio_equity = tradable + reserve_value
 
         snapshot = PnlSnapshot(
             user_id=user_id,
@@ -2130,6 +2134,71 @@ class AgentService:
             total_portfolio_equity_usd=total_portfolio_equity,
         )
         await pnl_repo.save_snapshot(snapshot)
+
+    async def _reserve_tick(self, session: AsyncSession, now: datetime) -> None:
+        """Slow-tick "Bank" reserve maintenance: sweep → deploy → rebalance → snapshot.
+
+        Each service call is a self-contained transaction and no-ops when its own
+        guard says so (disabled / frozen / drawdown guard / no trigger).
+        """
+        rc = self.settings.reserve
+        if not rc.enabled:
+            return
+        user_id = str(self.settings.default_user_id)
+
+        from backend.app.domain.reserve import ReserveError, load_reserve_settings
+        from backend.app.domain.reserve.pricing import build_reserve_service
+
+        service = await build_reserve_service(session, self.settings, now_fn=lambda: now)
+        notifier = get_agent_notifier()
+        hard_stop = self.risk.kill_switch == KillSwitchState.HARD_STOP
+
+        if not hard_stop:
+            try:
+                swept = await service.run_profit_sweep(user_id)
+                if swept > 0:
+                    await notifier.notify_reserve_event(
+                        user_id, "sweep", f"Spostati ${swept:.2f} di profitti nella riserva."
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("reserve_sweep_failed", error=str(exc))
+
+            try:
+                result = await service.deploy(user_id)
+                if not result.skipped and result.bought:
+                    summary = ", ".join(f"{a} ${u:.2f}" for a, u in result.bought.items())
+                    await notifier.notify_reserve_event(user_id, "deploy", f"Deploy riserva: {summary}.")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("reserve_deploy_failed", error=str(exc))
+
+            try:
+                cfg = load_reserve_settings(user_id, settings=self.settings).settings
+                if cfg.auto_rebalance:
+                    plan = await service.rebalance(user_id, dry_run=False)
+                    if plan.get("sold"):
+                        await notifier.notify_reserve_event(
+                            user_id, "rebalance", "Ribilanciata la riserva: venduto il sovrappeso."
+                        )
+            except ReserveError:
+                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("reserve_rebalance_failed", error=str(exc))
+
+        # Hourly value snapshot (real mark-to-market). Frozen/hard_stop still snapshot.
+        try:
+            repo = ReserveRepository(session)
+            recent = await repo.recent_snapshots(user_id, limit=1)
+            if recent:
+                last = recent[0].timestamp_utc.replace(
+                    tzinfo=recent[0].timestamp_utc.tzinfo or UTC
+                )
+                due = (now - last) >= timedelta(minutes=rc.snapshot_interval_minutes)
+            else:
+                due = True
+            if due:
+                await service.snapshot(user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("reserve_snapshot_failed", error=str(exc))
 
     async def slow_tick(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
         """Slow scanner tick plus the hard daily Spot trade heartbeat."""
@@ -2177,6 +2246,10 @@ class AgentService:
             await self._maybe_alert_engine_health(scanned, scan_errors, _now)
         except Exception as exc:
             logger.warning("engine_health_alert_failed", error=str(exc))
+        try:
+            await self._reserve_tick(session, _now)
+        except Exception as exc:
+            logger.warning("reserve_tick_failed", error=str(exc))
         try:
             await self._snapshot_portfolio_hourly(session, _now)
         except Exception as exc:

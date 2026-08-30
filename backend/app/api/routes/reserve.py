@@ -19,6 +19,7 @@ from backend.app.domain.reserve import (
     save_reserve_settings,
 )
 from backend.app.domain.reserve.pricing import build_reserve_service
+from backend.app.notifications.agent_notifier import get_agent_notifier
 from backend.app.persistence.repositories.reserve import ReserveRepository
 from backend.app.schemas.reserve import (
     ReserveSettings,
@@ -127,12 +128,22 @@ async def transfer(req: TransferRequest, _: AdminAccessDep, session: SessionDep)
     service = await build_reserve_service(session, get_settings())
     try:
         if req.direction == "in":
-            return await service.transfer_in(_user_id(), amount)
-        return await service.transfer_out(_user_id(), amount)
+            view = await service.transfer_in(_user_id(), amount)
+        else:
+            view = await service.transfer_out(_user_id(), amount)
     except ReserveError as exc:
         raise _domain_error(exc)
     except ReserveExecutionError:
         raise HTTPException(status_code=503, detail="price_unavailable")
+
+    verb = "Versati" if req.direction == "in" else "Prelevati"
+    try:
+        await get_agent_notifier().notify_reserve_event(
+            _user_id(), "transfer", f"{verb} ${amount:.2f} {'nella' if req.direction == 'in' else 'dalla'} riserva."
+        )
+    except Exception:  # noqa: BLE001 - a notification never blocks the transfer
+        pass
+    return view
 
 
 @router.post("/target-weights", response_model=ReserveView)

@@ -221,6 +221,47 @@ class AgentNotifier:
         )
 
     # ------------------------------------------------------------------
+    # Eventi riserva "Bank"
+    # ------------------------------------------------------------------
+
+    _RESERVE_TITLES = {
+        "sweep": "Riserva: sweep profitti",
+        "deploy": "Riserva: deploy",
+        "rebalance": "Riserva: ribilancio",
+        "transfer": "Riserva: trasferimento",
+    }
+
+    async def notify_reserve_event(
+        self,
+        user_id: str,
+        kind: str,
+        detail: str,
+        *,
+        idempotency_key: str | None = None,
+    ) -> bool:
+        """Notifica un evento importante della riserva (D23). Opt-out via ``reserve_events``."""
+        prefs = self.get_preferences(user_id)
+        if not getattr(prefs, "reserve_events", True):
+            return False
+        if idempotency_key and self._is_already_notified(user_id, idempotency_key):
+            return False
+
+        sent = await self._send(
+            user_id=user_id,
+            title=self._RESERVE_TITLES.get(kind, "Riserva"),
+            body=detail,
+            severity="normal",
+            data={
+                "topic": self.settings.fcm_summary_topic,
+                "kind": kind,
+                "detail": detail,
+            },
+        )
+        if sent and idempotency_key:
+            self._add_notified(user_id, idempotency_key)
+        return sent
+
+    # ------------------------------------------------------------------
     # Evento critico agente
     # ------------------------------------------------------------------
 
