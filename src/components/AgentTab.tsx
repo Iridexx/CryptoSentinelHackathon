@@ -2719,7 +2719,7 @@ const BankChart: FC<{
   if (items.length < 2) {
     return <div className="py-6 text-center text-xs text-gray-500">Storico insufficiente per il grafico</div>;
   }
-  const W = 320, H = 150, padL = 38, padR = 12, padT = 8, padB = 18;
+  const W = 320, H = 175, padL = 40, padR = 12, padT = 10, padB = 20;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = items.length;
 
@@ -2751,16 +2751,16 @@ const BankChart: FC<{
           <line x1={padL} y1={yAt(0)} x2={W - padR} y2={yAt(0)} stroke="#9ca3af" strokeOpacity="0.4" strokeDasharray="3 3" />
         )}
         {[hi, (hi + lo) / 2, lo].map((v, i) => (
-          <text key={i} x={padL - 4} y={yAt(v) + 3} textAnchor="end" fontSize="9" fill="#6b7280">
+          <text key={i} x={padL - 4} y={yAt(v) + 3} textAnchor="end" fontSize="10" fill="#9ca3af">
             {mode === 'usd' ? `$${v.toFixed(0)}` : `${v.toFixed(1)}%`}
           </text>
         ))}
         {series.map((s) => {
           const pts = poly(s.vals);
-          return pts ? <polyline key={s.key} points={pts} fill="none" stroke={s.color} strokeWidth={s.key === 'r' || s.key === 'v' ? 2.4 : 1.8} strokeLinejoin="round" strokeLinecap="round" /> : null;
+          return pts ? <polyline key={s.key} points={pts} fill="none" stroke={s.color} strokeWidth={s.key === 'r' || s.key === 'v' ? 2.6 : 2} strokeLinejoin="round" strokeLinecap="round" /> : null;
         })}
       </svg>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-gray-400">
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
         {series.map((s) => (
           <span key={s.key}><span style={{ color: s.color }}>●</span> {s.label}</span>
         ))}
@@ -2844,15 +2844,18 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
       <div className="rounded-xl border border-accent-yellow/20 bg-gradient-to-b from-accent-yellow/10 to-transparent px-4 py-3">
         <p className="text-[11px] uppercase text-gray-500">Valore riserva</p>
         <p className="text-2xl font-bold tabular-nums text-white">{fmtUsd(value)}</p>
-        <p className={`text-xs tabular-nums ${pnl >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+        <p className={`text-sm tabular-nums ${pnl >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
           {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)} · {fmtSignedPct(view.pnl_pct)} <span className="text-gray-500">· {view.portfolio_pct.toFixed(1)}% del portafoglio</span>
         </p>
-        <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-gray-400">
-          <span>USDC da investire: <b className="text-gray-200">{fmtUsd(Number(view.cash_usd))}</b></span>
-          <span>Fee pagate: <b className="text-gray-200">{fmtUsd(Number(view.fees_total_usd))}</b></span>
-          <span>Disponibile da spostare: <b className="text-accent-yellow">{fmtUsd(capacity)}</b></span>
-          {view.next_deploy_at && <span>Prossimo deploy: <b className="text-gray-200">{new Date(view.next_deploy_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</b></span>}
-        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Stat label="USDC da investire" value={fmtUsd(Number(view.cash_usd))} />
+        <Stat label="Fee pagate" value={fmtUsd(Number(view.fees_total_usd))} tone="bad" />
+        <Stat label="Disponibile da spostare" value={fmtUsd(capacity)} />
+        {view.next_deploy_at && (
+          <Stat label="Prossimo deploy" value={new Date(view.next_deploy_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })} />
+        )}
       </div>
 
       {emptyReserve ? (
@@ -2866,12 +2869,12 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
             <div className="mb-2 flex items-center justify-between">
               <div className="flex gap-1">
                 {(['24h', '7d', 'all'] as EquityRange[]).map((r) => (
-                  <button key={r} onClick={() => { hapticLight(); setRange(r); }} className={`rounded-md px-2 py-1 text-[11px] font-semibold ${range === r ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}>
+                  <button key={r} onClick={() => { hapticLight(); setRange(r); }} className={`rounded-md px-2.5 py-1 text-xs font-semibold ${range === r ? 'bg-accent-blue text-white' : 'bg-dark-700 text-gray-400'}`}>
                     {r === '24h' ? '24h' : r === '7d' ? '7g' : 'Tutto'}
                   </button>
                 ))}
               </div>
-              <button onClick={() => setChartMode((m) => (m === 'pct' ? 'usd' : 'pct'))} className="rounded-md bg-dark-700 px-2 py-1 text-[11px] font-semibold text-gray-300">
+              <button onClick={() => setChartMode((m) => (m === 'pct' ? 'usd' : 'pct'))} className="rounded-md bg-dark-700 px-2.5 py-1 text-xs font-semibold text-gray-300">
                 {chartMode === 'pct' ? '% rendimento' : '$ valore'}
               </button>
             </div>
@@ -2880,14 +2883,14 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
 
           <div className="rounded-xl bg-dark-800 px-3 py-3">
             <p className="mb-2 text-xs font-semibold uppercase text-gray-500">Pesi · corrente vs target</p>
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {view.holdings.map((h) => (
                 <div key={h.asset}>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center justify-between text-sm">
                     <span className="font-semibold text-gray-200">{h.asset}{h.off_target && <span className="ml-1 text-accent-yellow">•</span>}</span>
-                    <span className="tabular-nums text-gray-400">{h.weight_pct.toFixed(1)}% <span className="text-gray-600">/ {h.target_weight_pct}</span></span>
+                    <span className="tabular-nums text-gray-400">{h.weight_pct.toFixed(1)}% <span className="text-gray-600">/ {h.target_weight_pct}%</span></span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded bg-dark-700">
+                  <div className="mt-1 h-2 overflow-hidden rounded bg-dark-700">
                     <span className="block h-full" style={{ width: `${Math.min(100, h.weight_pct)}%`, background: RESERVE_COLORS[h.asset] ?? '#F0B90B' }} />
                   </div>
                 </div>
@@ -2902,11 +2905,11 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
                 <div key={h.asset} className="flex items-center justify-between border-b border-dark-700 py-2 text-sm last:border-0">
                   <div>
                     <span className="font-semibold text-white">{h.asset}</span>
-                    <span className="ml-2 text-[11px] text-gray-500">{Number(h.quantity).toPrecision(4)} · costo {fmtPrice(h.avg_cost_usd)}</span>
+                    <span className="ml-2 text-xs text-gray-500">{Number(h.quantity).toPrecision(4)} · costo {fmtPrice(h.avg_cost_usd)}</span>
                   </div>
                   <div className="text-right">
                     <div className="tabular-nums text-white">{fmtUsd(Number(h.value_usd))}</div>
-                    <div className={`text-[11px] tabular-nums ${Number(h.pnl_usd) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
+                    <div className={`text-xs tabular-nums ${Number(h.pnl_usd) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
                       {Number(h.pnl_usd) >= 0 ? '+' : ''}{fmtUsd(Number(h.pnl_usd))}
                     </div>
                   </div>
@@ -2921,12 +2924,12 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
         <div className="rounded-xl bg-dark-800 px-3 py-2">
           <p className="mb-1 px-1 text-xs font-semibold uppercase text-gray-500">Movimenti</p>
           {txns.items.map((t) => (
-            <div key={t.id} className="flex items-center justify-between border-b border-dark-700 py-1.5 text-xs last:border-0">
+            <div key={t.id} className="flex items-center justify-between gap-2 border-b border-dark-700 py-2 text-sm last:border-0">
               <span className="text-gray-300">
                 {t.type === 'sweep' ? 'Sweep profitti' : t.type === 'deploy_buy' ? `Acquisto ${t.asset}` : t.type === 'transfer_in' ? 'Versamento' : t.type === 'transfer_out' ? 'Prelievo' : t.type.startsWith('rebalance') ? 'Ribilancio' : t.type}
-                <span className="ml-2 text-gray-600">{new Date(t.created_at).toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="ml-2 text-xs text-gray-600">{new Date(t.created_at).toLocaleString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
               </span>
-              <span className="tabular-nums text-gray-200">{fmtUsd(Number(t.value_usd))}{Number(t.fee_usd) > 0 && <span className="text-gray-600"> · fee {fmtUsd(Number(t.fee_usd))}</span>}</span>
+              <span className="tabular-nums text-gray-200">{fmtUsd(Number(t.value_usd))}{Number(t.fee_usd) > 0 && <span className="text-xs text-gray-600"> · fee {fmtUsd(Number(t.fee_usd))}</span>}</span>
             </div>
           ))}
         </div>
@@ -2935,7 +2938,7 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
       {adminToken ? (
         <div className="rounded-xl bg-dark-800 px-4 py-3 space-y-3">
           <p className="text-xs font-semibold uppercase text-gray-500">Azioni</p>
-          {err && <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{err}</p>}
+          {err && <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red">{err}</p>}
           <input
             type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)}
             placeholder="Importo USD"
@@ -2945,22 +2948,22 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
             <button
               disabled={!canTransferIn || busy}
               onClick={() => { void runAction(() => reserveTransfer(amountNum, 'in', adminToken)).then(() => setAmount('')); }}
-              className="rounded-lg bg-accent-yellow px-3 py-2 text-xs font-bold text-dark-900 disabled:opacity-40"
+              className="rounded-lg bg-accent-yellow px-3 py-2.5 text-sm font-bold text-dark-900 disabled:opacity-40"
             >Sposta nella riserva</button>
             <button
               disabled={!adminToken || busy || inCooldown || value < 0.01}
               onClick={() => { void runAction(() => reserveTransfer(amountNum || value, 'out', adminToken)).then(() => setAmount('')); }}
-              className="rounded-lg border border-dark-600 px-3 py-2 text-xs font-bold text-gray-300 disabled:opacity-40"
+              className="rounded-lg border border-dark-600 px-3 py-2.5 text-sm font-bold text-gray-300 disabled:opacity-40"
             >Preleva{inCooldown ? ' (cooldown)' : ''}</button>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <button disabled={busy} onClick={() => void runAction(() => reserveDeploy(adminToken))} className="rounded-lg bg-dark-700 px-3 py-2 text-xs font-semibold text-gray-200 disabled:opacity-40">Deploy ora</button>
-            <button disabled={busy} onClick={() => void runAction(() => reserveRebalance(false, adminToken))} className="rounded-lg bg-dark-700 px-3 py-2 text-xs font-semibold text-gray-200 disabled:opacity-40">Ribilancia</button>
+            <button disabled={busy} onClick={() => void runAction(() => reserveDeploy(adminToken))} className="rounded-lg bg-dark-700 px-3 py-2.5 text-sm font-semibold text-gray-200 disabled:opacity-40">Deploy ora</button>
+            <button disabled={busy} onClick={() => void runAction(() => reserveRebalance(false, adminToken))} className="rounded-lg bg-dark-700 px-3 py-2.5 text-sm font-semibold text-gray-200 disabled:opacity-40">Ribilancia</button>
           </div>
-          <p className="text-[10px] text-gray-500">I pesi target e i parametri (sweep, cooldown, deploy) si impostano in <b>Setup › Bank</b>.</p>
+          <p className="text-xs text-gray-500">I pesi target e i parametri (sweep, cooldown, deploy) si impostano in <b>Setup › Bank</b>.</p>
         </div>
       ) : (
-        <p className="rounded-lg bg-dark-800 px-3 py-2 text-xs text-gray-500">Inserisci l'admin token in Setup per spostare capitale nella riserva.</p>
+        <p className="rounded-lg bg-dark-800 px-3 py-2 text-sm text-gray-500">Inserisci l'admin token in Setup per spostare capitale nella riserva.</p>
       )}
     </div>
   );
