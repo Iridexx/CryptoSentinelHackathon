@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   addExecutionWallet,
@@ -32,6 +32,13 @@ import {
   fetchEquityAdjustments,
   saveNotificationPrefs,
   saveSettings,
+  fetchReserve,
+  fetchReserveTransactions,
+  fetchReserveSettings,
+  saveReserveSettings,
+  reserveTransfer,
+  reserveDeploy,
+  reserveRebalance,
   sendToken,
   setKillSwitch,
   setExecutionNetwork,
@@ -67,6 +74,9 @@ import type {
   MarketAsset,
   OperationalStats,
   PerpView,
+  ReserveView,
+  ReserveSettings,
+  ReserveTransactionRow,
   SettingsResponse,
   SpotView,
   SupportTicketDetail,
@@ -77,7 +87,7 @@ import type {
   TradeDetail,
 } from './types';
 
-type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'analytics' | 'health' | 'wallet' | 'support' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
+type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'bank' | 'analytics' | 'health' | 'wallet' | 'support' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
 type LoadState<T> = { data: T | null; loading: boolean; error: string | null };
 type LogPriorityFilter = 'action' | 'critical' | 'error' | 'warning' | 'info' | 'all';
 type LogCategoryFilter = 'all' | 'agent' | 'storage' | 'risk' | 'execution' | 'notifications' | 'market' | 'api' | 'support';
@@ -93,6 +103,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'spot', label: 'Spot' },
   { id: 'perp', label: 'Perp' },
   { id: 'global', label: 'Global' },
+  { id: 'bank', label: 'Bank' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'health', label: 'Health' },
   { id: 'wallet', label: 'Wallet' },
@@ -660,6 +671,7 @@ export default function App() {
         {tab === 'spot' && <SpotPanel spot={spot} session={session} expanded />}
         {tab === 'perp' && <PerpPanel perp={perp} session={session} expanded />}
         {tab === 'global' && <GlobalPanel global={global} equity={equity} expanded />}
+        {tab === 'bank' && <BankPanel session={session} canAdmin={canAdmin} />}
         {tab === 'analytics' && (
           <AnalyticsPanel
             equity={equity}
@@ -856,6 +868,14 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
             <Metric label="Exposure Spot" value={money(data.spot_exposure_usd ?? '0')} />
             <Metric label="Exposure Perp" value={money(data.perp_exposure_usd ?? '0')} />
             <Metric label="Fee pagate" value={money(data.total_fees_usd ?? '0')} tone="warn" />
+            {Number(data.reserve_value_usd ?? 0) > 0.01 && (
+              <>
+                <Metric label="Bank / Riserva" value={money(data.reserve_value_usd ?? '0')} tone={Number(data.reserve_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+                <Metric label="Equity tradabile" value={money(data.tradable_equity_usd ?? '0')} />
+                <Metric label="Portafoglio totale" value={money(data.total_portfolio_equity_usd ?? '0')} />
+                <Metric label="PnL % totale" value={`${(data.total_portfolio_pnl_pct ?? 0) >= 0 ? '+' : ''}${(data.total_portfolio_pnl_pct ?? 0).toFixed(2)}%`} tone={(data.total_portfolio_pnl_pct ?? 0) >= 0 ? 'good' : 'bad'} />
+              </>
+            )}
             {expanded && (
               <Metric
                 label="Sharpe"
@@ -863,10 +883,192 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
               />
             )}
           </div>
+          {data.volatility_budget?.status === 'ready' && (
+            <div className="metric-grid" style={{ marginTop: '0.5rem' }}>
+              <Metric label="Max DD trading" value={`${(data.volatility_budget.trading_max_drawdown_pct ?? 0).toFixed(1)}%`} tone="bad" />
+              <Metric label="Max DD con riserva" value={`${(data.volatility_budget.total_max_drawdown_pct ?? 0).toFixed(1)}%`} tone="warn" />
+              <Metric label="Vol giornaliera" value={`${(data.volatility_budget.trading_daily_vol_pct ?? 0).toFixed(1)}%`} tone="bad" />
+              <Metric label="Vol con riserva" value={`${(data.volatility_budget.total_daily_vol_pct ?? 0).toFixed(1)}%`} tone="warn" />
+            </div>
+          )}
           {(equity.data?.items.length ?? 0) < 2 ? (
             <Empty title="No PnL history" detail="Global tracking is ready and waiting for confirmed activity." />
           ) : (
             <EquityChart equity={equity.data} />
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+const BANK_ERROR_LABELS: Record<string, string> = {
+  no_profit_available: 'Nessun profitto sopra il capitale iniziale',
+  below_min_transfer: 'Importo sotto il minimo',
+  frozen: 'La riserva è congelata',
+  cooldown: 'Prelievo in cooldown',
+  drawdown_guard: 'Prelievi bloccati durante il blocco drawdown',
+  empty: 'La riserva è vuota',
+  price_unavailable: 'Prezzi non disponibili',
+};
+
+function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin: boolean }) {
+  const [view, setView] = useState<ReserveView | null>(null);
+  const [txns, setTxns] = useState<ReserveTransactionRow[]>([]);
+  const [settings, setSettings] = useState<ReserveSettings | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [amount, setAmount] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const [v, t, s] = await Promise.all([
+        fetchReserve(session),
+        fetchReserveTransactions(session, 20),
+        fetchReserveSettings(session),
+      ]);
+      setView(v);
+      setTxns(t.items);
+      if (!dirty) setSettings(s.settings);
+      setErr('');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Errore di caricamento');
+    }
+  }, [session, dirty]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => { void load(); }, 30_000);
+    void load();
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  async function act(fn: () => Promise<unknown>) {
+    if (!canAdmin) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      const code = msg.split(' - ').pop()?.replace(/[^a-z_]/g, '') ?? '';
+      setErr(BANK_ERROR_LABELS[code] ?? (msg || 'Operazione non riuscita'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const weightSum = settings?.target_weights.reduce((a, w) => a + Number(w.weight_pct || 0), 0) ?? 0;
+  const weightsOk = Math.abs(weightSum - 100) < 0.5;
+  const patch = (p: Partial<ReserveSettings>) => {
+    if (!settings) return;
+    setSettings({ ...settings, ...p });
+    setDirty(true);
+  };
+
+  return (
+    <Panel title="Bank · Riserva di Valore" className="wide" action={<button onClick={() => void load()}>Refresh</button>}>
+      {err && <p className="muted" style={{ color: 'var(--bad, #f0616d)' }}>{err}</p>}
+      {!view ? (
+        <Empty title="Riserva non caricata" detail="Attendi il prossimo aggiornamento o premi Refresh." />
+      ) : (
+        <>
+          <div className="metric-grid">
+            <Metric label="Valore" value={money(view.value_usd)} tone={Number(view.pnl_usd) >= 0 ? 'good' : 'bad'} />
+            <Metric label="P&L" value={`${money(view.pnl_usd)} (${view.pnl_pct >= 0 ? '+' : ''}${view.pnl_pct.toFixed(2)}%)`} tone={Number(view.pnl_usd) >= 0 ? 'good' : 'bad'} />
+            <Metric label="USDC da investire" value={money(view.cash_usd)} />
+            <Metric label="Fee pagate" value={money(view.fees_total_usd)} tone="warn" />
+            <Metric label="Disponibile da spostare" value={money(view.deposit_capacity_usd)} />
+            <Metric label="% del portafoglio" value={`${view.portfolio_pct.toFixed(1)}%`} />
+            <Metric label="Stato" value={view.frozen ? 'congelata' : view.enabled ? 'attiva' : 'disattivata'} tone={view.frozen ? 'warn' : 'good'} />
+            {view.next_deploy_at && <Metric label="Prossimo deploy" value={new Date(view.next_deploy_at).toLocaleDateString('it-IT')} />}
+          </div>
+
+          <h4 style={{ margin: '1rem 0 0.4rem' }}>Posizioni · pesi vs target</h4>
+          <table className="data-table">
+            <thead><tr><th>Asset</th><th>Quantità</th><th>Valore</th><th>P&L</th><th>Peso</th><th>Target</th></tr></thead>
+            <tbody>
+              {view.holdings.map((h) => (
+                <tr key={h.asset}>
+                  <td>{h.asset}{h.off_target && ' •'}</td>
+                  <td>{Number(h.quantity).toPrecision(4)}</td>
+                  <td>{money(h.value_usd)}</td>
+                  <td className={Number(h.pnl_usd) >= 0 ? 'ok-text' : 'muted'}>{money(h.pnl_usd)}</td>
+                  <td>{h.weight_pct.toFixed(1)}%</td>
+                  <td>{h.target_weight_pct}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {txns.length > 0 && (
+            <>
+              <h4 style={{ margin: '1rem 0 0.4rem' }}>Movimenti</h4>
+              <table className="data-table">
+                <thead><tr><th>Data</th><th>Tipo</th><th>Asset</th><th>Valore</th><th>Fee</th></tr></thead>
+                <tbody>
+                  {txns.map((t) => (
+                    <tr key={t.id}>
+                      <td>{new Date(t.created_at).toLocaleString('it-IT')}</td>
+                      <td>{t.type}</td>
+                      <td>{t.asset ?? '—'}</td>
+                      <td>{money(t.value_usd)}</td>
+                      <td>{Number(t.fee_usd) > 0 ? money(t.fee_usd) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {canAdmin ? (
+            <>
+              <h4 style={{ margin: '1rem 0 0.4rem' }}>Azioni</h4>
+              <div className="status-row">
+                <input
+                  type="number"
+                  placeholder="Importo USD"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  style={{ maxWidth: '10rem' }}
+                />
+                <button disabled={busy || view.frozen} onClick={() => void act(() => reserveTransfer(session, Number(amount), 'in')).then(() => setAmount(''))}>Sposta nella riserva</button>
+                <button disabled={busy} onClick={() => void act(() => reserveTransfer(session, Number(amount) || Number(view.value_usd), 'out')).then(() => setAmount(''))}>Preleva</button>
+                <button disabled={busy} onClick={() => void act(() => reserveDeploy(session))}>Deploy ora</button>
+                <button disabled={busy} onClick={() => void act(() => reserveRebalance(session, false))}>Ribilancia</button>
+              </div>
+
+              {settings && (
+                <>
+                  <h4 style={{ margin: '1rem 0 0.4rem' }}>Impostazioni <small className={weightsOk ? 'ok-text' : 'muted'}>(pesi: {weightSum.toFixed(0)}%)</small></h4>
+                  <div className="status-row" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <label>Attiva <input type="checkbox" checked={settings.enabled} onChange={(e) => patch({ enabled: e.target.checked })} /></label>
+                    <label>Auto-rebalance <input type="checkbox" checked={settings.auto_rebalance} onChange={(e) => patch({ auto_rebalance: e.target.checked })} /></label>
+                    <label>Sweep <input type="checkbox" checked={settings.sweep_enabled} onChange={(e) => patch({ sweep_enabled: e.target.checked })} /></label>
+                    <label>Sweep % <input type="number" value={settings.sweep_pct} onChange={(e) => patch({ sweep_pct: Number(e.target.value) })} style={{ maxWidth: '4.5rem' }} /></label>
+                    <label>Sweep h <input type="number" value={settings.sweep_interval_hours} onChange={(e) => patch({ sweep_interval_hours: Number(e.target.value) })} style={{ maxWidth: '4.5rem' }} /></label>
+                    <label>Deploy gg <input type="number" value={settings.deploy_interval_days} onChange={(e) => patch({ deploy_interval_days: Number(e.target.value) })} style={{ maxWidth: '4.5rem' }} /></label>
+                    <label>Deploy ≥ $ <input type="number" value={settings.deploy_min_cash_usd} onChange={(e) => patch({ deploy_min_cash_usd: Number(e.target.value) })} style={{ maxWidth: '5rem' }} /></label>
+                    <label>Cooldown h <input type="number" value={Math.round(settings.withdrawal_cooldown_minutes / 60)} onChange={(e) => patch({ withdrawal_cooldown_minutes: Math.max(0, Number(e.target.value)) * 60 })} style={{ maxWidth: '4.5rem' }} /></label>
+                  </div>
+                  <div className="status-row" style={{ flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.4rem' }}>
+                    {settings.target_weights.map((w) => (
+                      <label key={w.symbol}>{w.symbol} % <input type="number" value={w.weight_pct} onChange={(e) => patch({ target_weights: settings.target_weights.map((x) => (x.symbol === w.symbol ? { ...x, weight_pct: Number(e.target.value) } : x)) })} style={{ maxWidth: '4.5rem' }} /></label>
+                    ))}
+                  </div>
+                  <button
+                    style={{ marginTop: '0.6rem' }}
+                    disabled={busy || !dirty || !weightsOk}
+                    onClick={() => void act(async () => { const r = await saveReserveSettings(session, settings); setSettings(r.settings); setDirty(false); })}
+                  >
+                    Salva impostazioni Bank
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="muted">Admin token richiesto per le azioni sulla riserva.</p>
           )}
         </>
       )}
@@ -2478,6 +2680,7 @@ const NOTIF_PREF_LABELS: Record<keyof NotificationPreferences, string> = {
   risk_alerts: 'Risk Alerts',
   daily_summary: 'Daily Summary',
   critical: 'Critical Events',
+  reserve_events: 'Bank / Reserve Events',
 };
 
 function NotificationPrefsPanel({

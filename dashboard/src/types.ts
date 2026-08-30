@@ -84,6 +84,8 @@ export type SpotView = {
   trade_count: number;
   trade_count_today: number;
   bot_active_days: number;
+  volume_total_usd?: string;
+  volume_today_usd?: string;
 };
 
 export type PnlPoint = {
@@ -139,6 +141,8 @@ export type PerpView = {
   trade_count: number;
   trade_count_today: number;
   bot_active_days: number;
+  volume_total_usd?: string;
+  volume_today_usd?: string;
 };
 
 export type GlobalView = {
@@ -164,6 +168,23 @@ export type GlobalView = {
   trades_today: number;
   open_spot_positions: number;
   open_perp_positions: number;
+  // "Bank" reserve (D25/D28)
+  reserve_value_usd?: string;
+  reserve_cash_usd?: string;
+  reserve_cost_basis_usd?: string;
+  reserve_pnl_usd?: string;
+  reserve_pnl_pct?: number;
+  reserve_fees_usd?: string;
+  tradable_equity_usd?: string;
+  total_portfolio_equity_usd?: string;
+  total_portfolio_pnl_pct?: number;
+  volatility_budget?: {
+    status: string;
+    trading_daily_vol_pct?: number | null;
+    total_daily_vol_pct?: number | null;
+    trading_max_drawdown_pct?: number | null;
+    total_max_drawdown_pct?: number | null;
+  } | null;
   risk_guardrail?: {
     blocked: boolean;
     reason?: string | null;
@@ -470,6 +491,71 @@ export type NotificationPreferences = {
   risk_alerts: boolean;
   daily_summary: boolean;
   critical: boolean;
+  reserve_events: boolean;
+};
+
+// ── "Bank" reserve ──────────────────────────────────────────────────────────
+
+export type ReserveHoldingView = {
+  asset: string;
+  quantity: string;
+  price_usd: string;
+  value_usd: string;
+  avg_cost_usd: string;
+  pnl_usd: string;
+  weight_pct: number;
+  target_weight_pct: number;
+  off_target: boolean;
+};
+
+export type ReserveView = {
+  enabled: boolean;
+  frozen: boolean;
+  value_usd: string;
+  cash_usd: string;
+  cost_basis_usd: string;
+  pnl_usd: string;
+  pnl_pct: number;
+  fees_total_usd: string;
+  portfolio_pct: number;
+  deposit_capacity_usd: string;
+  tradable_equity_usd: string;
+  total_portfolio_equity_usd: string;
+  next_deploy_at: string | null;
+  withdrawal_available_at: string | null;
+  holdings: ReserveHoldingView[];
+  updated_at: string;
+};
+
+export type ReserveTargetWeight = { symbol: string; weight_pct: number };
+
+export type ReserveSettings = {
+  enabled: boolean;
+  auto_rebalance: boolean;
+  drift_band_pct: number;
+  min_transfer_usd: number;
+  withdrawal_cooldown_minutes: number;
+  block_withdrawal_during_drawdown_guard: boolean;
+  sweep_enabled: boolean;
+  sweep_pct: number;
+  sweep_interval_hours: number;
+  deploy_interval_days: number;
+  deploy_min_cash_usd: number;
+  target_weights: ReserveTargetWeight[];
+};
+
+export type ReserveSettingsResponse = { settings: ReserveSettings; source: 'default' | 'persisted' };
+
+export type ReserveTransactionRow = {
+  id: number;
+  type: string;
+  asset: string | null;
+  quantity: string | null;
+  price_usd: string | null;
+  value_usd: string;
+  fee_usd: string;
+  note: string | null;
+  created_at: string;
 };
 
 export type NotificationPreferencesResponse = {

@@ -17,6 +17,9 @@ import type {
   NotificationPreferences,
   NotificationPreferencesResponse,
   OperationalStats,
+  ReserveSettings,
+  ReserveSettingsResponse,
+  ReserveView,
   PerpView,
   SettingsResponse,
   SpotView,
@@ -362,4 +365,48 @@ export function updatePerpWatchlist(session: DashboardSession, tokens: string[])
     method: 'PUT',
     body: JSON.stringify({ tokens }),
   });
+}
+
+// ── "Bank" reserve ──────────────────────────────────────────────────────────
+
+export function fetchReserve(session: DashboardSession) {
+  return requestJson<ReserveView>(session, '/api/v1/agent/reserve');
+}
+
+export function fetchReserveTransactions(session: DashboardSession, limit = 30) {
+  return requestJson<{ items: import('./types').ReserveTransactionRow[]; count: number }>(
+    session,
+    `/api/v1/agent/reserve/transactions?limit=${limit}`,
+  );
+}
+
+export function fetchReserveSettings(session: DashboardSession) {
+  return requestJson<ReserveSettingsResponse>(session, '/api/v1/agent/reserve/settings');
+}
+
+export function saveReserveSettings(session: DashboardSession, settings: ReserveSettings) {
+  return requestJson<ReserveSettingsResponse>(session, '/api/v1/agent/reserve/settings', 'admin', {
+    method: 'POST',
+    body: JSON.stringify(settings),
+  });
+}
+
+export function reserveTransfer(session: DashboardSession, amountUsd: number, direction: 'in' | 'out') {
+  return requestJson<ReserveView>(session, '/api/v1/agent/reserve/transfer', 'admin', {
+    method: 'POST',
+    body: JSON.stringify({ amount_usd: amountUsd, direction }),
+  });
+}
+
+export function reserveDeploy(session: DashboardSession) {
+  return requestJson<ReserveView>(session, '/api/v1/agent/reserve/deploy', 'admin', { method: 'POST' });
+}
+
+export function reserveRebalance(session: DashboardSession, dryRun: boolean) {
+  return requestJson<{ sold: Record<string, string>; dry_run: boolean }>(
+    session,
+    '/api/v1/agent/reserve/rebalance',
+    'admin',
+    { method: 'POST', body: JSON.stringify({ dry_run: dryRun }) },
+  );
 }
