@@ -380,6 +380,13 @@ export function fetchReserveTransactions(session: DashboardSession, limit = 30) 
   );
 }
 
+export function fetchReserveHistory(session: DashboardSession, range: import('./types').EquityRange = '7d') {
+  return requestJson<import('./types').ReserveHistoryResponse>(
+    session,
+    `/api/v1/agent/reserve/history?range=${range}`,
+  );
+}
+
 export function fetchReserveSettings(session: DashboardSession) {
   return requestJson<ReserveSettingsResponse>(session, '/api/v1/agent/reserve/settings');
 }

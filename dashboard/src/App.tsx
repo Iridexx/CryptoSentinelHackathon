@@ -34,6 +34,7 @@ import {
   saveSettings,
   fetchReserve,
   fetchReserveTransactions,
+  fetchReserveHistory,
   fetchReserveSettings,
   saveReserveSettings,
   reserveTransfer,
@@ -77,6 +78,7 @@ import type {
   ReserveView,
   ReserveSettings,
   ReserveTransactionRow,
+  ReserveHistoryResponse,
   SettingsResponse,
   SpotView,
   SupportTicketDetail,
@@ -912,6 +914,72 @@ const BANK_ERROR_LABELS: Record<string, string> = {
   price_unavailable: 'Prezzi non disponibili',
 };
 
+function ReserveBenchmarkChart({ history, mode }: { history: ReserveHistoryResponse | null; mode: 'pct' | 'usd' }) {
+  const items = history?.items ?? [];
+  if (items.length < 2) {
+    return <p className="muted">Storico insufficiente per il grafico (servono almeno 2 snapshot).</p>;
+  }
+  const W = 720, H = 190, padL = 44, padR = 14, padT = 10, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = items.length;
+
+  const series: { key: string; color: string; label: string; vals: (number | null)[]; wide?: boolean }[] =
+    mode === 'usd'
+      ? [{ key: 'v', color: '#F0B90B', label: 'Valore riserva', wide: true, vals: items.map((i) => Number(i.total_value_usd)) }]
+      : [
+          { key: 'r', color: '#F0B90B', label: 'Riserva', wide: true, vals: items.map((i) => (i.reserve_pct != null ? Number(i.reserve_pct) : null)) },
+          { key: 'b', color: '#3B82F6', label: 'BTC (hold)', vals: items.map((i) => (i.btc_hold_pct != null ? Number(i.btc_hold_pct) : null)) },
+          { key: 't', color: '#8B95A7', label: 'Trading', vals: items.map((i) => (i.trading_pct != null ? Number(i.trading_pct) : null)) },
+        ];
+
+  const pool = series.flatMap((s) => s.vals.filter((v): v is number => v != null));
+  if (mode === 'pct') pool.push(0);
+  let lo = pool.length ? Math.min(...pool) : 0;
+  let hi = pool.length ? Math.max(...pool) : 1;
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+
+  const xAt = (idx: number) => (n <= 1 ? padL + plotW / 2 : padL + (idx / (n - 1)) * plotW);
+  const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
+  const poly = (vals: (number | null)[]) =>
+    vals.map((v, i) => (v == null ? null : `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`)).filter(Boolean).join(' ');
+
+  const fmtY = (v: number) => (mode === 'usd' ? `$${v.toFixed(0)}` : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`);
+  const xIdxs = n <= 4 ? items.map((_, i) => i) : [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="Andamento riserva vs benchmark">
+        {[hi, (hi + lo) / 2, lo].map((v, i) => (
+          <g key={i}>
+            <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke="#ffffff" strokeOpacity="0.07" />
+            <text x={padL - 5} y={yAt(v) + 3} textAnchor="end" fontSize="9" fill="#6b7280">{fmtY(v)}</text>
+          </g>
+        ))}
+        {mode === 'pct' && lo < 0 && hi > 0 && (
+          <line x1={padL} y1={yAt(0)} x2={W - padR} y2={yAt(0)} stroke="#9ca3af" strokeOpacity="0.5" strokeDasharray="4 3" />
+        )}
+        {series.map((s) => {
+          const pts = poly(s.vals);
+          return pts ? (
+            <polyline key={s.key} points={pts} fill="none" stroke={s.color} strokeWidth={s.wide ? 2.2 : 1.6} strokeLinejoin="round" strokeLinecap="round" />
+          ) : null;
+        })}
+        {xIdxs.map((idx) => (
+          <text key={idx} x={xAt(idx)} y={H - 5} textAnchor="middle" fontSize="9" fill="#6b7280">
+            {new Date(items[idx].timestamp_utc).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
+          </text>
+        ))}
+      </svg>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.75rem', color: 'var(--muted, #8b95a7)' }}>
+        {series.map((s) => (
+          <span key={s.key}><span style={{ color: s.color }}>●</span> {s.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin: boolean }) {
   const [view, setView] = useState<ReserveView | null>(null);
   const [txns, setTxns] = useState<ReserveTransactionRow[]>([]);
@@ -922,6 +990,9 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
   const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [amount, setAmount] = useState('');
+  const [history, setHistory] = useState<ReserveHistoryResponse | null>(null);
+  const [range, setRange] = useState<EquityRange>('7d');
+  const [chartMode, setChartMode] = useState<'pct' | 'usd'>('pct');
   const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -929,13 +1000,15 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
     loadingRef.current = true;
     setLoading(true);
     try {
-      const [v, t, s] = await Promise.all([
+      const [v, t, s, h] = await Promise.all([
         fetchReserve(session),
         fetchReserveTransactions(session, 20),
         fetchReserveSettings(session),
+        fetchReserveHistory(session, range).catch(() => null),
       ]);
       setView(v);
       setTxns(t.items);
+      if (h) setHistory(h);
       if (!dirty) setSettings(s.settings);
       setErr('');
       setLastLoadedAt(Date.now());
@@ -945,7 +1018,7 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [session, dirty]);
+  }, [session, dirty, range]);
 
   useEffect(() => {
     const id = window.setInterval(() => { void load(); }, 30_000);
@@ -1010,6 +1083,23 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
             <Metric label="Stato" value={view.frozen ? 'congelata' : view.enabled ? 'attiva' : 'disattivata'} tone={view.frozen ? 'warn' : 'good'} />
             {view.next_deploy_at && <Metric label="Prossimo deploy" value={new Date(view.next_deploy_at).toLocaleDateString('it-IT')} />}
           </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '1rem 0 0.4rem' }}>
+            <h4 style={{ margin: 0 }}>Andamento · Riserva vs BTC vs Trading</h4>
+            <span style={{ display: 'flex', gap: '0.3rem' }}>
+              {(['pct', 'usd'] as const).map((m) => (
+                <button key={m} className={m === chartMode ? 'active' : ''} onClick={() => setChartMode(m)}>
+                  {m === 'pct' ? '%' : '$'}
+                </button>
+              ))}
+              {(['24h', '7d', 'all'] as EquityRange[]).map((r) => (
+                <button key={r} className={r === range ? 'active' : ''} onClick={() => setRange(r)}>
+                  {r === 'all' ? 'Tutto' : r === '7d' ? '7g' : '24h'}
+                </button>
+              ))}
+            </span>
+          </div>
+          <ReserveBenchmarkChart history={history} mode={chartMode} />
 
           <h4 style={{ margin: '1rem 0 0.4rem' }}>Posizioni · pesi vs target</h4>
           <table className="data-table">

@@ -558,6 +558,24 @@ export type ReserveTransactionRow = {
   created_at: string;
 };
 
+export type ReserveHistoryPoint = {
+  timestamp_utc: string;
+  total_value_usd: string;
+  cash_usd: string;
+  cost_basis_usd: string;
+  pnl_usd: string;
+  fees_cumulative_usd: string;
+  reserve_pct?: string;
+  btc_hold_pct?: string;
+  trading_pct?: string;
+};
+
+export type ReserveHistoryResponse = {
+  range: EquityRange;
+  items: ReserveHistoryPoint[];
+  count: number;
+};
+
 export type NotificationPreferencesResponse = {
   preferences: NotificationPreferences;
   source: 'default' | 'persisted';
