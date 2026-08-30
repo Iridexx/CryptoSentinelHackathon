@@ -1033,6 +1033,9 @@ const GlobalPane: FC<{
       <RiskGuardrailBanner guardrail={data?.risk_guardrail} />
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
+        {Number(data?.reserve_cost_basis_usd ?? 0) > 0.01 && (
+          <Stat label="Equity trading" value={fmtUsd(data?.tradable_equity_usd)} />
+        )}
         <Stat label="PnL tot." value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL aperto" value={fmtUsd(data?.unrealized_pnl_usd)} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL realizzato" value={fmtUsd(data?.realized_pnl_usd)} tone={Number(data?.realized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
