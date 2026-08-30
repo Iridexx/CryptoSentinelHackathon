@@ -971,7 +971,7 @@ function ReserveBenchmarkChart({ history, mode }: { history: ReserveHistoryRespo
           </text>
         ))}
       </svg>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.75rem', color: 'var(--muted, #8b95a7)' }}>
+      <div className="equity-legend" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
         {series.map((s) => (
           <span key={s.key}><span style={{ color: s.color }}>●</span> {s.label}</span>
         ))}
@@ -1084,19 +1084,23 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
             {view.next_deploy_at && <Metric label="Prossimo deploy" value={new Date(view.next_deploy_at).toLocaleDateString('it-IT')} />}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '1rem 0 0.4rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', margin: '1rem 0 0.4rem' }}>
             <h4 style={{ margin: 0 }}>Andamento · Riserva vs BTC vs Trading</h4>
-            <span style={{ display: 'flex', gap: '0.3rem' }}>
-              {(['pct', 'usd'] as const).map((m) => (
-                <button key={m} className={m === chartMode ? 'active' : ''} onClick={() => setChartMode(m)}>
-                  {m === 'pct' ? '%' : '$'}
-                </button>
-              ))}
-              {(['24h', '7d', 'all'] as EquityRange[]).map((r) => (
-                <button key={r} className={r === range ? 'active' : ''} onClick={() => setRange(r)}>
-                  {r === 'all' ? 'Tutto' : r === '7d' ? '7g' : '24h'}
-                </button>
-              ))}
+            <span style={{ display: 'flex', gap: '0.75rem' }}>
+              <span className="equity-ranges">
+                {(['pct', 'usd'] as const).map((m) => (
+                  <button key={m} className={m === chartMode ? 'active' : ''} onClick={() => setChartMode(m)}>
+                    {m === 'pct' ? '%' : '$'}
+                  </button>
+                ))}
+              </span>
+              <span className="equity-ranges">
+                {(['24h', '7d', 'all'] as EquityRange[]).map((r) => (
+                  <button key={r} className={r === range ? 'active' : ''} onClick={() => setRange(r)}>
+                    {r === 'all' ? 'Tutto' : r === '7d' ? '7g' : '24h'}
+                  </button>
+                ))}
+              </span>
             </span>
           </div>
           <ReserveBenchmarkChart history={history} mode={chartMode} />
