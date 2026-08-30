@@ -60,7 +60,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- ohlcv_warmup.py - warm-up storico delle klines 5m Binance per watchlist AI, con lock/cadenza anti-burst e popolamento cache Data Coverage/signal engine.
 |   |   |   |-- brain/ - Claude meta-controller con poteri limitati; fallback dry-run deterministico e fail-closed fuori dry-run.
 |   |   |   |-- loops/ - loop veloce gestione posizioni e loop lento scansione/decisione safe-by-default.
-|   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing dry-run realistico, override margine fisso Perp opzionale, soglia minima trade e guardrail portfolio/drawdown/daily loss.
+|   |   |   |-- risk/ - risk manager fail-closed con kill switch, universo eligible, sizing dry-run realistico, override margine fisso Perp opzionale, soglia minima trade e guardrail portfolio/drawdown/daily loss; sizing e floor calcolati su `tradable_equity = total_equity − reserve_transferred_net_usd` (D25: il capitale spostato nella riserva "Bank" non e' a rischio).
 |   |   |   `-- signals/ - signal engine modulare Spot/Perp/V2.
 |   |   |       |-- base.py - primitive base signal engine.
 |   |   |       |-- common/indicators.py - primitive Candle, EMA, VWAP, ATR, RSI e relative volume.
@@ -129,7 +129,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- migration.py - migrazione idempotente JSON→DB al boot e upgrade colonne SQLite per fee, ATR, trailing, funding e reference stop loss con precisione prezzo micro-token.
 |   |   |   |-- runtime_state.py - get/set_runtime_value sync per selettore provider; degrada silenziosamente.
 |   |   |   |-- archive.py - archiviazione dry-run in ArchivedRun, pulizia tabelle live e reset PortfolioState per reset analytics.
-|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, history Spot/Perp allineata ai trade chiusi con PnL, conteggio trade giornaliero invariato per mercato, Bot Day condiviso dal primo ordine Spot/Perp registrato, esposizione a margine, fee aggregate, position_id nella history Perp inclusi eventi Smart SL `ssl_`, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
+|   |   |   |-- views.py - ViewService: spot_view, perp_view, global_view con PnL firmato, campi riserva "Bank" in GlobalView (D25: tradable_equity_usd = total − reserve_transferred_net_usd, total_portfolio_equity_usd, reserve_value/cash/pnl/fees, total_portfolio_pnl_pct; valore dall'ultimo ReserveSnapshot con fallback al costo; fee riserva sommate a total_fees_usd; floor guardrail su tradable_equity), history Spot/Perp allineata ai trade chiusi con PnL, conteggio trade giornaliero invariato per mercato, Bot Day condiviso dal primo ordine Spot/Perp registrato, esposizione a margine, fee aggregate, position_id nella history Perp inclusi eventi Smart SL `ssl_`, entry storica Perp coerente per chiusure parziali, risk-off spot e Sharpe ratio guarded.
 |   |   |   |-- models/ - ORM SQLAlchemy 2.0.
 |   |   |   |   |-- base.py - DeclarativeBase comune.
 |   |   |   |   |-- device_tokens.py - DeviceToken.

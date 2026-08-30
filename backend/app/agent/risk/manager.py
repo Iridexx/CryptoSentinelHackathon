@@ -89,8 +89,16 @@ class RiskManager:
             return RiskDecision(False, self.kill_switch.value)
         if intent.asset.upper() not in self.eligible_symbols:
             return RiskDecision(False, "asset_not_in_eligible_universe")
+        # D25: capital moved into the "Bank" reserve is carved out of the equity
+        # the agent may risk. Non-reserve users have a 0 counter → no change.
+        reserve_offset = (
+            Decimal(str(getattr(portfolio, "reserve_transferred_net_usd", 0) or 0))
+            if portfolio is not None
+            else Decimal("0")
+        )
         if portfolio is not None:
-            if Decimal(portfolio.total_equity_usd) <= Decimal(str(self.settings.min_portfolio_value_usd)):
+            tradable_equity = Decimal(portfolio.total_equity_usd) - reserve_offset
+            if tradable_equity <= Decimal(str(self.settings.min_portfolio_value_usd)):
                 return RiskDecision(False, "portfolio_floor_guard")
             # drawdown_pct e' memorizzato come valore POSITIVO (entita' del calo dal picco),
             # mentre risk_max_drawdown_pct e' negativo (es. -15). Confronto su valore assoluto.
@@ -131,6 +139,7 @@ class RiskManager:
         equity = intent.quote_equity
         if equity <= Decimal("0"):
             equity = Decimal(portfolio.total_equity_usd) if portfolio is not None else Decimal("0")
+        equity = max(Decimal("0"), equity - reserve_offset)  # D25: size on tradable equity
         if equity <= Decimal("0"):
             return RiskDecision(False, "portfolio_equity_unavailable")
 

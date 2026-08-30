@@ -18,6 +18,7 @@ from backend.app.persistence.repositories.positions import (
     PerpPositionRepository,
     SpotPositionRepository,
 )
+from backend.app.persistence.repositories.reserve import ReserveRepository
 from backend.app.persistence.repositories.trades import (
     PerpTradeRepository,
     SpotTradeRepository,
@@ -242,8 +243,43 @@ class ViewService:
             volume_today_usd=perp_volume_today,
         )
 
+    async def _reserve_state(self, user_id: str) -> dict:
+        """Reserve value/cost/pnl/fees for GlobalView (D25/D30).
+
+        Value comes from the most recent ``ReserveSnapshot`` (written hourly by the
+        slow tick). Before the first snapshot, assets are valued at cost so the
+        reserve P&L reads 0 rather than swinging on a stale price.
+        """
+        repo = ReserveRepository(self._session)
+        fields = await repo.get_reserve_fields(user_id)
+        cash = Decimal(str(fields["reserve_cash_usd"]))
+        cost_basis = Decimal(str(fields["reserve_transferred_net_usd"]))
+        fees = await repo.sum_fees(user_id)
+
+        recent = await repo.recent_snapshots(user_id, limit=1)
+        if recent:
+            value = Decimal(str(recent[0].total_value_usd))
+        else:
+            assets_at_cost = sum(
+                (Decimal(str(h.quantity)) * Decimal(str(h.avg_cost_usd))
+                 for h in await repo.list_holdings(user_id)),
+                Decimal("0"),
+            )
+            value = cash + assets_at_cost
+
+        pnl = value - cost_basis
+        return {
+            "value": value,
+            "cash": cash,
+            "cost_basis": cost_basis,
+            "pnl": pnl,
+            "pnl_pct": float(pnl / cost_basis * 100) if cost_basis > 0 else 0.0,
+            "fees": fees,
+        }
+
     async def global_view(self, user_id: str) -> GlobalView:
         pnl_repo = PnlRepository(self._session)
+        reserve = await self._reserve_state(user_id)
         spot_pos = SpotPositionRepository(self._session)
         perp_pos = PerpPositionRepository(self._session)
         spot_trade_repo = SpotTradeRepository(self._session)
@@ -271,7 +307,7 @@ class ViewService:
         realized = realized_spot + realized_perp
         fees_spot = await spot_trade_repo.sum_fees(user_id)
         fees_perp = await perp_trade_repo.sum_fees(user_id)
-        total_fees_usd = fees_spot + fees_perp
+        total_fees_usd = fees_spot + fees_perp + reserve["fees"]  # D30
 
         from datetime import UTC, datetime as _dt
         day_start = _dt.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -284,6 +320,7 @@ class ViewService:
 
         if portfolio is None:
             base_equity = self._base_equity_usd
+            tradable_none = base_equity - reserve["cost_basis"]
             return GlobalView(
                 total_equity_usd=base_equity,
                 initial_equity_usd=base_equity,
@@ -311,6 +348,14 @@ class ViewService:
                 volume_today_usd=volume_today,
                 risk_guardrail=None,
                 pnl_history=[],
+                reserve_value_usd=reserve["value"],
+                reserve_cash_usd=reserve["cash"],
+                reserve_cost_basis_usd=reserve["cost_basis"],
+                reserve_pnl_usd=reserve["pnl"],
+                reserve_pnl_pct=round(reserve["pnl_pct"], 2),
+                reserve_fees_usd=reserve["fees"],
+                tradable_equity_usd=tradable_none,
+                total_portfolio_equity_usd=tradable_none + reserve["value"],
             )
 
         # Calcola total_equity direttamente dalla fonte, non dal DB cache
@@ -320,6 +365,13 @@ class ViewService:
         initial = portfolio.initial_equity_usd
         sharpe = _daily_sharpe(snapshots)
         pnl_pct = float(pnl_total / initial * 100) if initial > 0 else 0.0
+        # D25: tradable = trading equity minus what has been moved into the reserve
+        # (the counter, not the market value). Combined P&L adds the reserve P&L.
+        tradable_equity = total_equity - reserve["cost_basis"]
+        total_portfolio_equity = tradable_equity + reserve["value"]
+        total_portfolio_pnl_pct = (
+            float((total_portfolio_equity - initial) / initial * 100) if initial > 0 else 0.0
+        )
         # pnl_usd nei trade è già al netto delle fee: % giornaliero e globale
         # si calcolano direttamente dai valori già netti.
         daily_pnl = portfolio.daily_pnl_usd
@@ -350,7 +402,7 @@ class ViewService:
             volume_total_usd=volume_total,
             volume_today_usd=volume_today,
             risk_guardrail=_risk_guardrail(
-                total_equity=total_equity,
+                total_equity=tradable_equity,  # D25/§7: floor applies to tradable equity
                 drawdown_pct=portfolio.drawdown_pct,
                 drawdown_cap_pct=self._drawdown_cap_pct,
                 daily_loss_used_pct=portfolio.daily_loss_limit_used_pct,
@@ -365,6 +417,15 @@ class ViewService:
                 )
                 for s in reversed(snapshots)
             ],
+            reserve_value_usd=reserve["value"],
+            reserve_cash_usd=reserve["cash"],
+            reserve_cost_basis_usd=reserve["cost_basis"],
+            reserve_pnl_usd=reserve["pnl"],
+            reserve_pnl_pct=round(reserve["pnl_pct"], 2),
+            reserve_fees_usd=reserve["fees"],
+            tradable_equity_usd=tradable_equity,
+            total_portfolio_equity_usd=total_portfolio_equity,
+            total_portfolio_pnl_pct=round(total_portfolio_pnl_pct, 2),
         )
 
 

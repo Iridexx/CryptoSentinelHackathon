@@ -168,6 +168,16 @@ class GlobalView(BaseModel):
     daily_pnl_usd: Decimal
     daily_pnl_net_pct: float = 0.0
     pnl_total_net_pct: float = 0.0
+    # ── "Bank" reserve (plans/Plan_Reserve.md, D25) ──────────────────────────
+    reserve_value_usd: Decimal = Decimal("0")            # cash + assets, marked to market
+    reserve_cash_usd: Decimal = Decimal("0")
+    reserve_cost_basis_usd: Decimal = Decimal("0")       # reserve_transferred_net_usd
+    reserve_pnl_usd: Decimal = Decimal("0")
+    reserve_pnl_pct: float = 0.0
+    reserve_fees_usd: Decimal = Decimal("0")             # D30 (also folded into total_fees_usd)
+    tradable_equity_usd: Decimal = Decimal("0")          # total_equity − reserve_cost_basis
+    total_portfolio_equity_usd: Decimal = Decimal("0")   # tradable + reserve_value
+    total_portfolio_pnl_pct: float = 0.0                 # combined, on initial_equity
     agent_status: str
     trades_today: int
     open_spot_positions: int
