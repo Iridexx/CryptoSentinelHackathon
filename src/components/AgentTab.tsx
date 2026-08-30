@@ -776,6 +776,9 @@ const TradeHistoryList: FC<{
             onClick={() => onTrade(t.trade_id)}
             className={`h-auto w-full rounded-xl border-0 px-4 py-3 text-left text-sm ${isClose ? 'bg-dark-700' : 'bg-dark-800'}`}
           >
+            <div className="text-[11px] text-gray-500 mb-1">
+              {new Date(t.timestamp_utc).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </div>
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-white">{label}</div>
@@ -794,7 +797,7 @@ const TradeHistoryList: FC<{
                 <div>{isGood ? '+' : ''}{fmtUsd(t.pnl_usd ?? 0)}</div>
               </div>
             </div>
-            <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+            <div className="mt-1.5 flex items-center text-xs text-gray-500">
               <span className="flex items-center gap-1.5">
                 <span className="uppercase tracking-wide">{t.status}</span>
                 {t.close_reason && CLOSE_REASON_LABELS[t.close_reason] && (
@@ -802,9 +805,6 @@ const TradeHistoryList: FC<{
                     {CLOSE_REASON_LABELS[t.close_reason].label}
                   </span>
                 )}
-              </span>
-              <span>
-                {new Date(t.timestamp_utc).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </button>
@@ -862,6 +862,9 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
               disabled={!position.open_trade_id}
               className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
             >
+              <div className="text-[11px] text-gray-500 mb-1">
+                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-white">{position.asset}</p>
                 <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
@@ -878,9 +881,8 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
                 <span>Swap {position.swap_fee_usd != null ? fmtUsd(position.swap_fee_usd) : '$0.00'}</span>
                 <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
               </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+              <div className="mt-1.5 text-xs text-gray-500">
                 <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
-                <span>{new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             </button>
           ))}
@@ -932,6 +934,9 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
               disabled={!position.open_trade_id}
               className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
             >
+              <div className="text-[11px] text-gray-500 mb-1">
+                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
@@ -956,9 +961,8 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
                 <span>Liq {position.liquidation_price ? fmtPrice(position.liquidation_price) : '-'}</span>
                 <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
               </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-gray-500">
+              <div className="mt-1.5 text-xs text-gray-500">
                 <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
-                <span>{new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
               </div>
             </button>
           ))}
