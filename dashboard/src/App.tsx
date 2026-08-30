@@ -898,7 +898,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Asset', 'Size', 'Entry', 'Price Now', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
+                columns={['Asset', 'Size', 'Entry', 'Price Now', 'SL', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
@@ -913,6 +913,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
                     item.size,
                     fmtPrice(item.entry_price),
                     fmtPrice(item.current_price),
+                    item.stop_loss ? fmtPrice(item.stop_loss) : '-',
                     money(String(invested)),
                     <span className={value >= invested ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
                     <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{money(item.pnl_unrealized)}</span>,
@@ -960,7 +961,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status']}
+                columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'SL', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status']}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
@@ -977,6 +978,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
                     item.leverage ? `${item.leverage}x` : '-',
                     fmtPrice(item.entry_price),
                     fmtPrice(item.current_price),
+                    item.stop_loss ? fmtPrice(item.stop_loss) : '-',
                     money(String(margin)),
                     money(String(notional)),
                     <span className={value >= margin ? 'ok-text' : 'error-text'}>{money(String(value))}</span>,
