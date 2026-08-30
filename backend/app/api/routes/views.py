@@ -691,6 +691,37 @@ def _range_since(value: str) -> datetime | None:
     return None
 
 
+#: BTC 1h klines change slowly and the benchmark is requested on every equity /
+#: reserve-history poll (Global tab + Bank pane on both clients). Cache the raw
+#: candle pull for a few minutes, bounded by a hard timeout, stale-on-error.
+_BTC_KLINES_CACHE: dict[int, tuple[float, list]] = {}
+_BTC_KLINES_TTL_S = 300.0
+_BTC_KLINES_TIMEOUT_S = 6.0
+
+
+async def _btc_1h_klines(limit: int) -> list:
+    import time
+
+    from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
+
+    bucket = min(1000, ((limit // 24) + 2) * 24)  # round up to whole days so near ranges share
+    now = time.monotonic()
+    hit = _BTC_KLINES_CACHE.get(bucket)
+    if hit is not None and now - hit[0] < _BTC_KLINES_TTL_S:
+        return hit[1]
+    try:
+        candles = await asyncio.wait_for(
+            BinanceKlineFeed().fetch(symbol="BTCUSDT", interval="1h", limit=bucket, market="spot"),
+            timeout=_BTC_KLINES_TIMEOUT_S,
+        )
+    except Exception:
+        return hit[1] if hit is not None else []
+    if candles:
+        _BTC_KLINES_CACHE[bucket] = (now, candles)
+        return candles
+    return hit[1] if hit is not None else []
+
+
 async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
     """Andamento cumulato % di BTC allineato agli snapshot, per confronto sul grafico equity.
 
@@ -701,7 +732,6 @@ async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
     """
     if len(snapshots) < 2:
         return {}
-    from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 
     first_ts = snapshots[0].timestamp_utc
     last_ts = snapshots[-1].timestamp_utc
@@ -709,12 +739,8 @@ async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
     if span_hours < 1:
         span_hours = 1
     limit = min(1000, span_hours + 2)
-    try:
-        candles = await BinanceKlineFeed().fetch(
-            symbol="BTCUSDT", interval="1h", limit=limit, market="spot"
-        )
-    except Exception:
-        return {}
+    candles = await _btc_1h_klines(limit)
+    candles = candles[-limit:]  # keep "most recent N" alignment regardless of cache bucket
     if not candles:
         return {}
     base = Decimal(str(candles[0].close))

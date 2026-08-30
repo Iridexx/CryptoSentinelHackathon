@@ -53,6 +53,35 @@ def test_volatility_budget_reserve_dampens_vol_and_drawdown() -> None:
     assert vb.total_max_drawdown_pct <= vb.trading_max_drawdown_pct
 
 
+# ── BTC klines cache (perf) ─────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_btc_1h_klines_caches_and_serves_stale(monkeypatch: pytest.MonkeyPatch) -> None:
+    view_routes._BTC_KLINES_CACHE.clear()
+    calls = {"n": 0}
+
+    class _Feed:
+        async def fetch(self, **kw):
+            calls["n"] += 1
+            if calls["n"] > 1:
+                raise RuntimeError("binance down")
+            return [type("C", (), {"close": "60000"})() for _ in range(200)]
+
+    monkeypatch.setattr(
+        "backend.app.agent.signals.perp.binance_klines.BinanceKlineFeed", lambda *a, **k: _Feed()
+    )
+    first = await view_routes._btc_1h_klines(50)
+    assert len(first) == 200 and calls["n"] == 1
+    # within TTL: cache hit, no second upstream call
+    assert await view_routes._btc_1h_klines(50) is first and calls["n"] == 1
+    # force expiry -> upstream fails -> stale served, not empty
+    key = next(iter(view_routes._BTC_KLINES_CACHE))
+    view_routes._BTC_KLINES_CACHE[key] = (0.0, first)
+    assert await view_routes._btc_1h_klines(50) is first
+    view_routes._BTC_KLINES_CACHE.clear()
+
+
 # ── GlobalView integration ──────────────────────────────────────────────────
 
 

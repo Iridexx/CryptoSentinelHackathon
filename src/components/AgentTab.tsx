@@ -2780,15 +2780,19 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
   const [err, setErr] = useState('');
   const [amount, setAmount] = useState('');
   const [nowTs, setNowTs] = useState(() => Date.now());
+  const loadingRef = useRef(false);
   useEffect(() => { const id = window.setInterval(() => setNowTs(Date.now()), 30_000); return () => window.clearInterval(id); }, []);
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return;  // non sovrapporre poll e azioni manuali
+    loadingRef.current = true;
     try {
       const [v, t] = await Promise.all([fetchReserve(), fetchReserveTransactions(8)]);
       setView(v); setTxns(t); setErr('');
     } catch {
       setErr('Impossibile caricare la riserva');
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }, []);
@@ -2801,7 +2805,8 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
     try {
       await fn();
       await load();
-      setHistory(await fetchReserveHistory(range).catch(() => history));
+      // il grafico benchmark si aggiorna in background: non trattenere lo spinner dell'azione
+      void fetchReserveHistory(range).then(setHistory).catch(() => {});
     } catch (e) {
       const code = (e as { payload?: { detail?: string } })?.payload?.detail
         ?? (e as { message?: string })?.message ?? '';
@@ -2809,7 +2814,7 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
     } finally {
       setBusy(false);
     }
-  }, [load, range, history]);
+  }, [load, range]);
 
   if (loading && !view) {
     return <div className="py-10 text-center text-sm text-gray-500">Caricamento riserva…</div>;
