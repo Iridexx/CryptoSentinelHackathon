@@ -888,6 +888,8 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
             <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(2)}%`} />
             <Metric label="Trade Tot" value={String(data.trade_count)} />
             <Metric label="Trade Day" value={String(data.trade_count_today ?? 0)} />
+            <Metric label="Vol Tot" value={money(data.volume_total_usd ?? '0')} />
+            <Metric label="Vol Day" value={money(data.volume_today_usd ?? '0')} />
             <Metric label="Bot Day" value={String(data.bot_active_days ?? 0)} />
           </div>
           {data.open_positions.length === 0 ? (
@@ -948,6 +950,8 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
             <Metric label="Win rate" value={`${data.win_rate_pct.toFixed(2)}%`} />
             <Metric label="Trade Tot" value={String(data.trade_count)} />
             <Metric label="Trade Day" value={String(data.trade_count_today ?? 0)} />
+            <Metric label="Vol Tot" value={money(data.volume_total_usd ?? '0')} />
+            <Metric label="Vol Day" value={money(data.volume_today_usd ?? '0')} />
             <Metric label="Bot Day" value={String(data.bot_active_days ?? 0)} />
           </div>
           {data.open_positions.length === 0 ? (
