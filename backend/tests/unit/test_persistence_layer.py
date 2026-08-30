@@ -263,6 +263,29 @@ async def test_portfolio_upsert_and_snapshot(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_equity_at_or_before_returns_daily_baseline(db) -> None:
+    factory = get_session_factory()
+    day_start = datetime(2026, 8, 30, 0, 0, tzinfo=UTC)
+    async with factory() as session:
+        repo = PnlRepository(session)
+        await repo.upsert_portfolio(
+            USER, total_equity_usd=Decimal("1000"), initial_equity_usd=Decimal("1000")
+        )
+        for ts, eq in (
+            (datetime(2026, 8, 29, 23, 0, tzinfo=UTC), Decimal("1020")),  # baseline
+            (datetime(2026, 8, 30, 3, 0, tzinfo=UTC), Decimal("1035")),   # after 00:00
+        ):
+            await repo.save_snapshot(
+                PnlSnapshot(user_id=USER, timestamp_utc=ts, total_equity_usd=eq)
+            )
+
+        baseline = await repo.equity_at_or_before(USER, day_start)
+        assert baseline == Decimal("1020")  # last snapshot at/before 00:00 UTC
+
+        assert await repo.equity_at_or_before(USER, datetime(2026, 1, 1, tzinfo=UTC)) is None
+
+
+@pytest.mark.asyncio
 async def test_decision_repo_records_reasoning(db) -> None:
     factory = get_session_factory()
     async with factory() as session:

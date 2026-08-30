@@ -1051,6 +1051,13 @@ const GlobalPane: FC<{
           tone={claudeUsage == null ? 'neutral' : claudeUsage.budget_pct >= 90 ? 'bad' : claudeUsage.budget_pct >= 70 ? 'neutral' : 'good'}
         />
       </div>
+      {hasHistory ? (
+        <div className="rounded-xl bg-dark-800 px-4 py-3">
+          <EquityChart equity={equity} range={equityRange} onRange={onEquityRange} view={equityView} onView={setEquityView} />
+        </div>
+      ) : hasPortfolio && (
+        <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
+      )}
       {(Number(data?.reserve_value_usd ?? 0) > 0.01 || Number(data?.reserve_cost_basis_usd ?? 0) > 0.01) && (
         <div className="rounded-xl border border-accent-yellow/20 bg-dark-800/40 px-3 py-3 space-y-2">
           <p className="text-[11px] font-semibold uppercase text-gray-500">🏦 Bank · Riserva di Valore</p>
@@ -1080,13 +1087,6 @@ const GlobalPane: FC<{
       )}
       {!hasTradesToday && (
         <EmptyState title="Nessun trade oggi" detail="Il contatore UTC si aggiorna dopo il primo trade valido." />
-      )}
-      {hasHistory ? (
-        <div className="rounded-xl bg-dark-800 px-4 py-3">
-          <EquityChart equity={equity} range={equityRange} onRange={onEquityRange} view={equityView} onView={setEquityView} />
-        </div>
-      ) : hasPortfolio && (
-        <EmptyState title="Nessuno storico PnL" detail="La curva equity apparira' dopo i prossimi snapshot." />
       )}
       <div className="grid grid-cols-2 gap-2">
         <AssetRank title="Top asset" items={bestAssets} />

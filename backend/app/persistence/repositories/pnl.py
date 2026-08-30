@@ -31,6 +31,25 @@ class PnlRepository:
         )
         return list(result.scalars().all())
 
+    async def equity_at_or_before(
+        self, user_id: str, when: datetime
+    ) -> Decimal | None:
+        """`total_equity_usd` of the most recent snapshot at or before `when`.
+
+        Used as the baseline for the daily PnL (equity delta since 00:00 UTC),
+        which is transfer-neutral: moving capital into the "Bank" reserve does not
+        change `total_equity_usd` (no realized/unrealized trade PnL), so it never
+        shows up as a daily loss.
+        """
+        result = await self._session.execute(
+            select(PnlSnapshot.total_equity_usd)
+            .where(PnlSnapshot.user_id == user_id, PnlSnapshot.timestamp_utc <= when)
+            .order_by(PnlSnapshot.timestamp_utc.desc())
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        return Decimal(str(row)) if row is not None else None
+
     async def upsert_portfolio(
         self,
         user_id: str,

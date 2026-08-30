@@ -2041,9 +2041,19 @@ class AgentService:
         tradable = total - reserve_offset
 
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        daily_realized_spot = await spot_repo.sum_realized_pnl(user_id, since=day_start)
-        daily_realized_perp = await perp_repo.sum_realized_pnl(user_id, since=day_start)
-        daily_pnl = daily_realized_spot + daily_realized_perp + unrealized
+        # PnL giornaliero = variazione di equity dalle 00:00 UTC (delta mark-to-market,
+        # non "realizzato oggi + tutto l'unrealized" che mescolava mosse di giorni
+        # passati). Transfer-neutral: spostare capitale nella riserva "Bank" non
+        # tocca total_equity_usd, quindi non compare come perdita giornaliera (D31).
+        day_start_equity = await pnl_repo.equity_at_or_before(user_id, day_start)
+        if day_start_equity is not None:
+            daily_pnl = total - day_start_equity
+        else:
+            # Nessuno snapshot prima di oggi (agente avviato oggi / storico vuoto):
+            # ripiega sul realizzato di oggi + unrealized corrente.
+            daily_realized_spot = await spot_repo.sum_realized_pnl(user_id, since=day_start)
+            daily_realized_perp = await perp_repo.sum_realized_pnl(user_id, since=day_start)
+            daily_pnl = daily_realized_spot + daily_realized_perp + unrealized
         # % di PnL giornaliero sull'equity (negativo in perdita) per la guardia daily_loss_limit.
         daily_loss_limit_used_pct = (
             (daily_pnl / tradable * 100).quantize(Decimal("0.01")) if tradable > 0 else Decimal("0")
