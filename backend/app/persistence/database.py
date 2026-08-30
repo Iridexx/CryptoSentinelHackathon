@@ -59,6 +59,12 @@ async def _apply_column_migrations(conn) -> None:
         ("support_tickets", "user_last_seen_at", "DATETIME"),
         ("support_tickets", "admin_last_seen_at", "DATETIME"),
         ("perp_trades", "position_id", "VARCHAR(64)"),
+        # "Bank" reserve accounting on portfolio_state (plans/Plan_Reserve.md).
+        ("portfolio_state", "reserve_cash_usd", "NUMERIC(20,8) NOT NULL DEFAULT 0"),
+        ("portfolio_state", "reserve_transferred_net_usd", "NUMERIC(20,8) NOT NULL DEFAULT 0"),
+        ("portfolio_state", "last_swept_realized_pnl_usd", "NUMERIC(20,8) NOT NULL DEFAULT 0"),
+        ("portfolio_state", "last_deploy_at", "DATETIME"),
+        ("portfolio_state", "reserve_frozen", "BOOLEAN NOT NULL DEFAULT 0"),
     ]
     for table, column, col_type in new_columns:
         try:

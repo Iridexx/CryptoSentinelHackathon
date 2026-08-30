@@ -12,6 +12,7 @@ from .orders import PerpOrder
 from .device_tokens import DeviceToken
 from .pnl import PnlSnapshot, PortfolioState
 from .positions import PerpPosition, SpotPosition
+from .reserve import ReserveHolding, ReserveSnapshot, ReserveTransaction
 from .runtime_state import RuntimeState
 from .support import SupportMessage, SupportTicket
 from .trade_charts import TradeChartSnapshot
@@ -33,6 +34,9 @@ __all__ = [
     "PortfolioState",
     "PerpPosition",
     "SpotPosition",
+    "ReserveHolding",
+    "ReserveSnapshot",
+    "ReserveTransaction",
     "RuntimeState",
     "SupportMessage",
     "SupportTicket",

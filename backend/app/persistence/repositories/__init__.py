@@ -5,6 +5,7 @@ from .decisions import AgentDecisionRepository
 from .device_tokens import DeviceTokenRepository
 from .pnl import PnlRepository
 from .positions import PerpPositionRepository, SpotPositionRepository
+from .reserve import ReserveRepository
 from .trades import PerpTradeRepository, SpotTradeRepository
 from .x402_budget import X402BudgetRepository
 
@@ -15,6 +16,7 @@ __all__ = [
     "PnlRepository",
     "PerpPositionRepository",
     "SpotPositionRepository",
+    "ReserveRepository",
     "PerpTradeRepository",
     "SpotTradeRepository",
     "X402BudgetRepository",

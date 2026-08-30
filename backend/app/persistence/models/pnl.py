@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -48,3 +48,23 @@ class PortfolioState(Base):
     trades_today: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     extra_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # ── "Bank" reserve accounting (plans/Plan_Reserve.md, D25/D29/D30) ──────────
+    # USDC sleeve held inside the reserve, waiting to be deployed into assets.
+    reserve_cash_usd: Mapped[Decimal] = mapped_column(
+        Numeric(20, 8), nullable=False, default=Decimal("0")
+    )
+    # Net USD moved into the reserve: Σ(sweep + transfer_in) − Σ(transfer_out).
+    # Cost basis of the reserve and the amount subtracted from tradable equity.
+    reserve_transferred_net_usd: Mapped[Decimal] = mapped_column(
+        Numeric(20, 8), nullable=False, default=Decimal("0")
+    )
+    # High-water mark of realised trading PnL at the last profit sweep.
+    last_swept_realized_pnl_usd: Mapped[Decimal] = mapped_column(
+        Numeric(20, 8), nullable=False, default=Decimal("0")
+    )
+    last_deploy_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Reserve frozen (toggle "Riserva attiva" OFF with holdings still inside).
+    reserve_frozen: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

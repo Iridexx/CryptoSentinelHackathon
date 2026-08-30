@@ -71,7 +71,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- perp/volume_profile.py - Volume Profile Perp V1 rolling 24h con POC/VAH/VAL, VWAP trend filter, stop ATR/Min-Max configurabile e metadata candela riferimento SL strutturale.
 |   |   |       `-- perp/orderflow_delta_v2.py - placeholder order-flow delta V2.
 |   |   |-- core/ - configurazione, logging e sicurezza.
-|   |   |   |-- config.py - unico loader Settings: fonde .env + configs/*.yaml, valida guardrail hard.
+|   |   |   |-- config.py - unico loader Settings: fonde .env + configs/*.yaml, valida guardrail hard; include `reserve.yaml` tra i file funzionali e i modelli tipizzati `ReserveConfig`/`ReserveAssetConfig` per la scheda Bank.
 |   |   |   |-- logging.py - structlog JSON/console con file giornaliero rotante e retention configurabile.
 |   |   |   `-- security/ - sicurezza API/custody.
 |   |   |       |-- auth.py - autenticazione token read/device/admin fail-closed.
@@ -88,7 +88,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- cache.py / rate_limit.py / credits.py - primitive TTL, throttling e budget CMC.
 |   |   |   |-- ohlcv_sources.py - sorgente OHLCV pubblica separata dal provider latest: Binance klines spot con fallback CEX, conversione display USD/EUR/BTC best-effort.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
-|   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state.
+|   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state, reserve.
+|   |   |   `-- reserve/ - dominio scheda "Bank" (piano Riserva). settings.py: load/save override runtime (`runtime_state` chiave `reserve_settings`) del sottoinsieme tunabile, default da `configs/reserve.yaml`, pattern come `mobile_agent_settings`.
 |   |   |-- execution/ - layer esecuzione Step 4 (esteso: spot E perp astratti multi-provider, registry separati).
 |   |   |   |-- base.py - interfaccia astratta ExecutionProvider (spot) + modelli (ExecutionQuote, ExecutionProviderStatus); get_position/close_position default fail-closed per spot atomico.
 |   |   |   |-- registry.py - ExecutionProviderRegistry: selettore globale spot twak/pancakeswap, default da Settings, override persistito in RuntimeState, cambio admin-only.
@@ -139,7 +140,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |   |-- trades.py - SpotTrade e PerpTrade con timestamp_utc/block_timestamp_utc separati, prezzi a 18 decimali, PnL, fee, slippage e funding snapshot.
 |   |   |   |   |-- positions.py - SpotPosition e PerpPosition con prezzi/livelli a 18 decimali, livelli SL/TP/trailing, ATR entry, candela riferimento stop loss, fee/slippage/funding, margin e stato TP1.
 |   |   |   |   |-- decisions.py - AgentDecision (action, confidence, reasoning Text, trade_id).
-|   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert).
+|   |   |   |   |-- pnl.py - PnlSnapshot (orari) e PortfolioState (una riga per utente, upsert); PortfolioState include i contatori riserva "Bank" (reserve_cash_usd, reserve_transferred_net_usd, last_swept_realized_pnl_usd, last_deploy_at, reserve_frozen).
+|   |   |   |   |-- reserve.py - modelli scheda "Bank" (R2 piano Riserva): ReserveHolding (posizione per asset, unique user+asset), ReserveTransaction (audit: transfer_in/out, sweep, deploy_buy, rebalance_*; fee_usd, cash_usd_delta), ReserveSnapshot (valore orario per grafico/benchmark).
 |   |   |   |   |-- archives.py - ArchivedRun: snapshot JSON dei dati dry-run simulati esclusi dalle viste live.
 |   |   |   |   |-- equity_adjustments.py - versamenti/prelievi manuali separati dal PnL per non rebaselinare la performance storica.
 |   |   |   |   |-- api_usage.py - tracking chiamate Claude: input/output token e costo stimato.
@@ -157,6 +159,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |       |-- positions.py - SpotPositionRepository e PerpPositionRepository (save, open_for_user, history).
 |   |   |       |-- decisions.py - AgentDecisionRepository (save, get, recent_for_user con filtro market).
 |   |   |       |-- pnl.py - PnlRepository (save_snapshot, recent_for_user, upsert_portfolio, get_portfolio, adjust_equity, list_equity_adjustments).
+|   |   |       |-- reserve.py - ReserveRepository (R2): holdings upsert/list, add_transaction/list, sum_fees, save/recent/since snapshot, get/set_reserve_fields su portfolio_state; i mutatori fanno flush (non commit) per l'atomicita' dei transfer in R3.
 |   |   |       |-- api_usage.py - ApiUsageRepository per riepilogo costo/token Claude.
 |   |   |       |-- trade_charts.py - TradeChartRepository per snapshot o fallback posizione.
 |   |   |       `-- x402_budget.py - X402BudgetRepository (load_today, save).
@@ -165,6 +168,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notifications.py - device token, notification request/response e status.
 |   |   |   |-- support.py - schemi profilo device, ticket, messaggi, risposte admin e cambio stato.
 |   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
+|   |   |   |-- reserve.py - ReserveSettings (sottoinsieme tunabile della riserva: pesi target, drift, sweep, cooldown, toggle), ReserveTargetWeight, ReserveSettingsResponse con source; from_config()/reconcile_with_config() per allineare l'override alla lista asset YAML.
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
 |   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, modalita' stop loss Spot/Perp con lookback/buffer strutturale, margine fisso Perp opzionale, credential checks e wallet summary con balance asset non-zero.
@@ -181,6 +185,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- test_spot_swap.py - smoke test TWAK testnet con gas guard e verifica ricevuta.
 |   |   |-- twak_rpc_route_probe.py - diagnostica quote-only TWAK REST ruotando manualmente le RPC BSC configurate; dominio smartchain/smartchain-testnet derivato dalla rete.
 |   |   |-- pancakeswap_smoke_test.py - smoke test PancakeSwap diretto (quote-only di default; --execute swap reale, mainnet solo con --allow-mainnet).
+|   |   |-- aster_spot_probe.py - diagnostica read-only R1b (piano Riserva/Bank): incrocia gli asset BTC/ETH/BNB/SOL/TRX con exchangeInfo spot (sapi.asterdex.com) e perp Aster; nessun ordine/chiave.
 |   |   |-- run_backend.ps1 - avvio Windows PowerShell (dev/prod, legge host:port da Settings).
 |   |   `-- run_backend.sh  - avvio Linux/bash per VPS (dev/prod, stesso comportamento).
 |   `-- tests/ - test backend.
@@ -207,7 +212,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |-- risk.yaml - default funzionali risk management, incluso dry_run_capital_usd 500 e min_trade_size_usd 7.
 |   |-- strategy_spot.yaml - default strategia Spot.
 |   |-- strategy_perp.yaml - default strategia Perpetual.
-|   `-- eligible_tokens.yaml - universo 148 token eligible unici dopo rimozione del duplicato SLX.
+|   |-- eligible_tokens.yaml - universo 148 token eligible unici dopo rimozione del duplicato SLX.
+|   `-- reserve.yaml - default funzionali scheda "Bank" / Riserva di Valore (R1 piano Riserva): 5 hard asset BTC/ETH/BNB/SOL/TRX con pesi target 40/30/20/5/5, banda drift, sweep profitti, cooldown prelievi, indirizzi PancakeSwap e simboli spot Aster; sottoinsieme tunabile sovrascrivibile a runtime.
 |-- deploy/ - artefatti Step 10 per VPS Linux 24/7.
 |   |-- nginx/cryptosentinel.conf - template nginx per dashboard statica e proxy `/api/` verso backend locale.
 |   |-- scripts/ - script installazione, backup SQLite/TWAK encrypted state e healthcheck liveness.
