@@ -200,6 +200,23 @@ export interface GlobalView {
   total_fees_usd: string;
   daily_pnl_net_pct: number;
   pnl_total_net_pct: number;
+  // ── "Bank" reserve (D25/D28) ──
+  reserve_value_usd: string;
+  reserve_cash_usd: string;
+  reserve_cost_basis_usd: string;
+  reserve_pnl_usd: string;
+  reserve_pnl_pct: number;
+  reserve_fees_usd: string;
+  tradable_equity_usd: string;
+  total_portfolio_equity_usd: string;
+  total_portfolio_pnl_pct: number;
+  volatility_budget?: {
+    status: string;
+    trading_daily_vol_pct?: number | null;
+    total_daily_vol_pct?: number | null;
+    trading_max_drawdown_pct?: number | null;
+    total_max_drawdown_pct?: number | null;
+  } | null;
   risk_guardrail?: {
     blocked: boolean;
     reason?: string | null;
@@ -228,6 +245,9 @@ export interface EquityCurveResponse {
     pnl_pct: string;
     drawdown_pct: string;
     btc_pct?: string;
+    portfolio_equity_usd?: string;
+    portfolio_pnl_usd?: string;
+    portfolio_pnl_pct?: string;
   }>;
 }
 
@@ -754,4 +774,170 @@ export interface AsterWalletView {
 
 export function fetchAsterWallet(): Promise<AsterWalletView> {
   return request<AsterWalletView>('/api/v1/aster/wallet');
+}
+
+// ── "Bank" reserve (scheda Riserva di Valore) ────────────────────────────────
+
+export interface ReserveHoldingView {
+  asset: string;
+  quantity: string;
+  price_usd: string;
+  value_usd: string;
+  avg_cost_usd: string;
+  pnl_usd: string;
+  weight_pct: number;
+  target_weight_pct: number;
+  off_target: boolean;
+}
+
+export interface ReserveView {
+  enabled: boolean;
+  frozen: boolean;
+  value_usd: string;
+  cash_usd: string;
+  cost_basis_usd: string;
+  pnl_usd: string;
+  pnl_pct: number;
+  fees_total_usd: string;
+  portfolio_pct: number;
+  deposit_capacity_usd: string;
+  tradable_equity_usd: string;
+  total_portfolio_equity_usd: string;
+  next_deploy_at: string | null;
+  withdrawal_available_at: string | null;
+  holdings: ReserveHoldingView[];
+  updated_at: string;
+}
+
+export interface ReserveTargetWeight {
+  symbol: string;
+  weight_pct: number;
+}
+
+export interface ReserveSettings {
+  enabled: boolean;
+  auto_rebalance: boolean;
+  drift_band_pct: number;
+  min_transfer_usd: number;
+  withdrawal_cooldown_minutes: number;
+  block_withdrawal_during_drawdown_guard: boolean;
+  sweep_enabled: boolean;
+  sweep_pct: number;
+  sweep_interval_hours: number;
+  deploy_interval_days: number;
+  deploy_min_cash_usd: number;
+  target_weights: ReserveTargetWeight[];
+}
+
+export interface ReserveSettingsResponse {
+  settings: ReserveSettings;
+  source: 'default' | 'persisted';
+}
+
+export interface ReserveHistoryPoint {
+  timestamp_utc: string;
+  total_value_usd: string;
+  cash_usd: string;
+  cost_basis_usd: string;
+  pnl_usd: string;
+  fees_cumulative_usd: string;
+  reserve_pct?: string;
+  btc_hold_pct?: string;
+  trading_pct?: string;
+}
+
+export interface ReserveHistoryResponse {
+  range: EquityRange;
+  items: ReserveHistoryPoint[];
+  count: number;
+}
+
+export interface ReserveRebalanceResponse {
+  sold: Record<string, string>;
+  dry_run: boolean;
+}
+
+export interface ReserveTransactionRow {
+  id: number;
+  type: string;
+  asset: string | null;
+  quantity: string | null;
+  price_usd: string | null;
+  value_usd: string;
+  fee_usd: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface ReserveTransactionsResponse {
+  items: ReserveTransactionRow[];
+  count: number;
+}
+
+export function fetchReserve(): Promise<ReserveView> {
+  return request<ReserveView>('/api/v1/agent/reserve');
+}
+
+export function fetchReserveHistory(range: EquityRange = '7d'): Promise<ReserveHistoryResponse> {
+  return request<ReserveHistoryResponse>(`/api/v1/agent/reserve/history?range=${range}`);
+}
+
+export function fetchReserveSettings(): Promise<ReserveSettingsResponse> {
+  return request<ReserveSettingsResponse>('/api/v1/agent/reserve/settings');
+}
+
+export function fetchReserveTransactions(limit = 50): Promise<ReserveTransactionsResponse> {
+  return request<ReserveTransactionsResponse>(`/api/v1/agent/reserve/transactions?limit=${limit}`);
+}
+
+export function saveReserveSettings(
+  settings: ReserveSettings,
+  adminToken: string,
+): Promise<ReserveSettingsResponse> {
+  return request<ReserveSettingsResponse>('/api/v1/agent/reserve/settings', {
+    method: 'POST',
+    body: settings,
+    token: adminToken,
+  });
+}
+
+export function reserveTransfer(
+  amountUsd: number,
+  direction: 'in' | 'out',
+  adminToken: string,
+): Promise<ReserveView> {
+  return request<ReserveView>('/api/v1/agent/reserve/transfer', {
+    method: 'POST',
+    body: { amount_usd: amountUsd, direction },
+    token: adminToken,
+    timeoutMs: 60_000,
+  });
+}
+
+export function reserveSetTargetWeights(
+  weights: Record<string, number>,
+  adminToken: string,
+): Promise<ReserveView> {
+  return request<ReserveView>('/api/v1/agent/reserve/target-weights', {
+    method: 'POST',
+    body: { weights },
+    token: adminToken,
+  });
+}
+
+export function reserveRebalance(dryRun: boolean, adminToken: string): Promise<ReserveRebalanceResponse> {
+  return request<ReserveRebalanceResponse>('/api/v1/agent/reserve/rebalance', {
+    method: 'POST',
+    body: { dry_run: dryRun },
+    token: adminToken,
+    timeoutMs: 60_000,
+  });
+}
+
+export function reserveDeploy(adminToken: string): Promise<ReserveView> {
+  return request<ReserveView>('/api/v1/agent/reserve/deploy', {
+    method: 'POST',
+    token: adminToken,
+    timeoutMs: 60_000,
+  });
 }

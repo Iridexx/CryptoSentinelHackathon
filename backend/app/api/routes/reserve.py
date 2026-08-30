@@ -138,6 +138,28 @@ async def get_history(
     return {"range": range, "items": items, "count": len(items)}
 
 
+@router.get("/transactions")
+async def get_transactions(
+    _: ReadAccessDep, session: SessionDep, limit: int = Query(50, ge=1, le=200)
+) -> dict:
+    rows = await ReserveRepository(session).list_transactions(_user_id(), limit=limit)
+    items = [
+        {
+            "id": t.id,
+            "type": t.type,
+            "asset": t.asset,
+            "quantity": str(t.quantity) if t.quantity is not None else None,
+            "price_usd": str(t.price_usd) if t.price_usd is not None else None,
+            "value_usd": str(t.value_usd),
+            "fee_usd": str(t.fee_usd),
+            "note": t.note,
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in rows
+    ]
+    return {"items": items, "count": len(items)}
+
+
 @router.get("/settings", response_model=ReserveSettingsResponse)
 async def get_settings_endpoint(_: ReadAccessDep) -> ReserveSettingsResponse:
     return load_reserve_settings(_user_id())
