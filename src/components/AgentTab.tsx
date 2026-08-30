@@ -1033,9 +1033,6 @@ const GlobalPane: FC<{
       <RiskGuardrailBanner guardrail={data?.risk_guardrail} />
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
-        {Number(data?.reserve_cost_basis_usd ?? 0) > 0.01 && (
-          <Stat label="Equity trading" value={fmtUsd(data?.tradable_equity_usd)} />
-        )}
         <Stat label="PnL tot." value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL aperto" value={fmtUsd(data?.unrealized_pnl_usd)} tone={Number(data?.unrealized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
         <Stat label="PnL realizzato" value={fmtUsd(data?.realized_pnl_usd)} tone={Number(data?.realized_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
@@ -1054,29 +1051,27 @@ const GlobalPane: FC<{
           tone={claudeUsage == null ? 'neutral' : claudeUsage.budget_pct >= 90 ? 'bad' : claudeUsage.budget_pct >= 70 ? 'neutral' : 'good'}
         />
       </div>
-      {Number(data?.reserve_value_usd ?? 0) > 0.01 && (
-        <div className="rounded-xl border border-accent-yellow/20 bg-dark-800 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase text-gray-500">🏦 Bank · Riserva</span>
-            <span className={`text-xs font-bold tabular-nums ${Number(data?.reserve_pnl_usd ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>
-              {fmtUsd(data?.reserve_value_usd)} · {fmtSignedPct(Number(data?.reserve_pnl_pct ?? 0))}
-            </span>
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-gray-400">
-            <span>Tradabile <b className="block text-gray-200">{fmtUsd(data?.tradable_equity_usd)}</b></span>
-            <span>Totale <b className="block text-gray-200">{fmtUsd(data?.total_portfolio_equity_usd)}</b></span>
-            <span>P&amp;L totale <b className={`block ${Number(data?.total_portfolio_pnl_pct ?? 0) >= 0 ? 'text-accent-green' : 'text-accent-red'}`}>{fmtSignedPct(Number(data?.total_portfolio_pnl_pct ?? 0))}</b></span>
+      {(Number(data?.reserve_value_usd ?? 0) > 0.01 || Number(data?.reserve_cost_basis_usd ?? 0) > 0.01) && (
+        <div className="rounded-xl border border-accent-yellow/20 bg-dark-800/40 px-3 py-3 space-y-2">
+          <p className="text-[11px] font-semibold uppercase text-gray-500">🏦 Bank · Riserva di Valore</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Stat label="Valore riserva" value={fmtUsd(data?.reserve_value_usd)} />
+            <Stat label="P&L riserva" value={`${fmtUsd(data?.reserve_pnl_usd)} · ${fmtSignedPct(Number(data?.reserve_pnl_pct ?? 0))}`} tone={Number(data?.reserve_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
+            <Stat label="Equity trading" value={fmtUsd(data?.tradable_equity_usd)} />
+            <Stat label="Portafoglio totale" value={fmtUsd(data?.total_portfolio_equity_usd)} />
+            <Stat label="PnL % totale" value={fmtSignedPct(Number(data?.total_portfolio_pnl_pct ?? 0))} tone={Number(data?.total_portfolio_pnl_pct ?? 0) >= 0 ? 'good' : 'bad'} />
+            <Stat label="USDC riserva" value={fmtUsd(data?.reserve_cash_usd)} />
           </div>
           {data?.volatility_budget?.status === 'ready' && (
-            <div className="mt-3 border-t border-dark-700 pt-2">
-              <p className="text-[11px] font-semibold uppercase text-gray-500">Volatility budget</p>
-              <div className="mt-1 grid grid-cols-2 gap-2 text-[11px] text-gray-400">
-                <span>Max DD trading <b className="block text-accent-red">{(data.volatility_budget.trading_max_drawdown_pct ?? 0).toFixed(1)}%</b></span>
-                <span>Max DD totale <b className="block text-accent-yellow">{(data.volatility_budget.total_max_drawdown_pct ?? 0).toFixed(1)}%</b></span>
-                <span>Vol giornaliera <b className="block text-accent-red">{(data.volatility_budget.trading_daily_vol_pct ?? 0).toFixed(1)}%</b></span>
-                <span>Vol con riserva <b className="block text-accent-yellow">{(data.volatility_budget.total_daily_vol_pct ?? 0).toFixed(1)}%</b></span>
+            <>
+              <p className="text-[11px] font-semibold uppercase text-gray-500 pt-1">Volatility budget</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Stat label="Max DD trading" value={`${(data.volatility_budget.trading_max_drawdown_pct ?? 0).toFixed(1)}%`} tone="bad" />
+                <Stat label="Max DD totale" value={`${(data.volatility_budget.total_max_drawdown_pct ?? 0).toFixed(1)}%`} />
+                <Stat label="Vol giornaliera" value={`${(data.volatility_budget.trading_daily_vol_pct ?? 0).toFixed(1)}%`} tone="bad" />
+                <Stat label="Vol con riserva" value={`${(data.volatility_budget.total_daily_vol_pct ?? 0).toFixed(1)}%`} />
               </div>
-            </div>
+            </>
           )}
         </div>
       )}
