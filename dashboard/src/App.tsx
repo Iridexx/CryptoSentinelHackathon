@@ -868,10 +868,10 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
             <Metric label="Exposure Spot" value={money(data.spot_exposure_usd ?? '0')} />
             <Metric label="Exposure Perp" value={money(data.perp_exposure_usd ?? '0')} />
             <Metric label="Fee pagate" value={money(data.total_fees_usd ?? '0')} tone="warn" />
-            {Number(data.reserve_value_usd ?? 0) > 0.01 && (
+            {(Number(data.reserve_value_usd ?? 0) > 0.01 || Number(data.reserve_cost_basis_usd ?? 0) > 0.01) && (
               <>
                 <Metric label="Bank / Riserva" value={money(data.reserve_value_usd ?? '0')} tone={Number(data.reserve_pnl_usd ?? 0) >= 0 ? 'good' : 'bad'} />
-                <Metric label="Equity tradabile" value={money(data.tradable_equity_usd ?? '0')} />
+                <Metric label="Equity trading" value={money(data.tradable_equity_usd ?? '0')} />
                 <Metric label="Portafoglio totale" value={money(data.total_portfolio_equity_usd ?? '0')} />
                 <Metric label="PnL % totale" value={`${(data.total_portfolio_pnl_pct ?? 0) >= 0 ? '+' : ''}${(data.total_portfolio_pnl_pct ?? 0).toFixed(2)}%`} tone={(data.total_portfolio_pnl_pct ?? 0) >= 0 ? 'good' : 'bad'} />
               </>
