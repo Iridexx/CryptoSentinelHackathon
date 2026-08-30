@@ -8,6 +8,8 @@ The asset list itself is not user-editable and lives only in the YAML config.
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -39,7 +41,8 @@ class ReserveSettings(BaseModel):
     sweep_enabled: bool = True
     sweep_pct: float = Field(default=20.0, ge=0.0, le=100.0)
     sweep_interval_hours: int = Field(default=24, ge=1)
-    sweep_min_tradable_equity_usd: float = Field(default=50.0, ge=0.0)
+    deploy_interval_days: int = Field(default=7, ge=1)
+    deploy_min_cash_usd: float = Field(default=40.0, gt=0.0)
     target_weights: list[ReserveTargetWeight] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -69,7 +72,8 @@ class ReserveSettings(BaseModel):
             sweep_enabled=config.sweep_enabled,
             sweep_pct=config.sweep_pct,
             sweep_interval_hours=config.sweep_interval_hours,
-            sweep_min_tradable_equity_usd=config.sweep_min_tradable_equity_usd,
+            deploy_interval_days=config.deploy_interval_days,
+            deploy_min_cash_usd=config.deploy_min_cash_usd,
             target_weights=[
                 ReserveTargetWeight(symbol=a.symbol, weight_pct=a.target_weight_pct)
                 for a in config.assets
@@ -96,3 +100,41 @@ class ReserveSettingsResponse(BaseModel):
 
     settings: ReserveSettings
     source: Literal["default", "persisted"]
+
+
+# ── runtime views (R3) ───────────────────────────────────────────────────────
+
+
+class ReserveHoldingView(BaseModel):
+    """One asset held by the reserve, marked to market."""
+
+    asset: str
+    quantity: Decimal
+    price_usd: Decimal
+    value_usd: Decimal
+    avg_cost_usd: Decimal
+    pnl_usd: Decimal
+    weight_pct: float          # of the reserve's asset sleeve
+    target_weight_pct: float
+    off_target: bool           # |weight - target| beyond the drift band
+
+
+class ReserveView(BaseModel):
+    """Full state of the reserve for the Bank pane / API."""
+
+    enabled: bool
+    frozen: bool
+    value_usd: Decimal                 # cash + assets, marked to market
+    cash_usd: Decimal                  # USDC waiting to be deployed
+    cost_basis_usd: Decimal            # reserve_transferred_net_usd
+    pnl_usd: Decimal
+    pnl_pct: float
+    fees_total_usd: Decimal            # D30
+    portfolio_pct: float               # reserve as % of total portfolio equity
+    deposit_capacity_usd: Decimal      # §7bis: max(0, tradable - initial)
+    tradable_equity_usd: Decimal
+    total_portfolio_equity_usd: Decimal
+    next_deploy_at: datetime | None
+    withdrawal_available_at: datetime | None
+    holdings: list[ReserveHoldingView]
+    updated_at: datetime

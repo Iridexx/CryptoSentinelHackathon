@@ -400,16 +400,19 @@ class ReserveConfig(BaseModel):
     enabled: bool = False
     execution_mode_inherit: bool = True
     auto_rebalance: bool = True
-    drift_band_pct: float = 5.0
+    drift_band_pct: float = 5.0            # visual indicator + deploy priority
+    rebalance_band_pct: float = 12.0       # wide band that triggers a sell-side rebalance
     min_transfer_usd: float = 10.0
-    rebalance_min_trade_usd: float = 5.0
     snapshot_interval_minutes: int = 60
     withdrawal_cooldown_minutes: int = 1440
     block_withdrawal_during_drawdown_guard: bool = True
     sweep_enabled: bool = True
     sweep_pct: float = 20.0
     sweep_interval_hours: int = 24
-    sweep_min_tradable_equity_usd: float = 50.0
+    # Deploy: USDC sleeve → hard assets, batched (D29).
+    deploy_interval_days: int = 7
+    deploy_min_cash_usd: float = 40.0
+    deploy_min_buy_usd: float = 5.0
     assets: list[ReserveAssetConfig] = Field(default_factory=list)
 
     @property
@@ -422,9 +425,13 @@ class ReserveConfig(BaseModel):
             raise ValueError("reserve.sweep_pct must be between 0 and 100")
         if self.sweep_interval_hours < 1:
             raise ValueError("reserve.sweep_interval_hours must be at least 1")
-        if self.drift_band_pct <= 0:
-            raise ValueError("reserve.drift_band_pct must be positive")
-        if self.min_transfer_usd < 0 or self.sweep_min_tradable_equity_usd < 0:
+        if self.drift_band_pct <= 0 or self.rebalance_band_pct <= 0:
+            raise ValueError("reserve drift/rebalance bands must be positive")
+        if self.deploy_interval_days < 1:
+            raise ValueError("reserve.deploy_interval_days must be at least 1")
+        if self.deploy_min_buy_usd <= 0 or self.deploy_min_cash_usd <= 0:
+            raise ValueError("reserve deploy thresholds must be positive")
+        if self.min_transfer_usd < 0:
             raise ValueError("reserve USD thresholds must not be negative")
         if self.withdrawal_cooldown_minutes < 0:
             raise ValueError("reserve.withdrawal_cooldown_minutes must not be negative")

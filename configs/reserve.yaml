@@ -14,17 +14,20 @@ reserve:
   enabled: true
   execution_mode_inherit: true          # follow Settings.execution_mode
   auto_rebalance: true
-  drift_band_pct: 5.0                    # rebalance when |weight - target| > this
+  drift_band_pct: 5.0                    # visual "off target" indicator + deploy priority
+  rebalance_band_pct: 12.0              # wide band that triggers a sell-side rebalance
   min_transfer_usd: 10.0
-  rebalance_min_trade_usd: 5.0
   snapshot_interval_minutes: 60
   withdrawal_cooldown_minutes: 1440      # 24h anti "drain the reserve in a panic"
   block_withdrawal_during_drawdown_guard: true
-  # Automatic profit sweep (profit ratchet)
+  # Automatic profit sweep → USDC sleeve (profit ratchet, no fee)
   sweep_enabled: true
   sweep_pct: 20.0
   sweep_interval_hours: 24
-  sweep_min_tradable_equity_usd: 50.0
+  # Deploy: USDC sleeve → hard assets, batched (never micro-buys)
+  deploy_interval_days: 7
+  deploy_min_cash_usd: 40.0
+  deploy_min_buy_usd: 5.0
   # 100% hard assets — no stablecoin sleeve (the stable ballast is the trading wallet).
   assets:
     - symbol: BTC

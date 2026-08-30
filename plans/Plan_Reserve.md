@@ -356,10 +356,10 @@ Investe `reserve_cash_usd` nei 5 asset, in batch e raramente.
    Per asset: `target$ = weight × base`, `valore_corrente$` = MTM dell'asset
    (senza cash), `gap$ = max(0, target$ − valore_corrente$)`, `gap_rel = gap$ / target$`.
 4. Ordina per **`gap_rel` desc** (tie-break: peso target desc). Scarta `gap$ = 0`.
-5. Scendendo per priorità, assegna a ogni asset `min(quota_proporzionale, gap$)` —
-   **mai più del suo gap** (niente sovrappeso). Se la fetta risulta
-   `< deploy_min_buy_usd` → l'asset **salta il giro** e la sua quota **resta cash**
-   (NON va agli altri asset).
+5. Scendendo per priorità, riempi ogni asset fino al **suo gap$** prendendo dal
+   cash rimanente (greedy, niente ripartizione proporzionale — così un gap
+   minuscolo su un asset non affama un vero sotto-peso). Se `min(gap$, cash_residuo)
+   < deploy_min_buy_usd` → l'asset **salta il giro**, il cash resta.
 6. Se nessuna fetta qualifica **e** il trigger è a tempo → tutto il cash sull'asset
    con `gap_rel` massimo se ≥ `deploy_min_buy_usd`, altrimenti lascia tutto in cash.
 7. Esegui gli acquisti. **Il cash non impiegato resta `reserve_cash_usd`** (si
@@ -416,18 +416,12 @@ essere accorpati agli endpoint `mobile_agent` esistenti — da decidere in R5.
 > `aster_spot_symbol`). Validazione: somma pesi = 100 ±0.01, simboli unici, range
 > sweep/drift.
 
-**Da fare in R2/R4:**
-- rimuovere `sweep_min_tradable_equity_usd` (superato da §7bis).
-- aggiungere i parametri **deploy** (D29): `deploy_interval_days` (7),
-  `deploy_min_cash_usd` (**40**), `deploy_min_buy_usd` (5); e `rebalance_band_pct`
-  (banda larga, es. 12) distinta da `drift_band_pct`.
-- Pattern doppio già in piedi: default in `reserve.yaml`, override utente in
-  `runtime_state` (`reserve_settings`), applicato live. Override utente:
-  `target_weights`, `auto_rebalance`, `min_transfer_usd`,
-  `withdrawal_cooldown_minutes`, `block_withdrawal_during_drawdown_guard`,
-  `sweep_enabled`, `sweep_pct`, `sweep_interval_hours`, `deploy_interval_days`,
-  `deploy_min_cash_usd`. Lista asset/indirizzi **solo** in `reserve.yaml`.
-- Indirizzi BEP20 marcati "verify" — da verificare on-chain prima di uso live.
+**R3 fatto:** `reserve.yaml` aggiornato — rimosso `sweep_min_tradable_equity_usd`
+(superato da §7bis), aggiunti `rebalance_band_pct` (12), `deploy_interval_days` (7),
+`deploy_min_cash_usd` (40), `deploy_min_buy_usd` (5). `ReserveConfig` e
+`ReserveSettings` allineati; override utente include `deploy_interval_days` e
+`deploy_min_cash_usd` (`deploy_min_buy_usd` e `rebalance_band_pct` restano
+yaml-only). Indirizzi BEP20 "verify" — da verificare prima di uso live.
 
 ---
 
@@ -594,7 +588,7 @@ che si risolvono in implementazione:
 | ~~R1~~ | **FATTO** 2026-08-30 — `configs/reserve.yaml`, `ReserveConfig`/`ReserveAssetConfig` in config.py, `schemas/reserve.py` (`ReserveSettings`), `domain/reserve/settings.py` (override runtime), `test_reserve_config.py` (12 test). Report `docs/reports/report_reserve_r1_config.md`. |
 | ~~R1b~~ | **FATTO** 2026-08-30 — `backend/scripts/aster_spot_probe.py`, report `docs/reports/report_reserve_r1b_aster_spot_probe.md`. Esito in D15: venue live = PancakeSwap per tutti e 5. |
 | ~~R2~~ | **FATTO** 2026-08-30 — `models/reserve.py` (3 modelli) + 5 colonne su `PortfolioState` + `_apply_column_migrations` + `repositories/reserve.py` (`ReserveRepository`, mutatori flush-only) + `test_reserve_persistence.py` (11 test). Report `report_reserve_r2_models.md`. |
-| R3 | `ReserveService` + `ReserveExecutor` (solo dry-run) + fallback `initial_equity` + atomicità + test unit |
+| ~~R3~~ | **FATTO** 2026-08-30 — `domain/reserve/executor.py` (sim, `live`=NotImplementedError) + `domain/reserve/service.py` (transfer_in/out, sweep, deploy §8ter greedy, rebalance, valuate, snapshot, get_view, set_frozen; fallback `initial_equity`; commit unico per operazione) + `ReserveView` schema + deploy params in config + `test_reserve_service.py` (16 test). Report `report_reserve_r3_service.md`. |
 | R4 | `GlobalView` D25 (`tradable_equity` = total − transferred_net) + risk manager + fee nei transfer + rimozione `sweep_min_tradable_equity_usd` + test |
 | R4b | Reset/archivio: `persistence/archive.py` include tabelle riserva + azzera i campi `PortfolioState` |
 | R5 | API `/agent/reserve/*` + `ReserveView` schema (incl. `reserve_fees_total_usd`, D30) + registrazione router + i18n (base EN) |

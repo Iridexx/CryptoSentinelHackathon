@@ -89,7 +89,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- ohlcv_sources.py - sorgente OHLCV pubblica separata dal provider latest: Binance klines spot con fallback CEX, conversione display USD/EUR/BTC best-effort.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
 |   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state, reserve.
-|   |   |   `-- reserve/ - dominio scheda "Bank" (piano Riserva). settings.py: load/save override runtime (`runtime_state` chiave `reserve_settings`) del sottoinsieme tunabile, default da `configs/reserve.yaml`, pattern come `mobile_agent_settings`.
+|   |   |   `-- reserve/ - dominio scheda "Bank" (piano Riserva). settings.py: override runtime (`runtime_state` chiave `reserve_settings`) del sottoinsieme tunabile, default da `configs/reserve.yaml`. executor.py (R3): ReserveExecutor simulato (buy/sell a prezzo market-data + fee modellata; ramo `live` = NotImplementedError fino a R10). service.py (R3): ReserveService — transfer_in/out (§7bis cap ai soli profitti, cooldown, blocco drawdown), run_profit_sweep (§8bis, solo cash), deploy (§8ter, greedy per gap relativo, mai < deploy_min_buy_usd), rebalance (vendita sovrappeso banda larga), valuate/snapshot, get_view (ReserveView), set_frozen; fallback initial_equity = dry_run_capital_usd; ogni operazione = un commit.
 |   |   |-- execution/ - layer esecuzione Step 4 (esteso: spot E perp astratti multi-provider, registry separati).
 |   |   |   |-- base.py - interfaccia astratta ExecutionProvider (spot) + modelli (ExecutionQuote, ExecutionProviderStatus); get_position/close_position default fail-closed per spot atomico.
 |   |   |   |-- registry.py - ExecutionProviderRegistry: selettore globale spot twak/pancakeswap, default da Settings, override persistito in RuntimeState, cambio admin-only.
@@ -168,7 +168,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- notifications.py - device token, notification request/response e status.
 |   |   |   |-- support.py - schemi profilo device, ticket, messaggi, risposte admin e cambio stato.
 |   |   |   |-- notification_prefs.py - NotificationPreferences (5 toggle spot/perp/risk/summary/critical) e NotificationPreferencesResponse con campo source (default/persisted).
-|   |   |   |-- reserve.py - ReserveSettings (sottoinsieme tunabile della riserva: pesi target, drift, sweep, cooldown, toggle), ReserveTargetWeight, ReserveSettingsResponse con source; from_config()/reconcile_with_config() per allineare l'override alla lista asset YAML.
+|   |   |   |-- reserve.py - ReserveSettings (sottoinsieme tunabile: pesi target, drift, sweep, deploy interval/soglia, cooldown, toggle), ReserveTargetWeight, ReserveSettingsResponse; from_config()/reconcile_with_config(); ReserveView/ReserveHoldingView (R3: stato completo della riserva per pane Bank/API).
 |   |   |   |-- market_data.py - response API normalizzate e selezione provider.
 |   |   |   |-- execution.py - request/response selezione provider esecuzione spot/perp, wallet execution e diagnostica RPC.
 |   |   |   |-- mobile_agent.py - schemi Step 7 per mobile settings inclusi filtro inversione mercato, modalita' stop loss Spot/Perp con lookback/buffer strutturale, margine fisso Perp opzionale, credential checks e wallet summary con balance asset non-zero.
