@@ -82,6 +82,33 @@ async def test_btc_1h_klines_caches_and_serves_stale(monkeypatch: pytest.MonkeyP
     view_routes._BTC_KLINES_CACHE.clear()
 
 
+@pytest.mark.asyncio
+async def test_btc_benchmark_aligns_reserve_snapshots_by_hourly_offset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 6 hourly candles, price +1% each step from a 100 base.
+    candles = [type("C", (), {"close": str(100 * (1.01 ** i))})() for i in range(6)]
+
+    async def _fake_klines(limit: int):
+        return candles
+
+    monkeypatch.setattr(view_routes, "_btc_1h_klines", _fake_klines)
+
+    snaps = [
+        ReserveSnapshot(user_id=USER, timestamp_utc=DAY0 + timedelta(hours=h),
+                        total_value_usd=Decimal("1"), cash_usd=Decimal("0"),
+                        cost_basis_usd=Decimal("1"), pnl_usd=Decimal("0"))
+        for h in (0, 2, 4)
+    ]
+    out = await view_routes._btc_benchmark(snaps)
+
+    assert set(out) == {s.timestamp_utc.isoformat() for s in snaps}
+    # offset 0 -> 0%, offset 2 -> +2.01%, offset 4 -> +4.06%
+    assert out[snaps[0].timestamp_utc.isoformat()] == Decimal("0")
+    assert abs(out[snaps[1].timestamp_utc.isoformat()] - Decimal("2.01")) < Decimal("0.01")
+    assert abs(out[snaps[2].timestamp_utc.isoformat()] - Decimal("4.06")) < Decimal("0.01")
+
+
 # ── GlobalView integration ──────────────────────────────────────────────────
 
 

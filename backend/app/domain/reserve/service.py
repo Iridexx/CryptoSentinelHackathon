@@ -533,9 +533,12 @@ class ReserveService:
                 for a, i in mtm.items()
             ]
         )
+        # Hour-align like PnlSnapshot so /history can line the reserve curve up
+        # with the BTC and trading benchmarks (both aligned by hourly offset).
+        ts = self._now().replace(minute=0, second=0, microsecond=0)
         return await self._repo.save_snapshot(
             ReserveSnapshot(
-                user_id=user_id, timestamp_utc=self._now(), total_value_usd=value,
+                user_id=user_id, timestamp_utc=ts, total_value_usd=value,
                 cash_usd=cash, cost_basis_usd=cost_basis, pnl_usd=value - cost_basis,
                 fees_cumulative_usd=fees, holdings_json=holdings_json,
             )
