@@ -14,6 +14,7 @@ from backend.app.api.routes import (
     notification_prefs,
     notifications,
     observability,
+    reserve,
     status,
     support,
     views,
@@ -34,3 +35,4 @@ api_router.include_router(mobile_agent.router)
 api_router.include_router(observability.router)
 api_router.include_router(aster.router)
 api_router.include_router(support.router)
+api_router.include_router(reserve.router)

@@ -40,7 +40,8 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |-- api/ - router FastAPI e dipendenze API.
 |   |   |   |-- dependencies.py - dipendenze read/admin/device token e Settings.
 |   |   |   `-- routes/ - route FastAPI.
-|   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data/execution/views/mobile agent/observability.
+|   |   |       |-- __init__.py - aggrega router health/status/admin/notifications/alerts/market data/execution/views/mobile agent/observability/support/reserve.
+|   |   |       |-- reserve.py - API scheda "Bank" (R5): GET reserve (ReserveView), /history, /settings; POST /settings (con freeze D22), /transfer (in/out), /target-weights, /rebalance, /deploy. Errori dominio -> 400 con code; prezzi non disponibili -> 503.
 |   |   |       |-- alerts.py - sincronizzazione configurazione alert e pending badge preferiti con acknowledgement; persistenza sync spostata fuori dall'event loop per evitare freeze API durante lock SQLite.
 |   |   |       |-- admin.py - endpoint admin manual heartbeat.
 |   |   |       |-- health.py - liveness/readiness/heartbeat con check reale DB (SELECT 1 + latency) da Step 5.
@@ -89,7 +90,7 @@ CryptoSentinelHackathon/ - repository CryptoSentinel + backend agente BNB Hack T
 |   |   |   |-- ohlcv_sources.py - sorgente OHLCV pubblica separata dal provider latest: Binance klines spot con fallback CEX, conversione display USD/EUR/BTC best-effort.
 |   |   |   `-- mcp/cmc.py - metadata connessione MCP ufficiale CMC senza esposizione chiavi.
 |   |   |-- domain/ - modelli dominio separati: common, spot, perp, global_state, reserve.
-|   |   |   `-- reserve/ - dominio scheda "Bank" (piano Riserva). settings.py: override runtime (`runtime_state` chiave `reserve_settings`) del sottoinsieme tunabile, default da `configs/reserve.yaml`. executor.py (R3): ReserveExecutor simulato (buy/sell a prezzo market-data + fee modellata; ramo `live` = NotImplementedError fino a R10). service.py (R3): ReserveService — transfer_in/out (§7bis cap ai soli profitti, cooldown, blocco drawdown), run_profit_sweep (§8bis, solo cash), deploy (§8ter, greedy per gap relativo, mai < deploy_min_buy_usd), rebalance (vendita sovrappeso banda larga), valuate/snapshot, get_view (ReserveView), set_frozen; fallback initial_equity = dry_run_capital_usd; ogni operazione = un commit.
+|   |   |   `-- reserve/ - dominio scheda "Bank" (piano Riserva). pricing.py (R5): fetch_reserve_prices (Binance spot ticker batch) + build_reserve_service (factory pronta per route/slow tick). settings.py: override runtime (`runtime_state` chiave `reserve_settings`) del sottoinsieme tunabile, default da `configs/reserve.yaml`. executor.py (R3): ReserveExecutor simulato (buy/sell a prezzo market-data + fee modellata; ramo `live` = NotImplementedError fino a R10). service.py (R3): ReserveService — transfer_in/out (§7bis cap ai soli profitti, cooldown, blocco drawdown), run_profit_sweep (§8bis, solo cash), deploy (§8ter, greedy per gap relativo, mai < deploy_min_buy_usd), rebalance (vendita sovrappeso banda larga), valuate/snapshot, get_view (ReserveView), set_frozen; fallback initial_equity = dry_run_capital_usd; ogni operazione = un commit.
 |   |   |-- execution/ - layer esecuzione Step 4 (esteso: spot E perp astratti multi-provider, registry separati).
 |   |   |   |-- base.py - interfaccia astratta ExecutionProvider (spot) + modelli (ExecutionQuote, ExecutionProviderStatus); get_position/close_position default fail-closed per spot atomico.
 |   |   |   |-- registry.py - ExecutionProviderRegistry: selettore globale spot twak/pancakeswap, default da Settings, override persistito in RuntimeState, cambio admin-only.

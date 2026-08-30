@@ -430,11 +430,13 @@ class ReserveService:
         from backend.app.domain.reserve.settings import save_reserve_settings
 
         current = load_reserve_settings(user_id, settings=self._settings).settings
-        updated = current.model_copy(
-            update={
+        # Re-validate through the model so the weight-sum / uniqueness checks run.
+        updated = ReserveSettings.model_validate(
+            {
+                **current.model_dump(),
                 "target_weights": [
                     {"symbol": s, "weight_pct": w} for s, w in weights.items()
-                ]
+                ],
             }
         )
         save_reserve_settings(user_id, updated, settings=self._settings)

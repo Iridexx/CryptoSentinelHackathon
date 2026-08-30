@@ -15,5 +15,13 @@
   "market_data.credits.ok": "CMC credit budget is healthy",
   "market_data.credits.warning": "CMC credit budget is below the warning threshold",
   "market_data.credits.critical": "CMC credit budget is below the critical threshold",
-  "market_data.credits.exhausted": "CMC credit budget is exhausted"
+  "market_data.credits.exhausted": "CMC credit budget is exhausted",
+  "reserve.name": "Bank · Store of Value",
+  "reserve.error.frozen": "The reserve is frozen",
+  "reserve.error.no_profit_available": "No profit above the initial capital",
+  "reserve.error.below_min_transfer": "Below the minimum transfer amount",
+  "reserve.error.cooldown": "Withdrawal cooldown is still active",
+  "reserve.error.drawdown_guard": "Withdrawals are blocked while the drawdown guard is active",
+  "reserve.error.empty": "The reserve is empty",
+  "reserve.error.price_unavailable": "Asset prices are temporarily unavailable"
 }

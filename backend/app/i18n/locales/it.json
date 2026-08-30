@@ -15,5 +15,13 @@
   "market_data.credits.ok": "Il budget crediti CMC è regolare",
   "market_data.credits.warning": "Il budget crediti CMC è sotto la soglia di avviso",
   "market_data.credits.critical": "Il budget crediti CMC è sotto la soglia critica",
-  "market_data.credits.exhausted": "Il budget crediti CMC è esaurito"
+  "market_data.credits.exhausted": "Il budget crediti CMC è esaurito",
+  "reserve.name": "Bank · Riserva di Valore",
+  "reserve.error.frozen": "La riserva è congelata",
+  "reserve.error.no_profit_available": "Nessun profitto sopra il capitale iniziale",
+  "reserve.error.below_min_transfer": "Sotto l'importo minimo di trasferimento",
+  "reserve.error.cooldown": "Il cooldown sui prelievi è ancora attivo",
+  "reserve.error.drawdown_guard": "I prelievi sono bloccati mentre il guard di drawdown è attivo",
+  "reserve.error.empty": "La riserva è vuota",
+  "reserve.error.price_unavailable": "I prezzi degli asset non sono temporaneamente disponibili"
 }
