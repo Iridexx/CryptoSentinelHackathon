@@ -1,6 +1,6 @@
 ﻿# PROJECT STRUCTURE
 
-Ultimo aggiornamento: 2026-08-16
+Ultimo aggiornamento: 2026-08-30 (scheda "Bank" / Riserva di Valore — R1→R8)
 
 Documento di riferimento per revisione esterna. Viene aggiornato al termine di ogni step operativo.
 
@@ -418,6 +418,7 @@ Ordine di precedenza runtime: variabili ambiente e `.env` > `configs/instance.ya
 | Step 8 - Dashboard Web Unificata | Parziale | Progetto Vite separato su porta 5176 con Overview giudici, Spot/Global/Perp, dettaglio trade con grafico e margine, System Health, Data Coverage, Wallet con selezione wallet/chain/provider/RPC, kill switch, log viewer admin-only, settings agente, onboarding, monitor prezzi ed export JSON; build locale e test mirati passati, resta verifica end-to-end con backend reale e token operativi. |
 | Step 9 - Testing | Parziale | Debiti test Step 6/7/8 coperti, daily Spot heartbeat 20:00-23:30 UTC implementato nel loop lento, script registrazione competizione predisposto, watchlist AI operativa, warm-up OHLCV, migrazione nuovo wallet TWAK, fix leverage perp storico e analytics dry-run consolidati; ultima suite documentata: 127 passed. |
 | Step 10 - Deploy VPS | Parziale | Aggiunti template systemd, nginx, script install/backup/healthcheck e runbook VPS; deploy reale, DNS/TLS, segreti runtime e verifica 24/7 restano da eseguire sul server. |
+| Scheda "Bank" / Riserva di Valore (R1→R8) | Completato (simulato) | Sotto-portafoglio in hard asset (BTC/ETH/BNB/SOL/TRX) alimentato dai soli profitti (§7bis: cap `max(0, tradable_equity − initial_equity)`), modello a due fasi sweep→deploy con saldo USDC di transito, deploy greedy per gap relativo (mai < $5), tracking fee (D30), riserva esclusa dal guard drawdown ma inclusa nel P&L totale (D25), reset/archivio, API `/agent/reserve/*`, automatismi nel slow tick, benchmark + volatility budget, frontend (pulsante Bank, BankPane, Setup › Bank, GlobalPane, toggle equity). Piano `plans/Plan_Reserve.md` (D1–D31). Esecuzione **live = R10 futuro** (`ReserveExecutor.live` = NotImplementedError). 70 test dedicati. |
 
 ## 5. DECISIONI ARCHITETTURALI
 
