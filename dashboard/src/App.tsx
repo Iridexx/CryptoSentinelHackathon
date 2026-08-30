@@ -1220,7 +1220,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Asset', 'Size', 'Entry', 'Price Now', 'SL', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
+                columns={['Time', 'Asset', 'Size', 'Entry', 'Price Now', 'SL', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
@@ -1231,6 +1231,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
                   const pnl = Number(item.pnl_unrealized);
                   const pct = item.pnl_pct ?? '+0.00';
                   return [
+                    shortDate(item.opened_at),
                     item.asset,
                     item.size,
                     fmtPrice(item.entry_price),
@@ -1283,7 +1284,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Asset', 'Side', 'Leverage', 'Entry', 'Now', 'SL', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status']}
+                columns={['Time', 'Asset', 'Side', 'Leverage', 'Entry', 'Now', 'SL', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status']}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
@@ -1295,6 +1296,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
                   const pnl = Number(item.pnl_unrealized);
                   const pct = item.pnl_pct ?? '0.00';
                   return [
+                    shortDate(item.opened_at),
                     item.asset,
                     <span className={item.side === 'long' ? 'ok-text' : 'error-text'}>{item.side}</span>,
                     item.leverage ? `${item.leverage}x` : '-',
