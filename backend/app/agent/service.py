@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from functools import lru_cache
 from uuid import uuid4
@@ -48,14 +48,10 @@ from backend.app.execution.spot_fees import compute_spot_costs
 
 logger = get_logger("agent.service")
 
-DAILY_TRADE_CHECK_TIME_UTC = time(20, 0, tzinfo=UTC)
-DAILY_TRADE_RETRY_UNTIL_UTC = time(23, 30, tzinfo=UTC)
 # Stablecoin: niente scansione spot (volatilita' ~0, nessun segnale sensato).
 SPOT_EXCLUDED_STABLECOINS = frozenset(
     {"USDT", "USDC", "DAI", "USD1", "TUSD", "FDUSD", "BUSD", "USDP", "USDD", "GUSD", "PYUSD"}
 )
-HEARTBEAT_TRADE_ASSET = "ETH"
-HEARTBEAT_TRADE_PRICE_USD_FALLBACK = Decimal("1")
 # Distanza trailing-stop per il perp (coerente col livello generato dal segnale, 1%).
 PERP_TRAILING_DISTANCE_PCT = Decimal("1.0")
 # TTL cache del regime mercato (BTC 15m): evita un fetch BTC per ogni asset dello scan.
@@ -2211,11 +2207,10 @@ class AgentService:
             logger.warning("reserve_snapshot_failed", error=str(exc))
 
     async def slow_tick(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
-        """Slow scanner tick plus the hard daily Spot trade heartbeat."""
+        """Slow scanner tick."""
 
         heartbeat.beat("agent_slow_tick")
         _now = now or datetime.now(UTC)
-        trade_heartbeat = await self._daily_trade_heartbeat(session, now=_now)
         markets = _active_markets(self._ms.markets_enabled)
         # Aggiorna il regime mercato una volta per ciclo, così il flag (e il messaggio
         # in app) riflette sempre lo stato reale anche se nessun segnale prova a entrare.
@@ -2269,12 +2264,11 @@ class AgentService:
         except Exception as exc:
             logger.warning("daily_summary_failed", error=str(exc))
         return {
-            "status": "idle" if trade_heartbeat["status"] != "executed" else "heartbeat_trade_executed",
+            "status": "idle",
             "reason": "watchlist_empty" if not selected_assets else "watchlist_scanned",
             "markets_enabled": self._ms.markets_enabled,
             "watchlist": selected_assets,
             "scanner_results": [_scanner_summary(result) for result in scanner_results],
-            "daily_trade_heartbeat": trade_heartbeat,
         }
 
     _FATAL_SCAN_ERRORS = (
@@ -2424,21 +2418,24 @@ class AgentService:
         return decision
 
     async def _in_cooldown(self, session: AsyncSession, signal: dict, now: datetime) -> bool:
-        """True se esiste un trade recente sull'asset entro la finestra di cooldown."""
+        """True se esiste un trade recente sull'asset entro la finestra di cooldown.
+
+        Il cooldown e' PER MERCATO, coerente col dedup: un trade perp non blocca un
+        ingresso spot sullo stesso asset (motori indipendenti).
+        """
         ms = self._ms
         market = signal.get("market", "spot")
-        minutes = ms.perp_cooldown_minutes if market == "perp" else ms.spot_cooldown_minutes
+        is_perp = market == "perp"
+        minutes = ms.perp_cooldown_minutes if is_perp else ms.spot_cooldown_minutes
         asset = signal.get("asset")
         if minutes <= 0 or not asset:
             return False
         user_id = str(self.settings.default_user_id)
         asset = str(asset)
-        spot_ts = await SpotTradeRepository(session).last_timestamp_for_asset(user_id, asset)
-        perp_ts = await PerpTradeRepository(session).last_timestamp_for_asset(user_id, asset)
-        candidates = [t for t in (spot_ts, perp_ts) if t is not None]
-        if not candidates:
+        repo = PerpTradeRepository(session) if is_perp else SpotTradeRepository(session)
+        last_ts = await repo.last_timestamp_for_asset(user_id, asset)
+        if last_ts is None:
             return False
-        last_ts = max(candidates)
         if last_ts.tzinfo is None:
             last_ts = last_ts.replace(tzinfo=UTC)
         return (now - last_ts) < timedelta(minutes=minutes)
@@ -2733,130 +2730,6 @@ class AgentService:
         )
         result = await self.perp_registry.active.open_position(order)
         return {"status": result.status.value, "provider": self.perp_registry.active_name.value, "reason": result.reason}
-
-    async def _daily_trade_heartbeat(self, session: AsyncSession, *, now: datetime | None = None) -> dict:
-        now = now or datetime.now(UTC)
-        if now.tzinfo is None:
-            now = now.replace(tzinfo=UTC)
-        now = now.astimezone(UTC)
-        user_id = str(self.settings.default_user_id)
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        trades_today = await SpotTradeRepository(session).count_since(user_id, since=day_start)
-        if trades_today >= self.settings.minimum_trades_per_day:
-            return {
-                "status": "satisfied",
-                "trades_today": trades_today,
-                "check_after_utc": DAILY_TRADE_CHECK_TIME_UTC.isoformat(),
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        current_time = now.timetz()
-        if current_time < DAILY_TRADE_CHECK_TIME_UTC:
-            return {
-                "status": "waiting",
-                "trades_today": trades_today,
-                "check_after_utc": DAILY_TRADE_CHECK_TIME_UTC.isoformat(),
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        if current_time > DAILY_TRADE_RETRY_UNTIL_UTC:
-            return {
-                "status": "missed",
-                "trades_today": trades_today,
-                "reason": "daily_trade_retry_window_closed",
-                "check_after_utc": DAILY_TRADE_CHECK_TIME_UTC.isoformat(),
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        if self.risk.kill_switch != KillSwitchState.RUNNING:
-            return {
-                "status": "blocked",
-                "trades_today": trades_today,
-                "reason": self.risk.kill_switch.value,
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        # Dedup: se ETH e' gia' in posizione (spot o perp), non forzare un secondo trade.
-        open_spot = await SpotPositionRepository(session).open_for_user(user_id)
-        open_perp = await PerpPositionRepository(session).open_for_user(user_id)
-        if any(p.asset.upper() == HEARTBEAT_TRADE_ASSET for p in (*open_spot, *open_perp)):
-            return {
-                "status": "satisfied",
-                "trades_today": trades_today,
-                "reason": "asset_already_open",
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        # Prezzo live via feed riusato; SL/TP derivati dal segnale momentum reale.
-        heartbeat_price = HEARTBEAT_TRADE_PRICE_USD_FALLBACK
-        try:
-            ticker = await self.price_feed.fetch_prices(
-                symbols=[f"{HEARTBEAT_TRADE_ASSET}USDT"], market="spot"
-            )
-            heartbeat_price = ticker.get(f"{HEARTBEAT_TRADE_ASSET}USDT", heartbeat_price)
-        except Exception:
-            pass
-        sl = tp1 = tp2 = trailing = None
-        try:
-            momentum = await self.spot_signal.evaluate(_scanner_payload(HEARTBEAT_TRADE_ASSET, "spot"))
-            if momentum.get("price"):
-                heartbeat_price = Decimal(str(momentum["price"]))
-            sl = _optional_decimal(momentum.get("stop_loss"))
-            tp1 = _optional_decimal(momentum.get("take_profit_1"))
-            tp2 = _optional_decimal(momentum.get("take_profit_2"))
-            trailing = _optional_decimal(momentum.get("trailing_stop"))
-        except Exception:
-            pass
-        # Fallback: livelli di default se il segnale non li ha forniti (es. storico insufficiente).
-        if sl is None:
-            sl = heartbeat_price * Decimal("0.98")
-        if tp1 is None:
-            tp1 = heartbeat_price * Decimal("1.03")
-        if tp2 is None:
-            tp2 = heartbeat_price * Decimal("1.06")
-        if trailing is None:
-            trailing = heartbeat_price * Decimal("0.98")
-        signal = {
-            "signal_id": f"heartbeat_{now.date().isoformat()}",
-            "market": "spot",
-            "asset": HEARTBEAT_TRADE_ASSET,
-            "action": "enter_long",
-            "quality": 0.86,
-            "confidence": 0.86,
-            "price": heartbeat_price,
-            "stop_loss": sl,
-            "take_profit_1": tp1,
-            "take_profit_2": tp2,
-            "trailing_stop": trailing,
-            "quote_equity": Decimal(str(self.settings.dry_run_capital_usd)),
-            "heartbeat_trade": True,
-        }
-        heartbeat_trade_quote_usd = max(Decimal(str(self.settings.min_trade_size_usd)), Decimal("1"))
-        if self._ms.execution_mode == "dry_run":
-            execution = await self._simulate_trade(session, signal, heartbeat_trade_quote_usd)
-            return {
-                "status": "executed",
-                "mode": "dry_run",
-                "trades_today_before": trades_today,
-                "execution": execution,
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        from_asset = getattr(self.settings, "heartbeat_trade_from_asset", None)
-        to_asset = getattr(self.settings, "heartbeat_trade_to_asset", None)
-        amount_in_atomic = getattr(self.settings, "heartbeat_trade_amount_in_atomic", None)
-        if not from_asset or not to_asset or amount_in_atomic is None:
-            return {
-                "status": "blocked",
-                "trades_today": trades_today,
-                "reason": "heartbeat_trade_live_route_not_configured",
-                "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-            }
-        execution = await self._execute_spot(
-            {**signal, "from_asset": from_asset, "to_asset": to_asset, "amount_in_atomic": amount_in_atomic},
-            heartbeat_trade_quote_usd,
-        )
-        return {
-            "status": "executed" if execution.get("status") in {"prepared", "confirmed"} else "blocked",
-            "mode": self._ms.execution_mode,
-            "trades_today_before": trades_today,
-            "execution": execution,
-            "retry_until_utc": DAILY_TRADE_RETRY_UNTIL_UTC.isoformat(),
-        }
 
     # ------------------------------------------------------------------
     # Integrazione notifiche agente

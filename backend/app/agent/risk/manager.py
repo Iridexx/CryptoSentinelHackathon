@@ -113,10 +113,15 @@ class RiskManager:
         if intent.liquidity_usd is not None and intent.liquidity_usd < liquidity_floor:
             return RiskDecision(False, "liquidity_guard")
 
-        # Dedup per-asset: una sola posizione aperta per asset (spot o perp).
+        # Dedup per-asset PER MERCATO: una sola posizione aperta per asset sullo stesso
+        # mercato. Spot e perp sono indipendenti — lo stesso asset puo' essere in
+        # posizione su entrambi (motori diversi, tesi diverse, rischio gia' limitato
+        # dai tetti di esposizione per mercato).
         asset_upper = intent.asset.upper()
-        open_assets = {p.asset.upper() for p in open_spot_positions} | {p.asset.upper() for p in open_perp_positions}
-        if asset_upper in open_assets:
+        same_market_positions = (
+            open_perp_positions if intent.market == "perp" else open_spot_positions
+        )
+        if asset_upper in {p.asset.upper() for p in same_market_positions}:
             return RiskDecision(False, "asset_already_open")
 
         # Limiti posizioni e size separati per mercato

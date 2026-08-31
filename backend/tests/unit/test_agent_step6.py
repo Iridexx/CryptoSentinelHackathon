@@ -420,6 +420,28 @@ def test_risk_engine_dedup_per_asset() -> None:
     assert decision.reason == "asset_already_open"
 
 
+def test_risk_engine_dedup_is_per_market_not_cross_market() -> None:
+    # Il dedup e' PER MERCATO: una posizione perp aperta non blocca lo spot sullo
+    # stesso asset (e viceversa). Spot e perp sono motori indipendenti.
+    decision = RiskManager(settings(risk_max_open_positions=5)).evaluate(
+        _intent(asset="BTC", market="spot"),
+        portfolio=_portfolio(),
+        open_spot_positions=[],
+        open_perp_positions=[SimpleNamespace(asset="BTC")],
+    )
+
+    assert decision.reason != "asset_already_open"
+
+    decision = RiskManager(settings(risk_max_open_positions=5)).evaluate(
+        _intent(asset="BTC", market="perp"),
+        portfolio=_portfolio(),
+        open_spot_positions=[_spot_position(1, asset="BTC")],
+        open_perp_positions=[],
+    )
+
+    assert decision.reason != "asset_already_open"
+
+
 def test_risk_engine_drawdown_cap_positive_convention() -> None:
     # drawdown_pct e' positivo (entita' del calo); cap negativo -15 => blocca a >= 15.
     decision = RiskManager(settings()).evaluate(
@@ -933,27 +955,6 @@ async def test_perp_fixed_margin_remains_final_margin_when_brain_reduces(db) -> 
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_triggers_at_20utc(db) -> None:
-    service = AgentService(
-        settings(eligible_tokens=["ETH"] + [f"TOKEN_{i}" for i in range(148)]),
-        spot_registry=SimpleNamespace(),
-        perp_registry=SimpleNamespace(),
-    )
-    now = datetime(2026, 6, 22, 20, 0, tzinfo=UTC)
-    async with get_session_factory()() as session:
-        result = await service.slow_tick(session, now=now)
-        trades = await SpotTradeRepository(session).list_for_user(str(USER_ID))
-
-    heartbeat_result = result["daily_trade_heartbeat"]
-    assert heartbeat_result["status"] == "executed"
-    assert heartbeat_result["mode"] == "dry_run"
-    assert len(trades) == 1
-    assert trades[0].asset == "ETH"
-    assert trades[0].notes == "dry_run_step6"
-    assert trades[0].amount_quote == Decimal("7")
-
-
-@pytest.mark.asyncio
 async def test_build_spot_swap_params_maps_token() -> None:
     service = AgentService(
         settings(
@@ -1296,23 +1297,6 @@ async def test_spot_trailing_active_from_start(db) -> None:
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_skips_when_eth_already_open(db) -> None:
-    service = AgentService(
-        settings(eligible_tokens=["ETH"] + [f"TOKEN_{i}" for i in range(148)]),
-        spot_registry=SimpleNamespace(),
-        perp_registry=SimpleNamespace(),
-    )
-    now = datetime(2026, 6, 22, 20, 0, tzinfo=UTC)
-    async with get_session_factory()() as session:
-        await SpotPositionRepository(session).save(_spot_position(0, asset="ETH"))
-        result = await service.slow_tick(session, now=now)
-
-    heartbeat_result = result["daily_trade_heartbeat"]
-    assert heartbeat_result["status"] == "satisfied"
-    assert heartbeat_result["reason"] == "asset_already_open"
-
-
-@pytest.mark.asyncio
 async def test_slow_tick_rolls_back_after_asset_error_and_continues(monkeypatch) -> None:
     cfg = settings(
         markets_enabled="spot",
@@ -1346,11 +1330,7 @@ async def test_slow_tick_rolls_back_after_asset_error_and_continues(monkeypatch)
     async def no_op(*args, **kwargs):
         return None
 
-    async def fake_daily_trade_heartbeat(*args, **kwargs):
-        return {"status": "skipped", "reason": "test"}
-
     monkeypatch.setattr("backend.app.agent.service.selected_spot_watchlist", lambda _settings: ["ETH", "BTC"])
-    monkeypatch.setattr(service, "_daily_trade_heartbeat", fake_daily_trade_heartbeat)
     monkeypatch.setattr(service, "_spot_market_regime", no_op)
     monkeypatch.setattr(service, "evaluate_spot", fake_evaluate_spot)
     monkeypatch.setattr(service, "_snapshot_portfolio_hourly", no_op)
