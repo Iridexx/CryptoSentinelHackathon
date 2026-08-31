@@ -165,6 +165,15 @@ def settings(**overrides):
         cmc_api_key=None,
     )
     base.update(overrides)
+    # config.py mappa la chiave YAML `market_reversal_filter_enabled` delle sezioni
+    # spot/perp sui campi per-mercato `spot_`/`perp_`, che sono quelli letti dal codice.
+    # Qui li deriviamo dalla chiave generica quando non passati esplicitamente, cosi'
+    # un override generico continua a valere per entrambi i mercati.
+    for market in ("spot", "perp"):
+        base.setdefault(
+            f"{market}_market_reversal_filter_enabled",
+            base["market_reversal_filter_enabled"],
+        )
     return SimpleNamespace(**base)
 
 
@@ -586,14 +595,33 @@ async def test_meta_controller_fallback_on_timeout(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_meta_controller_reduce() -> None:
-    decision, _usage = await ClaudeMetaController(settings()).decide(
+async def test_meta_controller_local_fallback_bands() -> None:
+    """Fallback deterministico (senza API key): due sole bande, approve/skip.
+
+    La banda intermedia 'reduce' e' stata rimossa di proposito in 1ddbf41
+    ("brain threshold alignment"), che ha anche portato la soglia di approvazione
+    da 0.85 a 0.60. Qui si fissa il comportamento attuale.
+    """
+    brain = ClaudeMetaController(settings())
+
+    decision, _usage = await brain.decide(
         signal={"quality": 0.7},
         risk={"allowed": True, "reason": "risk_approved"},
     )
+    assert decision.action == "approve"
+    assert decision.confidence == Decimal("0.7")
 
-    assert decision.action == "reduce"
-    assert decision.size_multiplier == Decimal("0.5")
+    decision, _usage = await brain.decide(
+        signal={"quality": 0.5},
+        risk={"allowed": True, "reason": "risk_approved"},
+    )
+    assert decision.action == "skip"
+
+    decision, _usage = await brain.decide(
+        signal={"quality": 0.9},
+        risk={"allowed": False, "reason": "liquidity_guard"},
+    )
+    assert decision.action == "block"
 
 
 def test_kill_switch_soft_stop() -> None:
@@ -984,6 +1012,13 @@ async def test_build_spot_swap_params_skips_when_unmapped_and_no_resolver() -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="Funzionalita' mai implementata: AgentService non accetta token_resolver e "
+    "_resolve_token_address legge solo spot_token_map. Il test descrive il cablaggio "
+    "del resolver CMC, che e' la decisione aperta Q1 di plans/Plan_NuovoSpot.md: "
+    "risolvere gli indirizzi per ticker e' rischioso (un ticker mappa piu' token BEP20, "
+    "vedi docstring di venue_availability.py). Togliere lo skip quando Q1 sara' decisa."
+)
 async def test_build_spot_swap_params_resolves_via_cmc() -> None:
     # Niente mappa statica: indirizzi risolti dal resolver CMC iniettato.
     class FakeResolver:
@@ -1821,6 +1856,7 @@ def _perp_pos(pid: str, current: Decimal, *, stop: Decimal, leverage: int = 4) -
         max_price=None,
         funding_accrued_usd=Decimal("0"),
         tp1_reached=False,
+        venue="dry_run",
         status="open",
         opened_at=now,
         updated_at=now,
@@ -2426,6 +2462,7 @@ async def test_perp_long_trailing_above_entry_labeled_trailing_stop(db) -> None:
         max_price=Decimal("120"),
         funding_accrued_usd=Decimal("0"),
         tp1_reached=False,
+        venue="dry_run",
         status="open",
         opened_at=now,
         updated_at=now,
@@ -2464,6 +2501,7 @@ async def test_perp_short_trailing_below_entry_labeled_trailing_stop(db) -> None
         max_price=Decimal("88"),
         funding_accrued_usd=Decimal("0"),
         tp1_reached=False,
+        venue="dry_run",
         status="open",
         opened_at=now,
         updated_at=now,

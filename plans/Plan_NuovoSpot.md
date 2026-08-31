@@ -403,8 +403,6 @@ filtro volatilità spot (`max_stop_distance_pct`), trailing dopo TP1, Smart Stop
 Loss, modello protezione/uscite. Il bug della candela in formazione resta valido
 (V6).
 
----
-
 ### 5.6 Schema DB — campi da aggiungere
 
 `SpotPosition` (`backend/app/persistence/models/positions.py`) ha già:
@@ -433,24 +431,25 @@ massimo a 10 giorni, che è una finestra mobile di mercato, non uno stato di pos
 aggiunte col pattern `upgrade_schema` già usato altrove nel progetto (vedi
 `Plan_Reserve.md` D26), oppure serializzate in un campo JSON di stato.
 
-### 5.7 Stato della base di codice (verificato 2026-08-31)
+### 5.7 Stato della base di codice — ✅ RISOLTO (2026-08-31)
 
-`backend/tests/unit/test_agent_step6.py` ha **11 test rossi già in HEAD**, verificati
-eseguendo la suite su un worktree pulito del commit `8dd41ac`. Non dipendono da
-questo piano né dalle modifiche già fatte.
+La suite aveva **15 test rossi già in HEAD** (11 in `test_agent_step6.py`, 3 nel
+golden lifecycle, 1 nel support API), verificati su un worktree pulito del commit
+`8dd41ac`. **Ora è verde: 384 passed, 2 skipped.**
 
-| Gruppo | Causa apparente |
-|---|---|
-| 4 × `market_reversal_filter_*` | il test costruisce le impostazioni con `SimpleNamespace` privo di `spot_market_reversal_filter_enabled` |
-| 3 × trailing perp | comportamento atteso divergente + `venue missing or not registered` |
-| `test_build_spot_swap_params_resolves_via_cmc` | attende un kwarg `token_resolver` mai implementato (vedi Q1) |
-| `test_meta_controller_reduce` | il brain risponde `approve` dove il test attende `reduce` |
-| 2 × `dry_run_persists_*` | da diagnosticare |
+| Gruppo | Causa reale | Rimedio |
+|---|---|---|
+| 4 × `market_reversal_filter_*` + 1 × `dry_run_persists` | il fixture `settings()` forniva solo la chiave generica `market_reversal_filter_enabled`, mentre il codice legge i campi per-mercato `spot_`/`perp_` che `config.py` deriva dalla stessa chiave YAML | il fixture ora deriva i due campi per-mercato |
+| 1 × `dry_run_persists_decision_and_trade` | **bug di prodotto**: `_ms` non propagava `spot_max_stop_distance_filter_enabled` / `_pct`, quindi si usavano i default dello schema e `configs/strategy_spot.yaml` era **ignorato** per quei due parametri | i due campi ora vengono passati in `_ms` |
+| 3 × trailing perp + 3 × golden lifecycle | le `PerpPosition` di test non impostavano `venue`, quindi `resolve_position_venue` non risolveva e la posizione non si chiudeva mai | aggiunto `venue="dry_run"` |
+| 2 × golden lifecycle | i test descrivevano un **design mai implementato**: ratchet a chiusure parziali scalate (con un campo `ratchet_state` inesistente). Il Profit Lock reale è uno *stop che sale a gradini* e chiude tutto il residuo in un colpo, riempiendo al livello | test riallineati al design reale, con i valori economici esatti congelati |
+| `test_meta_controller_reduce` | la banda `reduce` è stata **rimossa di proposito** in `1ddbf41` ("brain threshold alignment"), che ha anche portato la soglia di approvazione da 0.85 a 0.60 | riscritto come `test_meta_controller_local_fallback_bands`, che fissa le due bande attuali |
+| `test_build_spot_swap_params_resolves_via_cmc` | il resolver CMC è stato **rimosso di proposito** in `2734ebb` ("remove CMC resolver"); il test è rimasto orfano | messo in `skip` con motivazione, in attesa di **Q1** |
+| `test_support_ticket_thread_and_admin_status_flow` | **bug di prodotto**: confronto fra datetime naive (riletti da SQLite) e aware in `_ticket_summary` | normalizzazione a UTC prima del confronto |
 
-⚠️ **Conseguenza operativa per F10**: la suite non è oggi un segnale di regressione
-affidabile. O si sistemano questi 11 prima di iniziare, oppure si fissa la baseline
-("11 rossi noti") e si verifica solo che il numero non cresca. La prima opzione è
-preferibile: senza una suite verde, il dry-run resta l'unico controllo, ed è lento.
+**Due scoperte che riguardano direttamente Q1**: il resolver CMC non è "mai stato
+collegato", è stato **rimosso deliberatamente** (`2734ebb`). Prima di ricablarlo va
+capito perché fu tolto — il rischio noto è che un ticker mappi più token BEP20.
 
 Nota di processo: durante questa sessione il repository ha ricevuto **modifiche
 concorrenti** da fuori (perp/uscite, config, frontend). Chi esegue il piano dovrebbe
@@ -472,7 +471,7 @@ verificare `git status` prima di iniziare.
 | **F8** | **Uscite strutturali**: priorità §4.5, uscite 2 e 4 **sospese a scala aperta** (N1, N3), media 20g daily, chiusura di regime N4, debolezza RS | F7b |
 | **F8b** | **Guardia di esecuzione**: confronto prezzo Binance / quote PancakeSwap, `max_price_divergence_pct` (N6) | F1, F8 |
 | **F9** | **Vincoli di portafoglio**: max 5 posizioni, max 2 prime tranche/24h, ordinamento per ranking (V7) | F7 |
-| **F0** | **Baseline verde**: sistemare gli 11 test rossi già in HEAD (§5.7), o almeno fissarli come baseline nota | — |
+| ~~**F0**~~ | ~~Baseline verde~~ ✅ **FATTO (2026-08-31)**: suite a 384 passed / 2 skipped (§5.7) | — |
 | **F10** | **Dry-run** a size ridotta: verifica che i trigger scattino quando devono. Priorità di verifica: N1 (l'ingresso non viene espulso subito) e N2 (quante scale restano incompiute) | tutte |
 | **F11** | **Pulizia**: rimozione codice vecchio, aggiornamento `docs/Strategia_Spot.md` e `docs/Uscite_Spot.md`, memorie obsolete | F10 |
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.app.api.dependencies import AdminAccessDep, ReadAccessDep, SessionDep
@@ -70,12 +72,22 @@ def _message_response(message) -> SupportMessageResponse:
     )
 
 
+def _as_aware(value: datetime | None) -> datetime | None:
+    """SQLite non conserva il fuso: i valori riletti dal DB tornano naive, mentre
+    quelli appena scritti in sessione sono aware. Confrontarli direttamente solleva
+    TypeError, quindi si normalizza tutto a UTC prima del confronto."""
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=UTC)
+
+
 def _ticket_summary(ticket, *, viewer: str = "user") -> SupportTicketSummary:
-    seen_at = ticket.admin_last_seen_at if viewer == "admin" else ticket.user_last_seen_at
+    seen_at = _as_aware(ticket.admin_last_seen_at if viewer == "admin" else ticket.user_last_seen_at)
     other_sender = "user" if viewer == "admin" else "admin"
     messages = getattr(ticket, "messages", []) or []
     has_unread = any(
-        m.sender_type == other_sender and (seen_at is None or m.created_at > seen_at)
+        m.sender_type == other_sender
+        and (seen_at is None or _as_aware(m.created_at) > seen_at)
         for m in messages
     )
     return SupportTicketSummary(

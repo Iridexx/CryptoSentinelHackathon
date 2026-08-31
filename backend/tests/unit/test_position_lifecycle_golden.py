@@ -2,7 +2,7 @@
 
 Freezes TODAY's economic behaviour of a complete cycle:
 
-    entry -> TP1 -> ratchet step 1 -> step 2 -> step 3 -> final exit
+    entry -> TP1 -> lo stop sale a gradini (step 1/2/3) -> uscita sullo stop
 
 so that the upcoming execution-layer refactor (venue abstraction, ExecutionResult,
 router) can be proven NOT to have changed the strategy. Existing tests cover single
@@ -10,7 +10,7 @@ cases ("this price triggers the stop"); none covers the economic equivalence of 
 whole cycle, which is exactly what a refactor can silently break.
 
 Checked per cycle: closed quantity at every tranche, residual size, execution prices,
-per-tranche PnL, total PnL, tp1_reached, ratchet_state, resulting trailing stop and
+per-tranche PnL, total PnL, tp1_reached, resulting trailing stop and
 close reasons. Both LONG and SHORT, to catch sign errors while execution is touched.
 
 If a value here changes, the refactor altered the strategy: stop and investigate.
@@ -104,6 +104,9 @@ def _position(side: str) -> PerpPosition:
         opening_fee_usd=Decimal("0"),
         slippage_usd=Decimal("0"),
         funding_accrued_usd=Decimal("0"),
+        # Senza venue, resolve_position_venue non risolve e la chiusura non avviene:
+        # la posizione resterebbe aperta e il lifecycle non verrebbe esercitato.
+        venue="dry_run",
         status="open",
         opened_at=now,
         updated_at=now,
@@ -149,7 +152,6 @@ async def _run_cycle(side: str) -> dict:
                     "status": pos.status,
                     "tp1_reached": pos.tp1_reached,
                     "trailing_stop": str(pos.trailing_stop) if pos.trailing_stop else None,
-                    "ratchet_state": pos.ratchet_state,
                 }
             )
         trades = await PerpTradeRepository(session).list_for_user(str(USER_ID))
@@ -180,14 +182,24 @@ async def test_golden_lifecycle_long(db) -> None:
     """LONG: entry 100 -> TP1 110 -> ratchet 114.5/117/119 -> exit 114.5."""
     result = await _run_cycle("long")
 
-    # TP1 closes half the position; the ratchet then closes 25/50/80% of the residual,
-    # cumulatively, so the residual after the third step is 20% of 5 = 1.
+    # Il Profit Lock implementato è uno STOP CHE SALE A GRADINI, non una serie di
+    # chiusure parziali: i gradini spostano soltanto lo stop (112.5 -> 115 -> 117) e
+    # quando il prezzo ci rientra chiude TUTTO il residuo in un colpo, riempiendo AL
+    # LIVELLO dello stop. Quindi il ciclo produce 2 tranche, non 4.
     sizes = [t["size"] for t in result["tranches"]]
-    assert len(result["tranches"]) >= 4, f"attese >=4 chiusure, ottenute {len(sizes)}: {sizes}"
+    assert len(result["tranches"]) == 2, f"attese 2 chiusure, ottenute {len(sizes)}: {sizes}"
 
-    first = result["tranches"][0]
+    first, last = result["tranches"][0], result["tranches"][1]
     assert Decimal(first["size"]) == Decimal("5"), f"TP1 deve chiudere metà posizione: {first}"
     assert Decimal(first["price"]) == TP1_LONG, f"TP1 deve riempire al livello: {first}"
+    assert first["reason"] == "take_profit_1_partial", first
+    assert Decimal(first["pnl"]) == Decimal("50"), first
+
+    # Terzo gradino: progress 0.9 -> lock 0.70 -> stop = 110 + 0.7*10 = 117.
+    assert Decimal(last["size"]) == Decimal("5"), last
+    assert Decimal(last["price"]) == Decimal("117"), f"deve riempire al livello del lock: {last}"
+    assert last["reason"] == "profit_lock", last
+    assert Decimal(last["pnl"]) == Decimal("85"), last
 
     # The whole cycle must end flat and profitable (every exit is above the entry).
     final_snap = result["snapshots"][-1]
@@ -205,11 +217,19 @@ async def test_golden_lifecycle_short(db) -> None:
     result = await _run_cycle("short")
 
     sizes = [t["size"] for t in result["tranches"]]
-    assert len(result["tranches"]) >= 4, f"attese >=4 chiusure, ottenute {len(sizes)}: {sizes}"
+    assert len(result["tranches"]) == 2, f"attese 2 chiusure, ottenute {len(sizes)}: {sizes}"
 
-    first = result["tranches"][0]
+    first, last = result["tranches"][0], result["tranches"][1]
     assert Decimal(first["size"]) == Decimal("5"), f"TP1 deve chiudere metà posizione: {first}"
     assert Decimal(first["price"]) == _mirror(TP1_LONG), f"TP1 deve riempire al livello: {first}"
+    assert first["reason"] == "take_profit_1_partial", first
+    assert Decimal(first["pnl"]) == Decimal("50"), first
+
+    # Speculare del long: stop del terzo gradino a 90 - 0.7*10 = 83.
+    assert Decimal(last["size"]) == Decimal("5"), last
+    assert Decimal(last["price"]) == Decimal("83"), f"deve riempire al livello del lock: {last}"
+    assert last["reason"] == "profit_lock", last
+    assert Decimal(last["pnl"]) == Decimal("85"), last
 
     final_snap = result["snapshots"][-1]
     assert final_snap["status"] == "closed", f"la posizione deve chiudersi: {final_snap}"

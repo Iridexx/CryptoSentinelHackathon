@@ -201,6 +201,14 @@ class AgentService:
             spot_tp1_close_pct=50.0,
             spot_time_stop_hours=self.settings.spot_time_stop_hours,
             spot_fee_mode="all",
+            # Filtro volatilita' assoluta: senza questi due il fallback usava i default
+            # dello schema e configs/strategy_spot.yaml restava ignorato.
+            spot_max_stop_distance_filter_enabled=getattr(
+                self.settings, "spot_max_stop_distance_filter_enabled", True
+            ),
+            spot_max_stop_distance_pct=getattr(
+                self.settings, "spot_max_stop_distance_pct", 4.0
+            ),
             # Perp strategy
             perp_direction_mode=self.settings.perp_direction_mode,
             perp_min_leverage=self.settings.perp_min_leverage,
