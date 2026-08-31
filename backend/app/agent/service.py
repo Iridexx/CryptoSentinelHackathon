@@ -159,6 +159,11 @@ class AgentService:
             perp_trend_shock_natr_percentile=getattr(self.settings, "perp_trend_shock_natr_percentile", 90.0),
             perp_trend_shock_volume_threshold=getattr(self.settings, "perp_trend_shock_volume_threshold", 2.0),
             perp_trend_shock_recovery_confirmations=getattr(self.settings, "perp_trend_shock_recovery_confirmations", 3),
+            perp_regime_derisk_enabled=getattr(self.settings, "perp_regime_derisk_enabled", True),
+            perp_regime_derisk_fraction=getattr(self.settings, "perp_regime_derisk_fraction", 50.0),
+            perp_regime_derisk_trail_mult=getattr(self.settings, "perp_regime_derisk_trail_mult", 0.6),
+            perp_regime_derisk_freeze_rebuy=getattr(self.settings, "perp_regime_derisk_freeze_rebuy", True),
+            perp_regime_derisk_require_contrarian=getattr(self.settings, "perp_regime_derisk_require_contrarian", True),
             perp_smart_sl_enabled=getattr(self.settings, "perp_smart_sl_enabled", True),
             perp_smart_sl_l1_frac=getattr(self.settings, "perp_smart_sl_l1_frac", 0.333),
             perp_smart_sl_l2_frac=getattr(self.settings, "perp_smart_sl_l2_frac", 0.666),
@@ -662,8 +667,12 @@ class AgentService:
             new_state = "NORMAL"
             new_rc = 0
 
-        if new_state != prev_state or new_rc != prev_rc:
-            self._set_trend_shock_persisted(new_state, new_rc)
+        # Persisti sempre: il de-risk di regime legge questo record dal ciclo di
+        # protezione (ogni 5s) e ha bisogno anche di direzione/score, non solo
+        # dello stato, per decidere quali posizioni aperte sono contro il regime.
+        self._set_trend_shock_persisted(
+            new_state, new_rc, direction=direction, score=score, adx=adx_value,
+        )
 
         value = {
             "state": new_state,
@@ -721,16 +730,47 @@ class AgentService:
         except (ValueError, AttributeError):
             return 0
 
-    def _set_trend_shock_persisted(self, state: str, recovery_count: int = 0) -> None:
+    def _set_trend_shock_persisted(
+        self,
+        state: str,
+        recovery_count: int = 0,
+        *,
+        direction: str | None = None,
+        score: int | None = None,
+        adx: float | None = None,
+    ) -> None:
         set_runtime_value(
             str(self.settings.default_user_id),
             "btc_trend_shock",
             json.dumps({
                 "state": state,
                 "recovery_count": recovery_count,
+                "direction": direction,
+                "score": score,
+                "adx": round(adx, 2) if adx is not None else None,
                 "updated_at": datetime.now(UTC).isoformat(),
             }),
         )
+
+    def _trend_shock_snapshot(self) -> dict:
+        """Stato del filtro shock letto dal record persistito (nessun fetch di rete).
+
+        Usato dal ciclo di protezione delle posizioni aperte, che gira ogni pochi
+        secondi e non puo' permettersi il calcolo completo del filtro.
+        """
+        raw = get_runtime_value(str(self.settings.default_user_id), "btc_trend_shock")
+        if not raw:
+            return {"state": "NORMAL", "direction": None, "score": None, "adx": None}
+        try:
+            data = json.loads(raw)
+        except (ValueError, AttributeError):
+            return {"state": "NORMAL", "direction": None, "score": None, "adx": None}
+        return {
+            "state": data.get("state", "NORMAL"),
+            "direction": data.get("direction"),
+            "score": data.get("score"),
+            "adx": data.get("adx"),
+        }
 
     async def evaluate_perp(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.perp_signal.evaluate(payload)
@@ -1225,14 +1265,23 @@ class AgentService:
         now: datetime,
         *,
         partial: bool = False,
+        fraction: Decimal | None = None,
     ) -> Decimal:
-        """Chiude (totalmente o al 50% per TP1) una posizione perp; crea trade di chiusura con pnl_usd."""
+        """Chiude una posizione perp (totale, oppure parziale) e crea il trade con pnl_usd.
+
+        `partial=True` senza `fraction` e' la chiusura da TP1 (usa perp_tp1_close_pct e
+        marca tp1_reached). Con `fraction` chiude quella quota esatta senza toccare
+        tp1_reached: serve al de-risk di regime, che non e' un take-profit.
+        """
         is_long = pos.side == "long"
         pnl_per_unit = (exit_price - pos.entry_price) if is_long else (pos.entry_price - exit_price)
         # Fee pura = opening_fee_usd escludendo lo slippage già incluso nell'entry_price.
         fee_only = (pos.opening_fee_usd or Decimal("0")) - (pos.slippage_usd or Decimal("0"))
 
-        f_req = Decimal(str(self._ms.perp_tp1_close_pct)) / Decimal("100") if partial else Decimal("1")
+        if partial:
+            f_req = fraction if fraction is not None else Decimal(str(self._ms.perp_tp1_close_pct)) / Decimal("100")
+        else:
+            f_req = Decimal("1")
         requested_qty = (pos.size * f_req).quantize(Decimal("0.000001")) if partial else pos.size
         venue = get_perp_venue_router().resolve_position_venue(pos)
         if venue is None:
@@ -1258,13 +1307,16 @@ class AgentService:
             return Decimal("0")
 
         if partial:
-            f = Decimal(str(self._ms.perp_tp1_close_pct)) / Decimal("100")
+            f = f_req
             close_size = (pos.size * f).quantize(Decimal("0.000001"))
             funding_share = pos.funding_accrued_usd * f
             raw_pnl = pnl_per_unit * close_size
             pnl = raw_pnl - fee_only * f + funding_share
             pos.size = pos.size - close_size
-            pos.tp1_reached = True
+            if fraction is None:
+                # Solo la chiusura da TP1 marca il livello raggiunto; il de-risk di
+                # regime riduce la size senza far avanzare la macchina a stati delle uscite.
+                pos.tp1_reached = True
             remaining = Decimal("1") - f
             pos.pnl_unrealized = pnl_per_unit * pos.size - fee_only * remaining + pos.funding_accrued_usd * remaining
             # Scala la fee residua sulla posizione: il close finale userà solo la quota rimasta
@@ -1321,8 +1373,14 @@ class AgentService:
         price: Decimal,
         ms: AgentMobileSettings,
         now: datetime,
+        *,
+        freeze_rebuy: bool = False,
     ) -> None:
-        """Smart Stop Loss: vende parzialmente su livelli intermedi, ricompra su rimbalzo."""
+        """Smart Stop Loss: vende parzialmente su livelli intermedi, ricompra su rimbalzo.
+
+        `freeze_rebuy` sospende i soli rientri: in regime BTC avverso ricomprare
+        dentro il crollo aggiunge esposizione proprio quando va ridotta.
+        """
         if pos.initial_stop_loss is None:
             return
         is_long = pos.side == "long"
@@ -1451,7 +1509,7 @@ class AgentService:
                         lv["confirm_since"] = None
                         changed = True
 
-            elif lv["status"] == "sold" and rebuy_mode == "delta" and lv["reentries"] < ms.perp_smart_sl_max_reentries:
+            elif lv["status"] == "sold" and rebuy_mode == "delta" and not freeze_rebuy and lv["reentries"] < ms.perp_smart_sl_max_reentries:
                 sp = Decimal(lv["sell_price"])
                 if is_long:
                     rebuy_price = sp + delta_dist
@@ -1525,7 +1583,7 @@ class AgentService:
                         changed = True
 
         # --- Rebuy above_entry: ricompra tutto quando prezzo supera original_entry ---
-        if rebuy_mode == "above_entry" and global_reentries < ms.perp_smart_sl_max_reentries:
+        if rebuy_mode == "above_entry" and not freeze_rebuy and global_reentries < ms.perp_smart_sl_max_reentries:
             sold_levels = [i for i in range(2) if state["levels"][i]["status"] == "sold"]
             if sold_levels:
                 above = (is_long and price >= orig_entry) or (not is_long and price <= orig_entry)
@@ -1824,6 +1882,16 @@ class AgentService:
         prot_mode = (getattr(ms, "perp_protection_mode", None) or "trailing")
         profit_lock_steps = list(getattr(ms, "perp_profit_lock_steps", None) or [])
 
+        # Regime BTC letto una volta per ciclo (record persistito, nessun fetch):
+        # il filtro shock blocca le nuove aperture, il de-risk qui sotto agisce
+        # sull'esposizione gia' in essere.
+        derisk_on = getattr(ms, "perp_regime_derisk_enabled", False)
+        shock_state, shock_direction = "NORMAL", None
+        if derisk_on:
+            _shock = self._trend_shock_snapshot()
+            shock_state, shock_direction = _shock["state"], _shock["direction"]
+        regime_blocked = derisk_on and shock_state == "BLOCKED"
+
         for pos in perp_positions:
             if pos.status != "open":
                 continue
@@ -1849,6 +1917,48 @@ class AgentService:
                     _ssl_suspended = _ssl_st.get("protection_suspended", False)
                 except (ValueError, KeyError):
                     pass
+
+            # ── De-risk di regime sulle posizioni aperte ──────────────────────
+            # Una posizione e' "contraria" se lo shock BTC e' attivo nella direzione
+            # opposta al suo lato (long in regime bearish, short in regime bullish).
+            # Con require_contrarian=False vale per ogni posizione aperta.
+            regime_contrarian = regime_blocked and (
+                not ms.perp_regime_derisk_require_contrarian
+                or (shock_direction == "bearish" and is_long)
+                or (shock_direction == "bullish" and not is_long)
+            )
+            derisk_frac = Decimal(str(ms.perp_regime_derisk_fraction)) / Decimal("100")
+            if regime_contrarian and derisk_frac > 0 and not _regime_derisk_done(pos):
+                _size_before = pos.size
+                _margin = pos.entry_price * pos.size / Decimal(max(int(pos.leverage or 1), 1))
+                _pnl = await self._close_perp_position(
+                    session, pos, price, "regime_derisk", now,
+                    partial=True, fraction=derisk_frac,
+                )
+                # Marca il flag solo se la riduzione e' andata a buon fine: se la venue
+                # non era raggiungibile la posizione e' ancora intera e va ritentata.
+                if pos.size < _size_before:
+                    _mark_regime_derisk_done(pos)
+                    session.add(pos)
+                    logger.info(
+                        "regime_derisk_partial_close",
+                        asset=pos.asset, side=pos.side, fraction=float(derisk_frac),
+                        shock_direction=shock_direction, price=float(price), pnl_usd=float(_pnl),
+                    )
+                    asyncio.create_task(
+                        notifier.notify_trade_closed(
+                            user_id=user_id,
+                            trade_id=f"cls_{pos.position_id}",
+                            asset=pos.asset,
+                            market="perp",
+                            pnl_usd=_pnl,
+                            pnl_pct=_pnl / _margin * 100 if _margin > 0 else Decimal("0"),
+                            close_reason="regime_derisk",
+                            is_dry_run=ms.execution_mode == "dry_run",
+                        )
+                    )
+                if pos.size <= 0:
+                    continue
 
             # Protezione ATR — solo se l'ATR è stato congelato all'ingresso (trade nuovi).
             if atr_v and atr_v > 0 and not _ssl_suspended:
@@ -1899,6 +2009,9 @@ class AgentService:
                 tp1_cap = Decimal(str(self.settings.perp_tp1_atr_multiplier))
                 if mult > tp1_cap:
                     mult = tp1_cap
+                # Regime avverso: stop molto piu' stretto sulla size residua.
+                if regime_contrarian:
+                    mult = mult * Decimal(str(ms.perp_regime_derisk_trail_mult))
                 pnl_pct = Decimal(str(ms.perp_trailing_pnl_pct))
                 if is_long:
                     trail_atr = extreme - atr_v * mult
@@ -1912,8 +2025,21 @@ class AgentService:
                     # Il trailing si attiva SOLO quando supera l'entry: non deve mai
                     # sostituire lo stop originale con uno stop più stretto ma ancora
                     # in perdita (causa chiusure precoci senza dare spazio alla posizione).
-                    if ms.perp_trailing_enabled and trail >= pos.entry_price and (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
-                        pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
+                    # In regime avverso il trailing puo' agganciare anche sotto l'entry
+                    # (posizione mai andata in profitto): senza questo l'unica difesa
+                    # resta lo stop iniziale, cioe' la perdita piena.
+                    if regime_contrarian and trail < pos.entry_price:
+                        # Non piazzarlo oltre il prezzo corrente: chiuderebbe tutto
+                        # il residuo al tick dopo, annullando il de-risk parziale.
+                        cap = price - atr_v * Decimal("0.15")
+                        if trail > cap:
+                            trail = cap
+                    allow = trail >= pos.entry_price or regime_contrarian
+                    if ms.perp_trailing_enabled and allow and (pos.stop_loss is None or trail > pos.stop_loss) and (pos.trailing_stop is None or trail > pos.trailing_stop):
+                        pos.trailing_stop = trail; pos.updated_at = now
+                        if regime_contrarian:
+                            _mark_regime_trail(pos)
+                        session.add(pos)
                 else:
                     trail_atr = extreme + atr_v * mult
                     if pnl_pct > 0:
@@ -1922,8 +2048,16 @@ class AgentService:
                     else:
                         trail = trail_atr
                     # Stesso guard per gli short: trail deve essere <= entry (in profitto).
-                    if ms.perp_trailing_enabled and trail <= pos.entry_price and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
-                        pos.trailing_stop = trail; pos.updated_at = now; session.add(pos)
+                    if regime_contrarian and trail > pos.entry_price:
+                        cap = price + atr_v * Decimal("0.15")
+                        if trail < cap:
+                            trail = cap
+                    allow = trail <= pos.entry_price or regime_contrarian
+                    if ms.perp_trailing_enabled and allow and (pos.stop_loss is None or trail < pos.stop_loss) and (pos.trailing_stop is None or trail < pos.trailing_stop):
+                        pos.trailing_stop = trail; pos.updated_at = now
+                        if regime_contrarian:
+                            _mark_regime_trail(pos)
+                        session.add(pos)
 
             # ── Profit Lock Ratchet: dopo TP1, lo stop sale a gradini verso TP2. ──
             if (
@@ -1958,7 +2092,10 @@ class AgentService:
 
             # ── Smart Stop Loss (vende parzialmente prima del SL classico) ──
             if ms.perp_smart_sl_enabled and pos.initial_stop_loss is not None:
-                await self._process_smart_sl(session, pos, price, ms, now)
+                await self._process_smart_sl(
+                    session, pos, price, ms, now,
+                    freeze_rebuy=regime_contrarian and ms.perp_regime_derisk_freeze_rebuy,
+                )
 
             # ── Uscite — trailing/profit_lock (se più protettivo) → stop → TP2 → TP1 → time ──
             if (ms.perp_trailing_enabled or prot_mode == "profit_lock") and pos.trailing_stop is not None and (
@@ -1967,7 +2104,14 @@ class AgentService:
                 or (not is_long and pos.trailing_stop < pos.stop_loss)
             ):
                 if (is_long and price <= pos.trailing_stop) or (not is_long and price >= pos.trailing_stop):
-                    reason = "profit_lock" if prot_mode == "profit_lock" else "trailing_stop"
+                    if prot_mode == "profit_lock":
+                        reason = "profit_lock"
+                    elif _regime_trail_active(pos):
+                        # Lo stop che chiude e' quello stretto dallo shock BTC: va
+                        # riconoscibile nello storico, non confuso con un trailing normale.
+                        reason = "regime_derisk_stop"
+                    else:
+                        reason = "trailing_stop"
 
             if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
@@ -2887,6 +3031,8 @@ def _close_purpose(reason: str) -> str:
         "profit_lock": "ratchet",
         "ratchet_step": "ratchet",
         "time_stop": "close",
+        "regime_derisk": "close",
+        "regime_derisk_stop": "stop_loss",
     }.get(reason, "close")
 
 
@@ -2906,7 +3052,7 @@ def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
         # Breakeven comes from stop_loss moved to entry/costs. Trailing keeps
         # reason="trailing_stop", even when the trailing level is profitable.
         level = pos.stop_loss
-    elif reason in ("trailing_stop", "profit_lock"):
+    elif reason in ("trailing_stop", "profit_lock", "regime_derisk_stop"):
         level = pos.trailing_stop
     elif reason == "take_profit_1":
         level = pos.take_profit_1
@@ -2915,6 +3061,54 @@ def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:
     if level is None:
         return market_price
     return Decimal(str(level))
+
+
+def _regime_derisk_done(pos) -> bool:
+    """True se il de-risk di regime ha gia' ridotto questa posizione.
+
+    Il flag vive dentro smart_sl_state (colonna JSON gia' esistente): il de-risk
+    e' una-tantum per posizione, cosi' un regime che oscilla BLOCKED/NORMAL non
+    la erode a fette ripetute.
+    """
+    if not pos.smart_sl_state:
+        return False
+    try:
+        return bool(json.loads(pos.smart_sl_state).get("regime_derisk_done", False))
+    except (ValueError, AttributeError):
+        return False
+
+
+def _regime_trail_active(pos) -> bool:
+    """True se il trailing corrente e' quello stretto piazzato dal de-risk di regime.
+
+    Serve a etichettare l'uscita: una chiusura causata dallo shock BTC non deve
+    comparire nello storico come un normale trailing stop.
+    """
+    if not pos.smart_sl_state:
+        return False
+    try:
+        return bool(json.loads(pos.smart_sl_state).get("regime_trail", False))
+    except (ValueError, AttributeError):
+        return False
+
+
+def _mark_regime_trail(pos) -> None:
+    try:
+        state = json.loads(pos.smart_sl_state) if pos.smart_sl_state else {}
+    except (ValueError, AttributeError):
+        state = {}
+    if not state.get("regime_trail"):
+        state["regime_trail"] = True
+        pos.smart_sl_state = json.dumps(state)
+
+
+def _mark_regime_derisk_done(pos) -> None:
+    try:
+        state = json.loads(pos.smart_sl_state) if pos.smart_sl_state else {}
+    except (ValueError, AttributeError):
+        state = {}
+    state["regime_derisk_done"] = True
+    pos.smart_sl_state = json.dumps(state)
 
 
 def _perp_trailing_mult(

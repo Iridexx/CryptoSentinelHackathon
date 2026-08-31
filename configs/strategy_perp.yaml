@@ -52,6 +52,14 @@ perp:
   trend_shock_natr_percentile: 90     # NATR percentile >= soglia -> +1
   trend_shock_volume_threshold: 2.0   # relative volume >= soglia -> +1
   trend_shock_recovery_confirmations: 3  # check consecutivi score<=1 per tornare NORMAL
+  # De-risk di regime: agisce sulle posizioni GIA' APERTE quando lo shock BTC
+  # scatta contro di loro (long con DI- dominante / short con DI+ dominante).
+  # Il guard sopra blocca solo le nuove aperture: questo protegge l'esposizione.
+  regime_derisk_enabled: true
+  regime_derisk_fraction: 50          # % della posizione chiusa al primo BLOCKED contrario
+  regime_derisk_trail_mult: 0.6       # moltiplicatore ATR del trailing stretto (vs quello normale)
+  regime_derisk_freeze_rebuy: true    # sospende i rebuy dello smart SL finche' il regime e' BLOCCATO
+  regime_derisk_require_contrarian: true  # false = de-riska ogni posizione, non solo quelle contro il regime
   # Smart Stop Loss: uscita scalata su 3 livelli con rebuy su rimbalzo
   smart_sl_enabled: true
   smart_sl_l1_frac: 0.333            # L1 = 33.3% della distanza entry→SL

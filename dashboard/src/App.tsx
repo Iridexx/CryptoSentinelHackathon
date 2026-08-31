@@ -166,6 +166,11 @@ const settingFields = [
   'perp_trend_shock_natr_percentile',
   'perp_trend_shock_volume_threshold',
   'perp_trend_shock_recovery_confirmations',
+  'perp_regime_derisk_enabled',
+  'perp_regime_derisk_fraction',
+  'perp_regime_derisk_trail_mult',
+  'perp_regime_derisk_freeze_rebuy',
+  'perp_regime_derisk_require_contrarian',
 ];
 
 const AUTO_REFRESH_MS = 45_000;
@@ -2698,6 +2703,11 @@ const SETTING_LABELS: Record<string, string> = {
   perp_trend_shock_natr_percentile: 'Shock BTC — NATR percentile',
   perp_trend_shock_volume_threshold: 'Shock BTC — Volume threshold',
   perp_trend_shock_recovery_confirmations: 'Shock BTC — Recovery confirmations',
+  perp_regime_derisk_enabled: 'De-risk di regime (posizioni aperte)',
+  perp_regime_derisk_fraction: 'De-risk — % chiusa al primo blocco',
+  perp_regime_derisk_trail_mult: 'De-risk — stretta dello stop (×ATR)',
+  perp_regime_derisk_freeze_rebuy: 'De-risk — congela i rebuy smart SL',
+  perp_regime_derisk_require_contrarian: 'De-risk — solo posizioni contro il regime',
 };
 
 function SettingsPanel({
@@ -2893,6 +2903,8 @@ function shortPositionId(value?: string | null): string {
   return value.replace(/^pos_/, '').slice(0, 8);
 }
 
+// Allineata alla mappa dell'app (AgentTab.tsx): ogni motivo di chiusura prodotto
+// dal backend ha qui la sua etichetta, altrimenti la tabella mostra il valore grezzo.
 const CLOSE_REASON_LABELS: Record<string, string> = {
   stop_loss: 'Stop Loss',
   breakeven: 'Breakeven',
@@ -2900,6 +2912,15 @@ const CLOSE_REASON_LABELS: Record<string, string> = {
   take_profit_2: 'Take Profit 2',
   trailing_stop: 'Trailing Stop',
   time_stop: 'Time Stop',
+  time_stop_atr: 'Time Stop (ATR)',
+  profit_lock: 'Profit Lock',
+  smart_sl_sell_l1: 'Smart SL Sell L1',
+  smart_sl_sell_l2: 'Smart SL Sell L2',
+  smart_sl_rebuy_l1: 'Smart SL Rebuy L1',
+  smart_sl_rebuy_l2: 'Smart SL Rebuy L2',
+  smart_sl_rebuy_all: 'Smart SL Rebuy All',
+  regime_derisk: 'Shock BTC — De-risk',
+  regime_derisk_stop: 'Shock BTC — Stop',
 };
 
 function TradeHistoryTable({

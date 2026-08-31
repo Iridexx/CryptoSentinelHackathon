@@ -274,6 +274,11 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "trend_shock_natr_percentile": "perp_trend_shock_natr_percentile",
         "trend_shock_volume_threshold": "perp_trend_shock_volume_threshold",
         "trend_shock_recovery_confirmations": "perp_trend_shock_recovery_confirmations",
+        "regime_derisk_enabled": "perp_regime_derisk_enabled",
+        "regime_derisk_fraction": "perp_regime_derisk_fraction",
+        "regime_derisk_trail_mult": "perp_regime_derisk_trail_mult",
+        "regime_derisk_freeze_rebuy": "perp_regime_derisk_freeze_rebuy",
+        "regime_derisk_require_contrarian": "perp_regime_derisk_require_contrarian",
         "smart_sl_enabled": "perp_smart_sl_enabled",
         "smart_sl_l1_frac": "perp_smart_sl_l1_frac",
         "smart_sl_l2_frac": "perp_smart_sl_l2_frac",
@@ -785,6 +790,12 @@ class Settings(BaseSettings):
     perp_trend_shock_natr_percentile: float = Field(default=90.0, alias="PERP_TREND_SHOCK_NATR_PERCENTILE")
     perp_trend_shock_volume_threshold: float = Field(default=2.0, alias="PERP_TREND_SHOCK_VOLUME_THRESHOLD")
     perp_trend_shock_recovery_confirmations: int = Field(default=3, alias="PERP_TREND_SHOCK_RECOVERY_CONFIRMATIONS")
+    # De-risk di regime sulle posizioni aperte
+    perp_regime_derisk_enabled: bool = Field(default=True, alias="PERP_REGIME_DERISK_ENABLED")
+    perp_regime_derisk_fraction: float = Field(default=50.0, alias="PERP_REGIME_DERISK_FRACTION")
+    perp_regime_derisk_trail_mult: float = Field(default=0.6, alias="PERP_REGIME_DERISK_TRAIL_MULT")
+    perp_regime_derisk_freeze_rebuy: bool = Field(default=True, alias="PERP_REGIME_DERISK_FREEZE_REBUY")
+    perp_regime_derisk_require_contrarian: bool = Field(default=True, alias="PERP_REGIME_DERISK_REQUIRE_CONTRARIAN")
     # Smart Stop Loss
     perp_smart_sl_enabled: bool = Field(default=True, alias="PERP_SMART_SL_ENABLED")
     perp_smart_sl_l1_frac: float = Field(default=0.333, alias="PERP_SMART_SL_L1_FRAC")

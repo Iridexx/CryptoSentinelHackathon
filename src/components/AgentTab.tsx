@@ -149,6 +149,11 @@ const defaultSettings: AgentMobileSettings = {
   perp_trend_shock_natr_percentile: 90,
   perp_trend_shock_volume_threshold: 2.0,
   perp_trend_shock_recovery_confirmations: 3,
+  perp_regime_derisk_enabled: true,
+  perp_regime_derisk_fraction: 50,
+  perp_regime_derisk_trail_mult: 0.6,
+  perp_regime_derisk_freeze_rebuy: true,
+  perp_regime_derisk_require_contrarian: true,
   perp_smart_sl_enabled: true,
   perp_smart_sl_l1_frac: 0.333,
   perp_smart_sl_l2_frac: 0.666,
@@ -722,12 +727,15 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   take_profit_2: { label: 'Take Profit 2', className: 'text-accent-green' },
   trailing_stop: { label: 'Trailing Stop', className: 'text-accent-green' },
   time_stop: { label: 'Time Stop', className: 'text-gray-300' },
+  time_stop_atr: { label: 'Time Stop (ATR)', className: 'text-gray-300' },
   smart_sl_sell_l1: { label: 'Smart SL Sell L1', className: 'text-amber-400' },
   smart_sl_sell_l2: { label: 'Smart SL Sell L2', className: 'text-amber-400' },
   smart_sl_rebuy_l1: { label: 'Smart SL Rebuy L1', className: 'text-sky-400' },
   smart_sl_rebuy_l2: { label: 'Smart SL Rebuy L2', className: 'text-sky-400' },
   smart_sl_rebuy_all: { label: 'Smart SL Rebuy All', className: 'text-sky-400' },
   profit_lock: { label: 'Profit Lock', className: 'text-accent-green' },
+  regime_derisk: { label: 'Shock BTC — De-risk', className: 'text-amber-400' },
+  regime_derisk_stop: { label: 'Shock BTC — Stop', className: 'text-accent-red' },
 };
 
 const TradeHistoryList: FC<{
