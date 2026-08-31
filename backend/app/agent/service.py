@@ -162,6 +162,9 @@ class AgentService:
             perp_trend_shock_natr_percentile=getattr(self.settings, "perp_trend_shock_natr_percentile", 90.0),
             perp_trend_shock_volume_threshold=getattr(self.settings, "perp_trend_shock_volume_threshold", 2.0),
             perp_trend_shock_recovery_confirmations=getattr(self.settings, "perp_trend_shock_recovery_confirmations", 3),
+            perp_trend_shock_return_enabled=getattr(self.settings, "perp_trend_shock_return_enabled", True),
+            perp_trend_shock_return_lookback_minutes=getattr(self.settings, "perp_trend_shock_return_lookback_minutes", 30),
+            perp_trend_shock_return_threshold_pct=getattr(self.settings, "perp_trend_shock_return_threshold_pct", 1.5),
             perp_regime_derisk_enabled=getattr(self.settings, "perp_regime_derisk_enabled", True),
             perp_regime_derisk_fraction=getattr(self.settings, "perp_regime_derisk_fraction", 50.0),
             perp_regime_derisk_trail_mult=getattr(self.settings, "perp_regime_derisk_trail_mult", 0.6),
@@ -642,16 +645,41 @@ class AgentService:
         candles_5m_closed = candles_5m[:-1] if len(candles_5m) > 2 else candles_5m
         rel_vol = calc_relative_volume(candles_5m_closed, lookback=BTC_TREND_SHOCK_5M_VOL_LOOKBACK)
 
+        # Quarta gamba: movimento di prezzo in ASSOLUTO sulla finestra recente.
+        # Le altre tre sono auto-referenziali — un percentile spara per costruzione una
+        # frazione fissa del tempo, e le medie mobili di volume e ATR si adattano al
+        # regime — quindi in un crollo prolungato si "abituano" e smettono di segnalare.
+        # Qui l'ultima candela 5m in formazione e' voluta: il suo close e' il prezzo
+        # corrente, e usare solo candele chiuse aggiungerebbe fino a 5 minuti di ritardo
+        # proprio alla gamba che serve a reagire in fretta (il volume, che invece
+        # sarebbe parziale, resta calcolato sulle chiuse).
+        return_pct = None
+        if ms.perp_trend_shock_return_enabled:
+            bars_back = max(1, int(ms.perp_trend_shock_return_lookback_minutes) // 5)
+            if len(candles_5m) > bars_back:
+                ref_close = candles_5m[-1 - bars_back].close
+                if ref_close > 0:
+                    return_pct = float((candles_5m[-1].close - ref_close) / ref_close * 100)
+
         score = 0
         adx_triggered = adx_value is not None and adx_value >= adx_threshold
         natr_triggered = natr_pct is not None and natr_pct >= natr_pct_threshold
         vol_triggered = rel_vol is not None and rel_vol >= vol_threshold
+        # Il segno non conta: la gamba misura la violenza del movimento, non la
+        # direzione — quella e' compito del reversal filter in ingresso e dei DI
+        # per il de-risk sulle posizioni aperte.
+        return_triggered = (
+            return_pct is not None
+            and abs(return_pct) >= ms.perp_trend_shock_return_threshold_pct
+        )
 
         if adx_triggered:
             score += 1
         if natr_triggered:
             score += 1
         if vol_triggered:
+            score += 1
+        if return_triggered:
             score += 1
 
         direction = None
@@ -699,6 +727,8 @@ class AgentService:
             "natr": round(natr_current, 4) if natr_current is not None else None,
             "natr_percentile": round(natr_pct, 1) if natr_pct is not None else None,
             "relative_volume": round(rel_vol, 2) if rel_vol is not None else None,
+            "return_pct": round(return_pct, 2) if return_pct is not None else None,
+            "return_triggered": return_triggered,
             "adx_triggered": adx_triggered,
             "natr_triggered": natr_triggered,
             "vol_triggered": vol_triggered,
@@ -714,13 +744,14 @@ class AgentService:
                 "btc_global_regime_filter_blocked",
                 adx=value["adx"], di_plus=value["di_plus"], di_minus=value["di_minus"],
                 direction=direction, natr_percentile=value["natr_percentile"],
-                relative_volume=value["relative_volume"], score=score,
+                relative_volume=value["relative_volume"], return_pct=value["return_pct"],
+                score=score,
             )
         elif new_state == "NORMAL" and prev_state in ("BLOCKED", "RECOVERING"):
             logger.info(
                 "btc_global_regime_filter_recovered",
                 adx=value["adx"], natr_percentile=value["natr_percentile"],
-                relative_volume=value["relative_volume"],
+                relative_volume=value["relative_volume"], return_pct=value["return_pct"],
             )
 
         self._trend_shock_cache = {"at": now, "value": value}
@@ -821,6 +852,7 @@ class AgentService:
                     adx=trend_shock.get("adx"),
                     natr_percentile=trend_shock.get("natr_percentile"),
                     relative_volume=trend_shock.get("relative_volume"),
+                    return_pct=trend_shock.get("return_pct"),
                     entry_price=signal.get("price"),
                     stop_loss=signal.get("stop_loss"),
                     take_profit_1=signal.get("take_profit_1"),

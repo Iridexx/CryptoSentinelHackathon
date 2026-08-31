@@ -387,6 +387,9 @@ export interface AgentMobileSettings {
   perp_trend_shock_natr_percentile: number;
   perp_trend_shock_volume_threshold: number;
   perp_trend_shock_recovery_confirmations: number;
+  perp_trend_shock_return_enabled: boolean;
+  perp_trend_shock_return_lookback_minutes: number;
+  perp_trend_shock_return_threshold_pct: number;
   perp_regime_derisk_enabled: boolean;
   perp_regime_derisk_fraction: number;
   perp_regime_derisk_trail_mult: number;

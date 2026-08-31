@@ -274,6 +274,9 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "trend_shock_natr_percentile": "perp_trend_shock_natr_percentile",
         "trend_shock_volume_threshold": "perp_trend_shock_volume_threshold",
         "trend_shock_recovery_confirmations": "perp_trend_shock_recovery_confirmations",
+        "trend_shock_return_enabled": "perp_trend_shock_return_enabled",
+        "trend_shock_return_lookback_minutes": "perp_trend_shock_return_lookback_minutes",
+        "trend_shock_return_threshold_pct": "perp_trend_shock_return_threshold_pct",
         "regime_derisk_enabled": "perp_regime_derisk_enabled",
         "regime_derisk_fraction": "perp_regime_derisk_fraction",
         "regime_derisk_trail_mult": "perp_regime_derisk_trail_mult",
@@ -786,10 +789,13 @@ class Settings(BaseSettings):
     perp_volume_profile_candle_minutes: int = Field(default=5, alias="PERP_VOLUME_PROFILE_CANDLE_MINUTES")
     # Filtro shock BTC perp
     perp_trend_shock_enabled: bool = Field(default=True, alias="PERP_TREND_SHOCK_ENABLED")
-    perp_trend_shock_adx_threshold: float = Field(default=25.0, alias="PERP_TREND_SHOCK_ADX_THRESHOLD")
-    perp_trend_shock_natr_percentile: float = Field(default=90.0, alias="PERP_TREND_SHOCK_NATR_PERCENTILE")
+    perp_trend_shock_adx_threshold: float = Field(default=30.0, alias="PERP_TREND_SHOCK_ADX_THRESHOLD")
+    perp_trend_shock_natr_percentile: float = Field(default=95.0, alias="PERP_TREND_SHOCK_NATR_PERCENTILE")
     perp_trend_shock_volume_threshold: float = Field(default=2.0, alias="PERP_TREND_SHOCK_VOLUME_THRESHOLD")
     perp_trend_shock_recovery_confirmations: int = Field(default=3, alias="PERP_TREND_SHOCK_RECOVERY_CONFIRMATIONS")
+    perp_trend_shock_return_enabled: bool = Field(default=True, alias="PERP_TREND_SHOCK_RETURN_ENABLED")
+    perp_trend_shock_return_lookback_minutes: int = Field(default=30, alias="PERP_TREND_SHOCK_RETURN_LOOKBACK_MINUTES")
+    perp_trend_shock_return_threshold_pct: float = Field(default=1.5, alias="PERP_TREND_SHOCK_RETURN_THRESHOLD_PCT")
     # De-risk di regime sulle posizioni aperte
     perp_regime_derisk_enabled: bool = Field(default=True, alias="PERP_REGIME_DERISK_ENABLED")
     perp_regime_derisk_fraction: float = Field(default=50.0, alias="PERP_REGIME_DERISK_FRACTION")

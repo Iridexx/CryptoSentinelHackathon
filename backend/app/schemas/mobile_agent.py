@@ -41,10 +41,13 @@ class AgentMobileSettings(BaseModel):
     perp_structural_stop_buffer_pct: float = Field(default=1.10, ge=0.0, le=20.0)
     # Filtro shock BTC perp
     perp_trend_shock_enabled: bool = True
-    perp_trend_shock_adx_threshold: float = Field(default=25.0, ge=10.0, le=60.0)
-    perp_trend_shock_natr_percentile: float = Field(default=90.0, ge=50.0, le=99.0)
+    perp_trend_shock_adx_threshold: float = Field(default=30.0, ge=10.0, le=60.0)
+    perp_trend_shock_natr_percentile: float = Field(default=95.0, ge=50.0, le=99.0)
     perp_trend_shock_volume_threshold: float = Field(default=2.0, ge=1.0, le=10.0)
     perp_trend_shock_recovery_confirmations: int = Field(default=3, ge=1, le=10)
+    perp_trend_shock_return_enabled: bool = True
+    perp_trend_shock_return_lookback_minutes: int = Field(default=30, ge=5, le=240)
+    perp_trend_shock_return_threshold_pct: float = Field(default=1.5, ge=0.1, le=20.0)
     # De-risk di regime sulle posizioni aperte
     perp_regime_derisk_enabled: bool = True
     perp_regime_derisk_fraction: float = Field(default=50.0, ge=0.0, le=100.0)
