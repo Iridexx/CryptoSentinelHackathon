@@ -154,6 +154,9 @@ class AgentService:
             perp_fixed_margin_usd=50.0,
             spot_time_stop_enabled=getattr(self.settings, "spot_time_stop_enabled", False),
             perp_time_stop_enabled=getattr(self.settings, "perp_time_stop_enabled", False),
+            spot_market_reversal_filter_enabled=getattr(self.settings, "spot_market_reversal_filter_enabled", True),
+            perp_market_reversal_filter_enabled=getattr(self.settings, "perp_market_reversal_filter_enabled", True),
+            spot_market_regime_filter_enabled=getattr(self.settings, "spot_market_regime_filter_enabled", True),
             perp_trend_shock_enabled=getattr(self.settings, "perp_trend_shock_enabled", True),
             perp_trend_shock_adx_threshold=getattr(self.settings, "perp_trend_shock_adx_threshold", 25.0),
             perp_trend_shock_natr_percentile=getattr(self.settings, "perp_trend_shock_natr_percentile", 90.0),
@@ -364,7 +367,7 @@ class AgentService:
                 signal["action"] = "skip"
                 signal["reason"] = "market_risk_off"
                 signal.setdefault("components", {})["market_regime"] = regime
-            elif self.settings.spot_market_reversal_filter_enabled:
+            elif self._ms.spot_market_reversal_filter_enabled:
                 reversal = await self._market_reversal_filter()
                 signal.setdefault("components", {})["market_reversal"] = reversal
                 if not reversal.get("risk_on"):
@@ -454,9 +457,12 @@ class AgentService:
         already present and market_risk_off is false; Perp uses it only to block
         shorts against confirmed BTC recovery.
         """
+        # Il flag va letto dai mobile settings, non dal YAML: e' l'utente a decidere
+        # dall'app se il filtro e' attivo, e lo stato mostrato in app legge la stessa
+        # fonte. Leggendo self.settings il filtro restava acceso pur risultando spento.
         if not (
-            self.settings.spot_market_reversal_filter_enabled
-            or self.settings.perp_market_reversal_filter_enabled
+            self._ms.spot_market_reversal_filter_enabled
+            or self._ms.perp_market_reversal_filter_enabled
         ):
             return {"enabled": False, "risk_on": False}
 
@@ -785,7 +791,7 @@ class AgentService:
         if (
             signal.get("action") != "skip"
             and signal.get("side") == "short"
-            and self.settings.perp_market_reversal_filter_enabled
+            and self._ms.perp_market_reversal_filter_enabled
         ):
             reversal = await self._market_reversal_filter()
             signal.setdefault("components", {})["market_reversal"] = reversal
@@ -795,7 +801,7 @@ class AgentService:
         if (
             signal.get("action") != "skip"
             and signal.get("side") == "long"
-            and self.settings.perp_market_reversal_filter_enabled
+            and self._ms.perp_market_reversal_filter_enabled
         ):
             reversal = await self._market_reversal_filter()
             signal.setdefault("components", {})["market_reversal"] = reversal
