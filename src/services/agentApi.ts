@@ -697,6 +697,22 @@ export function riskCloseAll(adminToken: string): Promise<RiskCloseAllResponse> 
   });
 }
 
+export interface ResetDrawdownResponse {
+  status: string;
+  total_equity_usd: string;
+  peak_equity_usd: string;
+  drawdown_pct: string;
+  max_drawdown_pct: string;
+}
+
+export function resetDrawdown(adminToken: string): Promise<ResetDrawdownResponse> {
+  return request<ResetDrawdownResponse>('/api/v1/agent/risk/reset-drawdown', {
+    method: 'POST',
+    timeoutMs: 30_000,
+    token: adminToken,
+  });
+}
+
 export interface ResetDbResponse {
   status: string;
   archived_run_id: string | null;

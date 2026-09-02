@@ -744,6 +744,35 @@ async def test_adjust_equity_deposit_raises_base_not_pnl(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_reset_drawdown_recalibrates_peak_without_touching_history(db) -> None:
+    factory = get_session_factory()
+    async with factory() as session:
+        await PnlRepository(session).upsert_portfolio(
+            USER, total_equity_usd=Decimal("500"), initial_equity_usd=Decimal("600"),
+            peak_equity_usd=Decimal("650"), drawdown_pct=Decimal("23.08"),
+            max_drawdown_pct=Decimal("23.08"),
+        )
+        await session.commit()
+
+    async with factory() as session:
+        portfolio = await PnlRepository(session).reset_drawdown(USER)
+
+    assert portfolio is not None
+    assert portfolio.peak_equity_usd == Decimal("500")
+    assert portfolio.drawdown_pct == Decimal("0")
+    assert portfolio.max_drawdown_pct == Decimal("0")
+    # equity e base non toccate
+    assert portfolio.total_equity_usd == Decimal("500")
+    assert portfolio.initial_equity_usd == Decimal("600")
+
+
+@pytest.mark.asyncio
+async def test_reset_drawdown_missing_portfolio_returns_none(db) -> None:
+    async with get_session_factory()() as session:
+        assert await PnlRepository(session).reset_drawdown(USER) is None
+
+
+@pytest.mark.asyncio
 async def test_adjust_equity_withdrawal_and_negative_guard(db) -> None:
     factory = get_session_factory()
     now = datetime.now(UTC)

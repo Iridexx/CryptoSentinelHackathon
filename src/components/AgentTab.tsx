@@ -17,6 +17,7 @@ import {
   saveAgentSettings,
   setKillSwitch,
   riskCloseAll,
+  resetDrawdown,
   adjustEquity,
   validateOnboarding,
   fetchAgentWatchlist,
@@ -333,9 +334,15 @@ const EmptyState: FC<{ title: string; detail: string }> = ({ title, detail }) =>
   </div>
 );
 
-const RiskGuardrailBanner: FC<{ guardrail: GlobalView['risk_guardrail'] }> = ({ guardrail }) => {
+const RiskGuardrailBanner: FC<{
+  guardrail: GlobalView['risk_guardrail'];
+  adminToken?: string;
+  onResetDrawdown?: () => void;
+  resetting?: boolean;
+}> = ({ guardrail, adminToken, onResetDrawdown, resetting }) => {
   if (!guardrail?.blocked) return null;
   const copy = guardrail.reason ? riskGuardrailText[guardrail.reason] : undefined;
+  const canReset = guardrail.reason === 'drawdown_cap_guard' && !!onResetDrawdown;
   return (
     <div className="rounded-xl border border-accent-red/30 bg-accent-red/10 px-4 py-3">
       <div className="flex items-start justify-between gap-3">
@@ -351,6 +358,23 @@ const RiskGuardrailBanner: FC<{ guardrail: GlobalView['risk_guardrail'] }> = ({ 
         <span className="rounded-lg bg-dark-900/70 px-3 py-2 text-gray-400">Drawdown <b className="text-white">{fmtPct(guardrail.drawdown_pct)}</b></span>
         <span className="rounded-lg bg-dark-900/70 px-3 py-2 text-gray-400">Cap <b className="text-white">{fmtPct(Math.abs(guardrail.drawdown_cap_pct))}</b></span>
       </div>
+      {canReset && (
+        <>
+          <button
+            type="button"
+            onClick={onResetDrawdown}
+            disabled={!adminToken || resetting}
+            className="mt-3 w-full rounded-lg bg-accent-red/20 px-3 py-2 text-xs font-semibold text-accent-red disabled:opacity-40"
+          >
+            {resetting ? 'Ricalibro...' : 'Ricalibra riferimento drawdown'}
+          </button>
+          <p className="mt-1.5 text-[11px] leading-4 text-gray-500">
+            {adminToken
+              ? 'Riporta il picco di equity al valore attuale e azzera il drawdown. Non tocca trade, posizioni o storico.'
+              : 'Richiede admin token salvato in Setup.'}
+          </p>
+        </>
+      )}
     </div>
   );
 };
@@ -1031,7 +1055,10 @@ const GlobalPane: FC<{
   decisions: AgentDecisionResponse | null;
   assetBreakdown: AssetBreakdownResponse | null;
   claudeUsage: ClaudeUsageView | null;
-}> = ({ data, status, equity, equityRange, onEquityRange, decisions, assetBreakdown, claudeUsage }) => {
+  adminToken: string;
+  onResetDrawdown: () => void;
+  resettingDrawdown: boolean;
+}> = ({ data, status, equity, equityRange, onEquityRange, decisions, assetBreakdown, claudeUsage, adminToken, onResetDrawdown, resettingDrawdown }) => {
   const [equityView, setEquityView] = useState<'trading' | 'portfolio'>('trading');
   const hasHistory = (data?.pnl_history.length ?? 0) > 0;
   const hasPortfolio = Number(data?.total_equity_usd ?? 0) > 0 || Number(data?.initial_equity_usd ?? 0) > 0;
@@ -1042,7 +1069,7 @@ const GlobalPane: FC<{
 
   return (
     <div className="space-y-3">
-      <RiskGuardrailBanner guardrail={data?.risk_guardrail} />
+      <RiskGuardrailBanner guardrail={data?.risk_guardrail} adminToken={adminToken} onResetDrawdown={onResetDrawdown} resetting={resettingDrawdown} />
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Equity" value={fmtUsd(data?.total_equity_usd)} />
         <Stat label="PnL tot." value={fmtUsd(data?.pnl_total_usd)} tone={Number(data?.pnl_total_usd ?? 0) >= 0 ? 'good' : 'bad'} />
@@ -3298,6 +3325,20 @@ const AgentTab: FC<AgentTabProps> = ({
     }
   };
 
+  const handleResetDrawdown = async () => {
+    if (!window.confirm('Ricalibrare il riferimento del drawdown?\n\nRiporta il picco di equity al valore corrente e azzera drawdown e max drawdown. Sblocca il blocco "drawdown cap". Trade, posizioni e storico NON vengono toccati.')) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      await resetDrawdown(adminToken);
+      await refresh(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Reset drawdown failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAdjustEquity = async (amount: number) => {
     const verb = amount >= 0 ? 'Versare' : 'Prelevare';
     const prep = amount >= 0 ? 'in' : 'da';
@@ -3460,7 +3501,7 @@ const AgentTab: FC<AgentTabProps> = ({
       )}
       {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
       {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
-      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} equityRange={equityRange} onEquityRange={setEquityRange} decisions={decisions} assetBreakdown={assetBreakdown} claudeUsage={claudeUsage} />}
+      {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} equityRange={equityRange} onEquityRange={setEquityRange} decisions={decisions} assetBreakdown={assetBreakdown} claudeUsage={claudeUsage} adminToken={adminToken} onResetDrawdown={() => void handleResetDrawdown()} resettingDrawdown={saving} />}
       {pane === 'wallet' && <WalletPane execWallets={execWallets} spot={spot} perp={perp} />}
       {pane === 'bank' && <BankPane adminToken={adminToken} />}
       {pane === 'coins' && (

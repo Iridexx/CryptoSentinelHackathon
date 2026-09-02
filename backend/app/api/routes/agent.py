@@ -288,6 +288,28 @@ async def dev_reset_db(request: ResetDbRequest, session: SessionDep, _: AdminAcc
     return result
 
 
+@router.post("/risk/reset-drawdown")
+async def risk_reset_drawdown(session: SessionDep, _: AdminAccessDep) -> dict:
+    """Ricalibra il riferimento del drawdown: riporta il picco di equity al valore
+    corrente e azzera ``drawdown_pct`` / ``max_drawdown_pct``.
+
+    Sblocca ``drawdown_cap_guard`` senza cancellare trade, posizioni o storico
+    (a differenza di ``/dev/reset-db``). Non tocca il kill switch.
+    """
+
+    settings = get_settings()
+    portfolio = await PnlRepository(session).reset_drawdown(str(settings.default_user_id))
+    if portfolio is None:
+        raise HTTPException(status_code=404, detail="portfolio_state_not_found")
+    return {
+        "status": "ok",
+        "total_equity_usd": str(portfolio.total_equity_usd),
+        "peak_equity_usd": str(portfolio.peak_equity_usd),
+        "drawdown_pct": str(portfolio.drawdown_pct),
+        "max_drawdown_pct": str(portfolio.max_drawdown_pct),
+    }
+
+
 class EquityAdjustRequest(BaseModel):
     amount: float = Field(..., description="Importo: positivo = versamento, negativo = prelievo")
     note: str | None = Field(default=None, max_length=120)

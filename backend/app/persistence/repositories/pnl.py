@@ -104,6 +104,24 @@ class PnlRepository:
         await self._session.refresh(record)
         return record
 
+    async def reset_drawdown(self, user_id: str) -> PortfolioState | None:
+        """Ricalibra il riferimento del drawdown senza toccare trade o storico.
+
+        Riporta il picco di equity al valore corrente, azzerando ``drawdown_pct`` e
+        ``max_drawdown_pct``. Sblocca ``drawdown_cap_guard`` e resta stabile al tick
+        successivo (``peak = max(peak, total)`` diventa ``total``).
+        """
+        record = await self.get_portfolio(user_id)
+        if record is None:
+            return None
+        record.peak_equity_usd = record.total_equity_usd
+        record.drawdown_pct = Decimal("0")
+        record.max_drawdown_pct = Decimal("0")
+        record.updated_at = datetime.now(UTC)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return record
+
     async def get_portfolio(self, user_id: str) -> PortfolioState | None:
         result = await self._session.execute(
             select(PortfolioState).where(PortfolioState.user_id == user_id)
