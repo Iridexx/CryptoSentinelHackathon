@@ -423,6 +423,38 @@ async def test_global_view_exposes_drawdown_guardrail_block(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mark_drawdown_block_records_start_then_view_exposes_it(db) -> None:
+    factory = get_session_factory()
+    started = datetime(2026, 9, 2, 14, 30, tzinfo=UTC)
+    async with factory() as session:
+        await PnlRepository(session).upsert_portfolio(
+            USER, total_equity_usd=Decimal("600"), initial_equity_usd=Decimal("750"),
+            peak_equity_usd=Decimal("760"), drawdown_pct=Decimal("20.86"),
+            agent_status="running",
+        )
+        await session.commit()
+
+    async with factory() as session:
+        repo = PnlRepository(session)
+        await repo.mark_drawdown_block(USER, started)
+        # secondo tick ancora bloccato: l'istante d'inizio NON si sovrascrive
+        await repo.mark_drawdown_block(USER, started.replace(hour=15))
+
+    async with factory() as session:
+        view = await ViewService(
+            session, drawdown_cap_pct=-15.0, daily_loss_limit_pct=-8.0, min_portfolio_value_usd=5.0,
+        ).global_view(USER)
+    assert view.risk_guardrail.blocked_since == started.isoformat()
+
+    # drawdown rientrato: marcatore cancellato
+    async with factory() as session:
+        await PnlRepository(session).mark_drawdown_block(USER, None)
+    async with factory() as session:
+        portfolio = await PnlRepository(session).get_portfolio(USER)
+    assert portfolio.extra_json in (None, "{}")
+
+
+@pytest.mark.asyncio
 async def test_spot_and_perp_views_return_open_positions(db) -> None:
     factory = get_session_factory()
     now = datetime.now(UTC)
@@ -753,6 +785,8 @@ async def test_reset_drawdown_recalibrates_peak_without_touching_history(db) -> 
             max_drawdown_pct=Decimal("23.08"),
         )
         await session.commit()
+    async with factory() as session:
+        await PnlRepository(session).mark_drawdown_block(USER, datetime.now(UTC))
 
     async with factory() as session:
         portfolio = await PnlRepository(session).reset_drawdown(USER)
@@ -761,6 +795,7 @@ async def test_reset_drawdown_recalibrates_peak_without_touching_history(db) -> 
     assert portfolio.peak_equity_usd == Decimal("500")
     assert portfolio.drawdown_pct == Decimal("0")
     assert portfolio.max_drawdown_pct == Decimal("0")
+    assert portfolio.extra_json in (None, "{}")  # marcatore di blocco ripulito
     # equity e base non toccate
     assert portfolio.total_equity_usd == Decimal("500")
     assert portfolio.initial_equity_usd == Decimal("600")

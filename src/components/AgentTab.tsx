@@ -349,6 +349,16 @@ const RiskGuardrailBanner: FC<{
         <div>
           <p className="text-sm font-bold text-accent-red">{copy?.title ?? guardrail.title}</p>
           <p className="mt-1 text-xs leading-5 text-gray-300">{copy?.detail ?? guardrail.detail}</p>
+          {guardrail.reason === 'drawdown_cap_guard' && (
+            <p className="mt-1.5 text-[11px] text-gray-400">
+              Bloccato dal{' '}
+              <b className="text-gray-200">
+                {guardrail.blocked_since
+                  ? new Date(guardrail.blocked_since).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  : 'momento non registrato'}
+              </b>
+            </p>
+          )}
         </div>
         <span className="rounded-full bg-accent-red/15 px-2 py-1 text-[11px] font-semibold text-accent-red">
           {guardrail.reason?.replace(/_/g, ' ') ?? 'blocked'}

@@ -222,6 +222,7 @@ export interface GlobalView {
     reason?: string | null;
     title: string;
     detail: string;
+    blocked_since?: string | null;
     drawdown_pct: string;
     drawdown_cap_pct: number;
     daily_loss_used_pct: string;

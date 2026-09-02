@@ -156,6 +156,8 @@ class RiskGuardrailView(BaseModel):
     reason: str | None = None
     title: str = "Risk guardrails OK"
     detail: str = "New entries are allowed by portfolio guardrails."
+    # ISO-8601 UTC: da quando il drawdown ha sfondato il cap (solo con reason=drawdown_cap_guard).
+    blocked_since: str | None = None
     drawdown_pct: Decimal = Decimal("0")
     drawdown_cap_pct: float
     daily_loss_used_pct: Decimal = Decimal("0")

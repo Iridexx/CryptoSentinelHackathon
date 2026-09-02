@@ -2289,6 +2289,14 @@ class AgentService:
             trades_today=spot_count + perp_count,
         )
 
+        # Marcatore "da quando" il drawdown ha sfondato il cap: lo legge la UI del
+        # banner di blocco. Scritto solo al primo tick oltre soglia, cancellato al rientro.
+        try:
+            dd_cap = abs(Decimal(str(self._ms().drawdown_cap_pct)))
+        except (ArithmeticError, TypeError, ValueError):
+            dd_cap = abs(Decimal(str(self.settings.risk_max_drawdown_pct)))
+        await pnl_repo.mark_drawdown_block(user_id, now if drawdown_pct >= dd_cap else None)
+
     async def _snapshot_portfolio_hourly(self, session: AsyncSession, now: datetime) -> None:
         """Crea un PnlSnapshot ogni ora se non già presente per l'ora corrente."""
         user_id = str(self.settings.default_user_id)

@@ -409,6 +409,7 @@ class ViewService:
                 daily_loss_used_pct=portfolio.daily_loss_limit_used_pct,
                 daily_loss_limit_pct=self._daily_loss_limit_pct,
                 min_portfolio_value_usd=self._min_portfolio_value_usd,
+                drawdown_blocked_since=_extra_str(portfolio.extra_json, "drawdown_blocked_since"),
             ),
             pnl_history=[
                 PnlPoint(
@@ -431,6 +432,17 @@ class ViewService:
         )
 
 
+def _extra_str(raw: str | None, key: str) -> str | None:
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    value = data.get(key) if isinstance(data, dict) else None
+    return value if isinstance(value, str) else None
+
+
 def _risk_guardrail(
     *,
     total_equity: Decimal,
@@ -439,6 +451,7 @@ def _risk_guardrail(
     daily_loss_used_pct: Decimal,
     daily_loss_limit_pct: float,
     min_portfolio_value_usd: float,
+    drawdown_blocked_since: str | None = None,
 ) -> RiskGuardrailView:
     drawdown_cap = abs(Decimal(str(drawdown_cap_pct)))
     daily_cap = Decimal(str(daily_loss_limit_pct))
@@ -461,6 +474,7 @@ def _risk_guardrail(
             reason="drawdown_cap_guard",
             title="Trading blocked: drawdown cap",
             detail=f"Drawdown {drawdown_pct:.2f}% is above the cap {drawdown_cap:.2f}%. New entries are suspended.",
+            blocked_since=drawdown_blocked_since,
             drawdown_pct=drawdown_pct,
             drawdown_cap_pct=drawdown_cap_pct,
             daily_loss_used_pct=daily_loss_used_pct,

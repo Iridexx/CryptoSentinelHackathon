@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -9,6 +10,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.persistence.models.pnl import PnlSnapshot, PortfolioState
+
+
+def _parse_extra(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _extra_without(raw: str | None, key: str) -> str | None:
+    data = _parse_extra(raw)
+    data.pop(key, None)
+    return json.dumps(data) if data else None
 
 
 class PnlRepository:
@@ -117,10 +134,31 @@ class PnlRepository:
         record.peak_equity_usd = record.total_equity_usd
         record.drawdown_pct = Decimal("0")
         record.max_drawdown_pct = Decimal("0")
+        record.extra_json = _extra_without(record.extra_json, "drawdown_blocked_since")
         record.updated_at = datetime.now(UTC)
         await self._session.commit()
         await self._session.refresh(record)
         return record
+
+    async def mark_drawdown_block(self, user_id: str, blocked_since: datetime | None) -> None:
+        """Registra (o cancella) il momento in cui il drawdown ha superato il cap.
+
+        ``blocked_since`` valorizzato = il tick corrente vede il blocco: si scrive
+        solo la PRIMA volta (non si sovrascrive, così resta l'istante d'inizio).
+        ``None`` = drawdown rientrato: si cancella il marcatore.
+        """
+        record = await self.get_portfolio(user_id)
+        if record is None:
+            return
+        data = _parse_extra(record.extra_json)
+        if blocked_since is None:
+            data.pop("drawdown_blocked_since", None)
+        else:
+            data.setdefault("drawdown_blocked_since", blocked_since.astimezone(UTC).isoformat())
+        new_json = json.dumps(data) if data else None
+        if new_json != record.extra_json:
+            record.extra_json = new_json
+            await self._session.commit()
 
     async def get_portfolio(self, user_id: str) -> PortfolioState | None:
         result = await self._session.execute(
