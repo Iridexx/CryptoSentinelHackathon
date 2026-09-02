@@ -414,6 +414,7 @@ export interface AgentMobileSettings {
   perp_smart_sl_tp_recovery_delta_pct: number;
   spot_breakeven_mode: string;
   perp_breakeven_mode: string;
+  perp_breakeven_tp1_proximity_pct: number;
   spot_sl_mode: string;
   perp_sl_mode: string;
   spot_structural_stop_lookback_candles: number;

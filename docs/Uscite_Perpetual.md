@@ -60,6 +60,14 @@ Il riempimento dry-run usa il livello trigger (`stop_loss`, `trailing_stop`, `ta
 
 Il breakeven scatta a favore di `1.0 ATR`. Lo stop viene spostato a entry piu' costi round-trip stimati; se il prezzo ha gia' superato il buffer, aggiunge anche `0.1%`.
 
+Il momento dello scatto dipende da `perp_breakeven_mode`:
+
+| Modalita' | Scatta quando |
+|---|---|
+| `atr` | il prezzo supera `entry ± 1.0 ATR` |
+| `tp1` | come `atr`, ma solo dopo che il TP1 e' stato toccato |
+| `prossimita_tp1` | il prezzo ha percorso `perp_breakeven_tp1_proximity_pct` (default `60`) del tragitto `entry -> TP1`: `entry + (TP1 - entry) * pct/100`. Senza TP1 sul trade il breakeven non viene mosso. |
+
 Il trailing e' attivo da subito ma viene popolato solo quando e' piu' protettivo dello stop. Il moltiplicatore ATR dipende dalla leva:
 
 | Modalita' | Leva minima | Leva massima |
@@ -107,6 +115,8 @@ Il time stop perp resta orario ma e' opzionale e disattivato di default: con `ti
 | `use_poc_for_tp2` | `true` |
 | `breakeven_trigger_atr` | `1.0` |
 | `breakeven_buffer_pct` | `0.1` |
+| `perp_breakeven_mode` | `atr` |
+| `perp_breakeven_tp1_proximity_pct` | `60` |
 | `trailing_mode` | `largo` |
 | `time_stop_enabled` | `false` |
 | `time_stop_hours` | `8` |

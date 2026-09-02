@@ -157,6 +157,7 @@ const settingFields = [
   'perp_time_stop_hours',
   'spot_breakeven_mode',
   'perp_breakeven_mode',
+  'perp_breakeven_tp1_proximity_pct',
   'spot_sl_mode',
   'perp_sl_mode',
   'spot_structural_stop_buffer_pct',

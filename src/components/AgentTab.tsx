@@ -176,6 +176,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_tp_recovery_delta_pct: 7,
   spot_breakeven_mode: 'atr' as const,
   perp_breakeven_mode: 'atr' as const,
+  perp_breakeven_tp1_proximity_pct: 60,
   spot_sl_mode: 'atr' as const,
   perp_sl_mode: 'atr' as const,
   spot_structural_stop_lookback_candles: 20,
@@ -2035,8 +2036,18 @@ const SetupPane: FC<{
               options={[
                 { value: 'atr', label: 'ATR (attuale)' },
                 { value: 'tp1', label: 'Solo dopo TP1' },
+                { value: 'prossimita_tp1', label: 'Vicino al TP1 (%)' },
               ]}
             />
+            {settings.perp_breakeven_enabled && settings.perp_breakeven_mode === 'prossimita_tp1' && (
+              <NumberInput
+                label="BE vicino TP1 - % tragitto"
+                showHelp={h} help={'Percentuale del tragitto ingresso->TP1 dopo la quale lo stop va a pareggio. 60 = scatta col 40% ancora da fare.'}
+                value={settings.perp_breakeven_tp1_proximity_pct}
+                step={1}
+                onChange={(perp_breakeven_tp1_proximity_pct) => patch({ perp_breakeven_tp1_proximity_pct: Math.min(99, Math.max(1, perp_breakeven_tp1_proximity_pct)) })}
+              />
+            )}
             {settings.perp_breakeven_enabled && (
               <NumberInput
                 label="BE profitto min $ (0=solo costi)"

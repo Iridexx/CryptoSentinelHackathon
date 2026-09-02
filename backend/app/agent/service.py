@@ -2009,9 +2009,21 @@ class AgentService:
             # Protezione ATR — solo se l'ATR è stato congelato all'ingresso (trade nuovi).
             if atr_v and atr_v > 0 and not _ssl_suspended:
                 # Breakeven: a +N×ATR lo SL si sposta a entry (+costi), solo verso il sicuro.
-                be_trigger = (pos.entry_price + atr_v * be_mult) if is_long else (pos.entry_price - atr_v * be_mult)
-                be_tp1_ok = ms.perp_breakeven_mode != "tp1" or pos.tp1_reached
-                if self.settings.perp_breakeven_enabled and ((is_long and price >= be_trigger) or (not is_long and price <= be_trigger)) and be_tp1_ok:
+                be_mode = ms.perp_breakeven_mode
+                if be_mode == "prossimita_tp1":
+                    # Scatta quando il prezzo ha percorso X% del tragitto ingresso->TP1
+                    # (pct=60 => attivo col 40% ancora da fare). Senza TP1 sul trade
+                    # non muovo il breakeven: a monte sarebbe un bug, non lo maschero.
+                    if pos.take_profit_1 is None:
+                        be_trigger = None
+                    else:
+                        frac = Decimal(str(ms.perp_breakeven_tp1_proximity_pct)) / Decimal("100")
+                        be_trigger = pos.entry_price + (pos.take_profit_1 - pos.entry_price) * frac
+                    be_tp1_ok = True
+                else:
+                    be_trigger = (pos.entry_price + atr_v * be_mult) if is_long else (pos.entry_price - atr_v * be_mult)
+                    be_tp1_ok = be_mode != "tp1" or pos.tp1_reached
+                if self.settings.perp_breakeven_enabled and be_trigger is not None and ((is_long and price >= be_trigger) or (not is_long and price <= be_trigger)) and be_tp1_ok:
                     be_stop = pos.entry_price
                     if self.settings.perp_breakeven_offset_costs and pos.size > 0:
                         # Fee andata+ritorno (×2): copre anche la chiusura.

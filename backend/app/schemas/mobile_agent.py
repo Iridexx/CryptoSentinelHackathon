@@ -31,7 +31,10 @@ class AgentMobileSettings(BaseModel):
     spot_time_stop_enabled: bool = False
     perp_time_stop_enabled: bool = False
     spot_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
-    perp_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1)$")
+    perp_breakeven_mode: str = Field(default="atr", pattern="^(atr|tp1|prossimita_tp1)$")
+    # Modalita' prossimita_tp1: lo stop va a pari quando il prezzo ha percorso
+    # questa % del tragitto ingresso->TP1 (60 = scatta col 40% ancora da fare).
+    perp_breakeven_tp1_proximity_pct: float = Field(default=60.0, ge=1.0, le=99.0)
     perp_breakeven_min_profit_usd: float = Field(default=0.0, ge=0.0, le=50.0)
     spot_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")
     perp_sl_mode: str = Field(default="atr", pattern="^(atr|lowest)$")

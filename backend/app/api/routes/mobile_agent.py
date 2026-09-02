@@ -127,6 +127,7 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_time_stop_enabled=getattr(settings, "perp_time_stop_enabled", False),
         spot_breakeven_mode="atr",
         perp_breakeven_mode="atr",
+        perp_breakeven_tp1_proximity_pct=getattr(settings, "perp_breakeven_tp1_proximity_pct", 60.0),
         perp_breakeven_min_profit_usd=getattr(settings, "perp_breakeven_min_profit_usd", 0.0),
         spot_sl_mode=getattr(settings, "spot_sl_mode", "atr"),
         perp_sl_mode=getattr(settings, "perp_sl_mode", "atr"),
