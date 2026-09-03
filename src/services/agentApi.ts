@@ -110,6 +110,7 @@ export interface SpotView {
   volume_total_usd: string;
   volume_today_usd: string;
   market_risk_off?: boolean;
+  spot_enabled?: boolean;
 }
 
 export interface PerpPositionView {

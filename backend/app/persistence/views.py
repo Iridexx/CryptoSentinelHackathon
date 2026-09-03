@@ -48,6 +48,18 @@ def _market_risk_off(user_id: str) -> bool:
         return False
 
 
+def _spot_market_enabled(user_id: str) -> bool:
+    """False se le impostazioni mobile hanno markets_enabled = perp (Spot spento)."""
+    raw = get_runtime_value(user_id, "mobile_agent_settings")
+    if not raw:
+        return True
+    try:
+        value = str(json.loads(raw).get("markets_enabled", "both")).lower()
+        return value not in {"perp", "perpetual"}
+    except (ValueError, AttributeError, TypeError):
+        return True
+
+
 def _smart_sl_view_fields(pos) -> dict:
     raw = getattr(pos, "smart_sl_state", None)
     if not raw:
@@ -107,6 +119,7 @@ class ViewService:
         volume_today = await trade_repo.sum_volume(user_id, since=day_start_spot)
         return SpotView(
             market_risk_off=_market_risk_off(user_id),
+            spot_enabled=_spot_market_enabled(user_id),
             open_positions=[
                 SpotPositionView(
                     position_id=p.position_id,

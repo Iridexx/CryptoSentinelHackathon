@@ -938,6 +938,7 @@ const SpotPane: FC<{
   const hasHistory = (data?.history.length ?? 0) > 0;
   const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
   const riskOff = data?.market_risk_off ?? false;
+  const spotDisabled = data?.spot_enabled === false;
 
   return (
     <div className="space-y-3">
@@ -951,7 +952,10 @@ const SpotPane: FC<{
         <Stat label="Vol Day" value={fmtUsd(Number(data?.volume_today_usd ?? 0))} />
         <Stat label="Bot Day" value={String(data?.bot_active_days ?? 0)} />
       </div>
-      {!hasActivity && (
+      {spotDisabled && (
+        <EmptyState title="Spot disattivato" detail="Il mercato Spot non è tra quelli abilitati (Setup › Market). L'agente non apre né valuta posizioni spot finché non lo riattivi." />
+      )}
+      {!spotDisabled && !hasActivity && (
         riskOff
           ? <EmptyState title="Mercato bloccato per condizioni sfavorevoli" detail="BTC in downtrend: nuovi acquisti spot sospesi finché non rientra sopra la media." />
           : <EmptyState title="In attesa di segnali spot" detail="Nessuna posizione aperta e nessun trade registrato." />
@@ -993,7 +997,7 @@ const SpotPane: FC<{
             </div>
           ))}
         </div>
-      ) : hasActivity && (
+      ) : hasActivity && !spotDisabled && (
         riskOff
           ? <EmptyState title="Mercato bloccato per condizioni sfavorevoli" detail="BTC in downtrend: nuovi acquisti spot sospesi finché non rientra sopra la media." />
           : <EmptyState title="Nessuna posizione aperta" detail="Lo Spot e' pronto: le nuove entrate appariranno qui." />

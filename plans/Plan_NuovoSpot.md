@@ -2,7 +2,15 @@
 
 Stato: **BOZZA IN DISCUSSIONE** — non iniziare l'implementazione senza approvazione esplicita (AGENTS.md §Required Documentation).
 
-Ultimo aggiornamento: 2026-08-31 (4ª revisione: passata di verifica finale —
+Ultimo aggiornamento: 2026-09-02 (6ª revisione: §5.8 analisi d'integrazione con la
+struttura attuale — 3 blocchi trovati (brain che scarta tutto, tetto di esposizione,
+token senza prezzo) risolti in una nuova fase F0b; interruttore di regime asimmetrico
+EMA20/EMA50 che non liquida piu' (S18), quindi N4 superato)
+
+Revisione precedente: 2026-09-02 (5ª revisione: §4.8 nodi operativi N10-N16 tutti
+decisi; eliminato lo scarico parziale (S11); spot vecchio spento via markets_enabled)
+
+Revisione precedente: 2026-08-31 (4ª revisione: passata di verifica finale —
 riferimenti di codice passati dai numeri di riga ai nomi dei simboli, incoerenze fra
 sezioni sanate, §5.7 sullo stato della suite di test, fase F0)
 
@@ -49,12 +57,22 @@ generale non è un filtro da calibrare, è un on/off dell'intero motore.
 | S2 | Timing d'ingresso | **Ritracciamento dentro la salita**, non capitolazione. L'asset deve restare sopra la propria media 50g. |
 | S3 | Ingressi per asset | **Sempre 2-3 tranche a size decrescente** (50/30/20). Mai ingresso singolo. Distanze in ATR, non in % fissa. |
 | S4 | Stop loss di prezzo | **Nessuno.** Le uscite sono strutturali (rottura trend, perdita forza relativa, regime). |
-| S5 | Interruttore generale | BTC sopra media 100g + media in salita + **salute delle alt** (% universo sopra la propria media 50g) con isteresi **45% accende / 35% spegne**. Spento ⇒ nessun ingresso, nessuna tranche. |
-| S6 | Timeframe | **Daily** per regime e classifica, **4h** per i trigger di ingresso/uscita. Via il 5m. |
+| S5 | Interruttore generale | **Asimmetrico**: accende con BTC sopra la **EMA 20 daily**, spegne solo sotto la **EMA 50 daily**. Piu' la salute delle alt (45% accende / 35% spegne). |
+| S19 | Capitale | **Budget separati per mercato**: 40% spot / 60% perp dell'equity tradabile (configurabile). Ogni motore dimensiona sulla **propria fetta**, non sul totale: cosi' non si affamano a vicenda e la somma non puo' superare il 100%. |
+| S20 | Dimensionamento | **Adattivo al capitale**: numero di posizioni e di tranche derivati da quanto capitale c'e', imponendo che ogni tranche superi una soglia economica (`min_tranche_usd`). Crescendo il conto si arriva da soli alla configurazione piena, senza rimettere le mani nei parametri. |
+| S18 | Cosa fa il regime | **Blocca solo gli acquisti, non liquida.** Spento = niente ingressi e niente tranche; le posizioni aperte restano gestite dalle uscite per asset. Senza questo, una media veloce svuoterebbe il portafoglio a ogni incrocio. |
+| S6 | Timeframe | **Daily** (chiusure) per regime, classifica e tutte le medie: BTC 100g, asset 50g, uscita 20g. **4h** solo per i trigger di ingresso in ATR. Via il 5m. |
 | S7 | Universo | Calcolato **automaticamente** ogni giorno come intersezione (vedi §4), non scelto a mano. |
-| S8 | Dati prezzo | **Solo token con coppia Binance USDT.** I token solo-DEX restano fuori: senza storico non esiste classifica. |
+| S8 | Dati prezzo | **Ibrido**: Binance dove la coppia esiste (dati puliti, storico lungo), fonte OHLC nativa del pool dove manca. Nessun token escluso solo perche' non e' quotato su Binance. |
 | S9 | Venue | PancakeSwap V2 (provider esistente). |
 | S10 | Validazione | **Nessuna ottimizzazione su backtest.** Verifica in dry-run a size ridotta, solo per controllare che i trigger scattino quando devono. |
+| S11 | Uscite parziali | **Nessuna.** Niente take-profit, niente scarico: si esce solo per motivi strutturali. Sullo spot il tempo e' gratis, la posizione resta intera finche' la struttura regge (N13). |
+| S12 | Scheduling | **Guidato dalle candele chiuse**, mai dall'orologio di sistema (N10). |
+| S13 | Stato fra riavvii | In `runtime_state`, con ripristino **conservativo**: mai un'uscita spuria dopo un riavvio (N11). |
+| S14 | Impatto sulla pool | Una tranche non supera il **3%** delle riserve (N14). |
+| S15 | Validazione esecuzione | **Quote in ombra** in dry-run: si interroga PancakeSwap in sola lettura per misurare divergenza, slippage e impatto, senza eseguire (N15). |
+| S16 | Grafici | Tranche d'acquisto, uscite col motivo, medie 50g/20g e marker di stato — sul grafico **live**, non solo a posizione chiusa (N16). |
+| S17 | UI | Fase F9b completa: semaforo del regime, radar per percentile, motivo di esclusione, stato della scala, parametri editabili dall'app (N12). |
 
 ### Questioni aperte (da decidere prima dell'implementazione)
 
@@ -62,7 +80,7 @@ generale non è un filtro da calibrare, è un on/off dell'intero motore.
 |---|---|---|
 | Q1 | Come si popola `SPOT_TOKEN_MAP`? Manuale curata, o si collega il risolutore CMC? | Vedi §3 — è il blocco principale. **Indizio**: in HEAD esiste già il test `test_build_spot_swap_params_resolves_via_cmc`, che si aspetta un kwarg `token_resolver` di `AgentService` **mai implementato** (il test fallisce da prima di questo piano). Il cablaggio CMC è stato tentato e abbandonato: capire perché prima di ripercorrerlo. |
 | Q2 | Il passaggio a mainnet: oggi `execute_swap` è gated e `execution_mode=live` impone `bsc_network=testnet` | Serve una decisione operativa separata |
-| Q3 | Numero massimo di posizioni: 5 o 6? | Proposta: 5 |
+| ~~Q3~~ | ~~Numero massimo di posizioni~~ | ✅ **RISOLTA (2026-09-02)**: **8 posizioni**, ~11% ciascuna. Piu' slot da riempire = motore piu' attivo, e meno capitale per singola coin. |
 | Q4 | Il vecchio motore si rimuove o si tiene dietro un flag di rollback? | Proposta: flag, rimozione dopo validazione |
 | ~~Q5~~ | ~~Dedup incrociato spot/perp~~ | ✅ **RISOLTA ed ESEGUITA (2026-08-31)**: rimosso. Il dedup è ora **per mercato** (`manager.py`), spot e perp indipendenti sullo stesso asset. |
 | ~~Q6~~ | ~~Heartbeat trade giornaliero~~ | ✅ **RISOLTA ed ESEGUITA (2026-08-31)**: rimosso del tutto (funzione, costanti, chiamata in `slow_tick`, chiave di risposta, test). |
@@ -106,20 +124,27 @@ verificata**, non dedotta.
 
 Valutato una volta al giorno su candele daily:
 
-| Condizione | Fonte |
-|---|---|
-| Prezzo BTC > media 100 giorni | BTC daily |
-| Media 100 giorni in salita | BTC daily |
-| % dell'universo sopra la propria media 50 giorni, **con isteresi**: accende sopra **45%**, spegne sotto **35%** | tutte le coin dell'universo |
+Entrambe le condizioni hanno **isteresi**: soglia diversa per accendere e per spegnere.
 
-Tutte e tre vere ⇒ **motore acceso**. Altrimenti **spento**: nessun nuovo ingresso,
-nessuna tranche aggiuntiva; le posizioni aperte si chiudono alla prima chiusura 4h
-verde e comunque entro 24 ore (N4), non con liquidazione immediata.
+| Condizione | Accende | Spegne |
+|---|---|---|
+| Trend BTC (daily) | prezzo sopra la **EMA 20** | prezzo sotto la **EMA 50** |
+| Salute delle alt (% universo sopra la propria media 50g) | sopra **45%** | sotto **35%** |
 
-L'isteresi sulla salute delle alt serve a evitare che il motore si accenda e spenga
-a giorni alterni quando la percentuale oscilla intorno alla soglia — con posizioni
-che durano settimane, un on/off ballerino è peggio di una soglia leggermente
-sbagliata.
+Fra le due soglie non succede nulla: si resta nello stato in cui si era.
+
+**Perche' asimmetrico.** Una media lenta (100g) tiene fuori dai rialzi che capitano
+dentro un bear, e puo' lasciare lo spot fermo per mesi. Una media veloce simmetrica
+farebbe l'opposto: BTC incrocia la EMA 20 di continuo in fase laterale. Prendendo la
+EMA 20 per accendere e la EMA 50 per spegnere si e' rapidi a cogliere il rialzo e
+lenti a mollarlo — la stessa logica gia' usata per la forza relativa (75° entra,
+50° esce).
+
+**Spento non vuol dire vendere (S18).** Il regime blocca **solo gli acquisti**:
+nessun nuovo ingresso, nessuna tranche aggiuntiva. Le posizioni aperte continuano a
+essere gestite dalle proprie uscite per asset. Se il regime liquidasse, ogni falso
+segnale costerebbe un giro completo di fee su tutte le posizioni — con una media
+veloce diventerebbe il costo dominante.
 
 La terza condizione è quella che manca oggi ed è la più importante: intercetta il
 caso "BTC tiene, le alt scendono", che il filtro attuale non vede.
@@ -132,7 +157,7 @@ Intersezione di:
 2. indirizzo BSC mappato e verificato
 3. pool PancakeSwap esistente sul percorso `USDT → WBNB → token` (`getPair` ≠ zero)
 4. liquidità pool ≥ soglia (`risk_min_pool_liquidity_usd`, default 50.000 $)
-5. coppia `<SIMBOLO>USDT` esistente su Binance con ≥ 250 candele daily
+5. storico prezzi disponibile con ≥ 250 candele daily, da Binance **oppure** dal pool
 6. non è una stablecoin (`SPOT_EXCLUDED_STABLECOINS`)
 
 Il risultato **sostituisce la watchlist spot scelta a mano**. La selezione manuale
@@ -143,11 +168,13 @@ resta come eventuale restrizione ulteriore, non come sorgente.
 Su chiusure daily:
 
 ```
-RS = (prezzo_coin_oggi / prezzo_coin_30g_fa) / (prezzo_btc_oggi / prezzo_btc_30g_fa)
+RS = (prezzo_coin_oggi / prezzo_coin_14g_fa) / (prezzo_btc_oggi / prezzo_btc_14g_fa)
 ```
 
 `RS > 1` ⇒ batte BTC. Si ordina l'universo per RS e si lavora sul **percentile**,
-non sul valore assoluto.
+non sul valore assoluto. Finestra **14 giorni** su chiusure daily: nel crypto le
+rotazioni durano settimane, e a 30 giorni ci si accorgeva di un nuovo leader con
+circa due settimane di ritardo.
 
 | Soglia | Valore |
 |---|---|
@@ -170,9 +197,12 @@ Trigger: ritracciamento dal massimo a 10 giorni, misurato in ATR (4h).
 
 | Tranche | Trigger | Size |
 |---|---|---|
-| 1ª | −1,5 ATR dal massimo 10g | **50%** |
+| 1ª | −1,0 ATR dal massimo 10g | **50%** |
 | 2ª | −1,0 ATR sotto la 1ª | **30%** |
 | 3ª | −1,0 ATR sotto la 2ª | **20%** |
+
+Tutti i valori della tabella sono **configurabili dall'app** (soglia della 1ª tranche,
+passo fra le tranche, frazioni, periodo e timeframe dell'ATR): vedi F9b.
 
 Size decrescente: il grosso sul primo storno, che dentro un trend è quello con più
 probabilità di bastare. Le tranche successive coprono lo storno profondo senza
@@ -222,25 +252,37 @@ azzera le tranche successive.
 
 | Priorità | Uscita | Condizione | Attiva quando | Quota |
 |---|---|---|---|---|
-| 1 | Regime | interruttore spento → prima chiusura 4h verde, max 24h (N4) | sempre | tutto |
-| 2 | Rottura trend | chiusura **daily** sotto media **20 giorni** | **solo a scala conclusa** (N1) | tutto il residuo |
-| 3 | Debolezza relativa | percentile RS < 50 per 5 giorni | sempre | tutto il residuo |
-| 4 | Primo scarico | +2 ATR dal costo medio | **solo a scala conclusa** (N3) | 30% |
+| 1 | Rottura trend | chiusura **daily** sotto media **20 giorni** | **solo a scala conclusa** (N1) | tutto il residuo |
+| 2 | Debolezza relativa | percentile RS < 50 per 5 giorni | sempre | tutto il residuo |
+
+Il regime **non compare fra le uscite** (S18): spegnendosi blocca gli acquisti, non
+vende. In un crollo vero sono queste due a scattare, e in fretta.
 
 "Scala conclusa" = tutte e tre le tranche eseguite, **oppure** scala annullata per
 rottura della media 50g, **oppure** scala scaduta per `ladder_expiry_bars` (N2).
-Mentre la scala è aperta l'unico presidio è la condizione di annullamento: le uscite
-2 e 4 sono sospese, altrimenti comprerebbero e venderebbero lo stesso movimento.
+Mentre la scala è aperta l'unico presidio è la condizione di annullamento: l'uscita
+2 è sospesa, altrimenti comprerebbe e venderebbe lo stesso movimento.
+
+**Nessuno scarico parziale (deciso, N13).** Si esce solo per i due motivi qui sopra.
+Un take-profit parziale sarebbe lo stesso errore del vecchio TP1 che questo piano
+boccia in §1: taglia la vincita presto. Sullo spot il tempo non costa nulla, quindi
+la posizione resta intera finché la struttura regge — e i due swap risparmiati per
+posizione rendono le fee DEX una voce trascurabile invece che un problema.
 
 Nessun TP2, nessun trailing percentuale, nessun breakeven, nessuno stop di prezzo.
 Il "trailing" è la media 20g daily: si segue la struttura, non una distanza fissa.
 
 ### 4.6 Portafoglio
 
+Il capitale spot e' una **fetta separata** dell'equity tradabile (S19), di default
+il **40%**. Tutte le percentuali qui sotto sono riferite a quella fetta, non
+all'equity totale.
+
 | Vincolo | Valore |
 |---|---|
-| Posizioni massime | 5 (Q3) |
-| Peso per asset a scala piena | 18% (5 × 18% = 90% investito a pieno regime) |
+| Fetta spot | **40%** dell'equity tradabile (il resto al perp) |
+| Posizioni massime | **8**, ma solo se il capitale lo consente (S20) |
+| Peso per asset a scala piena | **11%** della fetta spot |
 | Nuove prime tranche nelle stesse 24h | max 2 |
 | Capitale non impiegato | resta in USDT, nessun obbligo di essere investito |
 
@@ -279,23 +321,23 @@ l'errore opposto a quello che il piano vuole correggere.
 raggiunta. Va deciso se in alternativa completare la size a mercato — sconsigliato,
 comprerebbe forza invece che debolezza, contro S2.
 
-#### N3 — Ordine di precedenza tra scala e primo scarico
+#### N3 — ~~Ordine di precedenza tra scala e primo scarico~~ (SUPERATO da N13)
 
 Il primo scarico è a **+2 ATR dal costo medio**. Ma il costo medio si abbassa a ogni
 tranche. Se si scarica il 30% e poi il prezzo scende facendo scattare la tranche
 successiva, si **ricompra ciò che si è appena venduto**, pagando due volte le fee.
 
-**Soluzione proposta:** il primo scarico si attiva **solo a scala completata o
-scaduta/annullata**. Finché la scala è aperta, nessuna vendita parziale.
+**Superato:** con la decisione N13 lo scarico parziale non esiste più, quindi il
+conflitto sparisce alla radice. Resta valido il principio generale: mentre la scala
+è aperta non si vende.
 
-#### N4 — "Chiudere sul primo rimbalzo utile" non è implementabile
+#### N4 — ~~"Chiudere sul primo rimbalzo utile"~~ (SUPERATO da S18)
 
 L'uscita 1 (regime spento) dice di chiudere "sul primo rimbalzo utile": non è una
 condizione, è un'intenzione.
 
-**Soluzione proposta:** a regime spento si chiude alla **prima chiusura 4h verde**,
-e comunque **entro 24 ore** anche senza rimbalzo. Il ritardo è limitato e
-deterministico.
+**Superato:** con S18 il regime non liquida piu', quindi non esiste nessuna
+"chiusura da regime" da definire. Il problema sparisce alla radice.
 
 #### N5 — Percentili instabili su un universo piccolo
 
@@ -345,6 +387,127 @@ vecchio, con TP1/TP2/trailing valorizzati e senza i campi della scala.
 uscite** fino a chiusura naturale (flag `engine="v1"` sulla posizione), e il nuovo
 motore non le tocca. Nessuna migrazione di stato, nessuna chiusura forzata.
 
+### 4.8 NODI OPERATIVI — cosa manca per farlo davvero girare
+
+> Sezione aggiunta nella 5ª revisione. §4.7 copre la logica; questa copre l'impianto
+> che la fa funzionare in produzione. Erano tutti buchi scoperti, non rifiniture.
+
+#### N10 — ✅ DECISO: guidato dalle candele, non dall'orologio
+
+Il piano parla di calcoli "giornalieri" e trigger "ogni 4 ore", ma l'unico ciclo che
+esiste e' `slow_tick`, che gira a intervalli di minuti. Mancava del tutto la
+risposta a: a che ora si ricostruisce l'universo, quando si calcola la classifica,
+cosa succede se il bot e' spento a quell'ora, cosa succede al riavvio.
+
+**Soluzione proposta — tutto guidato dalle candele, non dall'orologio.**
+
+- *Passata giornaliera* (universo, classifica RS, regime): parte da `slow_tick`
+  quando la **data UTC dell'ultima candela daily chiusa** e' piu' recente di quella
+  dell'ultima passata registrata. Se il bot era spento, recupera al primo tick utile.
+- *Trigger 4h* (tranche, uscite): agiscono solo quando compare una **nuova candela
+  4h chiusa** per quell'asset, confrontando il timestamp dell'ultima elaborata.
+
+Ancorare tutto al timestamp delle candele invece che all'ora di sistema evita anche
+la trappola nota del clock simulato in dry-run (data di sistema disallineata dalle
+klines reali): il motore non guarda mai `now`, guarda l'ultima candela chiusa.
+
+#### N11 — ✅ DECISO: `runtime_state` con ripristino conservativo
+
+Lo stato della posizione sta nel DB (§5.6), ma tre cose non avevano casa:
+
+| Stato | Perche' serve |
+|---|---|
+| stato del regime (acceso/spento + soglia usata) | con l'isteresi 45/35 serve ricordare **da dove si viene**, altrimenti al riavvio si sceglie la soglia sbagliata |
+| contatore "giorni sotto il percentile 50" per asset **non in posizione** | serve al radar, e sulla posizione non c'e' |
+| quali asset sono gia' nel radar | altrimenti al riavvio rientrano tutti insieme |
+
+**Soluzione proposta:** chiavi in `runtime_state` (dove gia' vivono le impostazioni
+mobile): `spot_v2_regime`, `spot_v2_rs_state`, `spot_v2_last_daily_pass`.
+Se mancano, si ricalcola cio' che e' derivabile (i percentili) e si azzerano i
+contatori in modo **conservativo**: `weak_days = 0`, cosi' un riavvio non provoca
+mai un'uscita spuria.
+
+#### N12 — ✅ DECISO: UI completa (fase F9b)
+
+La scheda Agente oggi mostra i punteggi del vecchio motore. Col nuovo non resta
+niente da vedere, e i parametri nuovi non sono in `AgentMobileSettings`, quindi non
+sarebbero modificabili dall'app.
+
+**Soluzione proposta:** nuova fase **F9b** con semaforo del regime (e quale delle tre
+condizioni manca), radar ordinato per percentile RS, motivo di esclusione per ogni
+token scartato (F2 lo produce gia'), stato della scala per posizione, e i parametri
+di §7 aggiunti allo schema mobile.
+
+#### N13 — ✅ DECISO: nessuno scarico parziale
+
+Costruire una posizione piena sono **3 swap**, chiuderla 1 o 2. Su PancakeSwap ogni
+swap costa LP fee 0,25% + gas + slippage: un ciclo completo sta **sopra l'1%**.
+Il primo scarico a +2 ATR (su base 4h) non e' garantito che lo copra.
+
+**Ma la diagnosi giusta e' un'altra**: se l'1% di fee intacca il bersaglio, e' il
+bersaglio a essere sbagliato, non la soglia. +2 ATR su 4h e' un movimento piccolo:
+era **lo stesso errore del vecchio TP1** che questo piano boccia in §1 ("vincite
+tagliate presto"), reintrodotto con un altro nome.
+
+**Decisione: lo scarico parziale si elimina.** Si esce solo per motivi strutturali.
+Conseguenze:
+- due swap in meno per posizione, quindi i costi DEX diventano trascurabili;
+- si punta a movimenti da decine di punti, dove l'1% non conta;
+- coerente con la natura dello spot: il tempo e' gratis, la posizione resta intera
+  finche' la struttura regge.
+
+Nessuna soglia minima da introdurre, nessun asset da escludere per bassa volatilita'.
+
+#### N14 — ✅ DECISO: tetto al 3% delle riserve
+
+Il filtro chiede pool >= 50.000 $, ma se il capitale cresce una tranche da 18%
+dell'equity **muove il prezzo da sola**. Nessuna regola lo impediva.
+
+**Decisione:** la singola tranche non supera `max_pool_impact_pct`
+(default **3%**) delle riserve della pool. Sopra soglia, la tranche si riduce; se
+nemmeno la minima ci sta, l'asset viene escluso. Dipende dai fix B1/B3, perche' oggi
+la misura della liquidita' e' sbagliata per i token con decimals != 18.
+
+#### N15 — ✅ DECISO: quote in ombra nel dry-run
+
+F10 verifica che i trigger scattino, ma il dry-run simula i riempimenti a prezzi
+Binance: **non tocca PancakeSwap**. Slippage reale, divergenza di prezzo (N6), gas e
+swap falliti resterebbero non testati fino al mainnet (Q2).
+
+**Soluzione proposta — "quote in ombra":** durante il dry-run, per ogni trade
+simulato si chiama comunque `get_quote` di PancakeSwap in sola lettura e si
+registrano divergenza, slippage implicito e impatto sulla pool, **senza eseguire**.
+Costa nulla, non rischia nulla, e valida in anticipo N6, N14 e la misura di
+liquidita'.
+
+#### N16 — ✅ DECISO: tranche, uscite col motivo, medie 50g/20g, marker — anche live
+
+`_snapshot_closed_trade` costruisce un payload con **un solo `entry_price` e un solo
+`exit_price`**, piu' i livelli SL/TP1/TP2. Con la scala a 3 ingressi, uno scarico
+parziale e un'uscita finale, il grafico mostrerebbe solo il prezzo medio: si
+perderebbe esattamente cio' che serve capire — dove hai comprato ogni tranche e
+perche' sei uscito.
+
+**Soluzione proposta:** il payload passa da valori singoli a liste.
+
+| Campo | Contenuto |
+|---|---|
+| `entries[]` | per ogni tranche: timestamp, prezzo, size, indice (1/2/3) |
+| `exits[]` | per ogni uscita: timestamp, prezzo, size, motivo (scarico / trend / RS / regime) |
+| `levels` | le serie **media 50g e media 20g** — sono le regole vere di uscita, al posto delle rette SL/TP che non esistono piu' |
+| `markers` | scala annullata, scala scaduta, regime spento, debolezza RS |
+
+Vale per il grafico **live**, non solo per lo snapshot alla chiusura: con posizioni
+che durano settimane, vedere la scala mentre si costruisce e' piu' utile del
+consuntivo.
+
+⚠️ **Prerequisito:** oggi l'unico legame fra un trade e la sua posizione e' il
+**prefisso del `trade_id`** (limite gia' annotato nel golden test). Per ricostruire
+in modo affidabile tranche e uscite serve `position_id` come **colonna vera** su
+`SpotTrade`. Va fatto prima di F8b.
+
+---
+
 ---
 
 ## 5. AUDIT DEL CODICE SPOT ESISTENTE
@@ -357,7 +520,7 @@ motore non le tocca. Nessuna migrazione di stato, nessuna chiusura forzata.
 | # | Cosa | Dove | Perché è un problema |
 |---|---|---|---|
 | C1 | **Scale-in E v3** | `service.py` `_maybe_scale_in_spot` | ✅ verificato. Aggiunge solo a favore: `if price <= pos.entry_price: return` , stop già a breakeven, nuovo higher-high richiesto. La nostra scala aggiunge **contro**. **Da riscrivere invertendo le condizioni**, riusando la media ponderata e il cap già presenti. È il percorso corretto per le tranche (vedi §4.4). |
-| C2 | **TP1 / TP2** | `momentum.py` (calcolo TP), `_check_sl_tp` | TP1 chiude il 60% a 2,5 ATR. Nel nuovo modello il primo scarico è il 30% a +2 ATR **dal costo medio** (non dall'entry della 1ª tranche) e il resto corre. Se restano attivi, chiudono le posizioni prima della logica nuova. |
+| C2 | **TP1 / TP2** | `momentum.py` (calcolo TP), `_check_sl_tp` | TP1 chiude il 60% a 2,5 ATR. Nel nuovo modello **non esiste alcun take-profit** (N13): si esce solo per motivi strutturali. Se restano attivi, chiudono le posizioni prima della logica nuova. |
 | C3 | **Trailing + breakeven + profit lock** | `service.py` `_check_sl_tp` | Sostituiti dalla media 20g. L'ordine di priorità delle uscite (`_check_sl_tp`) li fa scattare **per primi**: resterebbero loro a comandare. |
 | C4 | **Stop loss (ATR / lowest)** | `momentum.py` (calcolo stop) | S4: nessuno stop di prezzo. **Soluzione verificata: emettere `stop_loss = None`.** In `RiskManager.evaluate` tutto il blocco sul sizing è dentro `if intent.stop_loss is not None`, quindi con `None` si saltano *insieme* il filtro I e il sizing per distanza di stop, e `risk_size` resta `nominal_size`. Pulito, nessuna modifica al risk manager. |
 | C5 | **Filtro I — max stop distance** | `risk/manager.py` (`RiskManager.evaluate`) | ✅ verificato: attivo solo con `stop_loss is not None`. Risolto da C4 senza toccarlo. Da spegnere comunque via config per chiarezza. |
@@ -415,7 +578,7 @@ Mancano, e servono al nuovo modello:
 |---|---|
 | `ladder_budget_usd` | budget totale pianificato per l'asset (le tranche sono frazioni di questo) |
 | `ladder_filled` | quante tranche eseguite. **Non riusare `scale_in_count`**: resta al vecchio motore finché esiste il flag di rollback (Q4), riusarlo rende ambiguo lo stato |
-| `ladder_state` | `open` / `complete` / `cancelled` / `expired` — governa l'attivazione delle uscite 2 e 4 (N1, N3) |
+| `ladder_state` | `open` / `complete` / `cancelled` / `expired` — governa l'attivazione dell'uscita per rottura trend (N1) |
 | `ladder_deadline` | scadenza della scala (N2) |
 | `last_tranche_price` | riferimento per il trigger della tranche successiva (−1 ATR sotto) |
 | `rs_weak_days` | contatore giorni consecutivi con RS sotto soglia |
@@ -430,6 +593,181 @@ massimo a 10 giorni, che è una finestra mobile di mercato, non uno stato di pos
 ⚠️ **Non c'è Alembic**: lo schema nasce da `create_all`. Le colonne nuove vanno
 aggiunte col pattern `upgrade_schema` già usato altrove nel progetto (vedi
 `Plan_Reserve.md` D26), oppure serializzate in un campo JSON di stato.
+
+### 5.8 INTEGRAZIONE con la struttura attuale — problemi trovati
+
+> Passata dedicata (6ª revisione): non "il piano è coerente con sé stesso", ma
+> "il piano funziona dentro CryptoSentinel com'è fatto oggi". Due voci sono
+> **bloccanti**: senza risolverle il motore nuovo non comprerebbe, o comprerebbe e
+> non venderebbe mai.
+
+| # | Problema | Gravità |
+|---|---|---|
+| I1 | Il brain scarta ogni trade del motore nuovo | 🔴 bloccante |
+| I2 | `spot_max_exposure_pct` a 30% strozza il portafoglio a ~3 posizioni | 🔴 bloccante |
+| I3 | I token solo-DEX resterebbero bloccati in posizione per sempre | 🔴 bloccante |
+| I4 | `slow_tick` è un ciclo per-asset, il modello è cross-sezionale | struttura |
+| I5 | `_scanner_payload` costruisce sempre un simbolo Binance | struttura |
+| I6 | Il vecchio filtro di regime vive in `evaluate_spot`, non nel segnale | precisione |
+| I7 | Tre tranche = tre notifiche "trade aperto" | rumore |
+| I8 | Lo snapshot del grafico dipende da SL/TP che non esistono più | grafici |
+| I9 | Motivi di chiusura nuovi non mappati | minore |
+| I10 | Volume delle `AgentDecision` | nota positiva |
+
+#### I11 — 🔴 Spot e perp attingono dallo stesso capitale, senza tetto complessivo
+
+`RiskManager.evaluate` calcola la size su `total_equity_usd` (meno la Riserva) **per
+entrambi i mercati**. L'unica separazione sono due tetti indipendenti
+(`spot_max_exposure_pct`, `perp_max_exposure_pct`), e **ciascuno conta solo le
+proprie posizioni**: quello spot somma il nozionale spot, quello perp somma il
+margine perp. Non esiste nessun guard complessivo.
+
+Con i default attuali (30 + 30) il problema era latente. Portando lo spot al 90%
+diventerebbe immediato: su 1.000 € farebbe 900 spot + 300 perp = **120% del
+capitale**, e nulla lo bloccherebbe. In più i due motori si farebbero la corsa sullo
+stesso denaro, con lo spot — che punta a stare quasi sempre investito — a
+affamare il perp.
+
+**Soluzione (S19):** budget separati. `RiskManager` riceve una **equity di mercato**
+(equity tradabile × quota del mercato) invece dell'equity totale; tutte le
+percentuali per-trade e di esposizione si riferiscono a quella. Il tetto complessivo
+diventa automatico perche' le quote sommano a 100%.
+
+#### N17 — 🔴 Il disegno non entra nel capitale attuale
+
+Numeri reali (portafoglio dry-run, verificati sul DB): equity totale **883,74 €**,
+Riserva **30,67 €**, quindi equity tradabile **853 €**. Fetta spot al 40% = **341 €**.
+
+Con 8 posizioni all'11% e la scala 50/30/20:
+
+| | valore |
+|---|---|
+| budget per posizione | 37,5 € |
+| 1ª tranche | 18,8 € |
+| 2ª tranche | 11,3 € |
+| 3ª tranche | **7,5 €** |
+
+La terza tranche sfiora il minimo tecnico di 7 €, e su BSC un ordine da 7 € paga in
+gas oltre l'1%: economicamente non ha senso. **Le 8 posizioni sono un disegno da
+conto piu' grande** (servono ~2.000 € di equity totale perche' tutte e tre le tranche
+restino sopra i ~20 €).
+
+**Soluzione (S20) — dimensionamento adattivo.** Si fissa `min_tranche_usd` (default
+**20 €**, la soglia sotto la quale il gas pesa troppo) e da lì si ricava quante
+posizioni il capitale sostiene:
+
+```
+budget_per_posizione = min_tranche_usd / frazione_tranche_piu_piccola
+posizioni = min(max_posizioni, fetta_spot / budget_per_posizione)
+```
+
+Con la fetta attuale di 341 € e la scala 50/30/20 (frazione minima 20%):
+budget minimo per posizione = 20 / 0,20 = 100 € → **3 posizioni** con scala piena.
+Crescendo il capitale il numero sale da solo fino al tetto di 8.
+
+Se nemmeno una posizione a scala piena ci sta, si riduce **prima il numero di
+tranche** (da 3 a 2), mai a tranche unica: l'ingresso scalato e' un punto fermo (S3).
+
+⚠️ **Nota di configurazione:** `configs/instance.yaml` ha
+`dry_run_capital_usd: 200`, valore **stantio** — il portafoglio reale è partito da
+1.000 €. Non ha effetto sul portafoglio esistente, ma se venisse reinizializzato
+ripartirebbe da 200. Da allineare.
+
+#### I1 — 🔴 Il brain scarterebbe ogni trade
+
+`_handle_signal` passa sempre dal meta-controller. Nel fallback locale (senza API
+key) la regola è: `quality >= 0.6` ⇒ `approve`, altrimenti `skip`. E
+`_intent_from_signal` legge `quality` dal segnale con **default 0**.
+
+Il motore nuovo non ha un "quality score": lo abbiamo sostituito con la selezione
+cross-sezionale. Risultato: ogni ingresso uscirebbe come `skip`, per sempre, senza
+alcun errore visibile.
+
+**Soluzione:** il segnale emette `quality = percentile RS / 100`. Non è un numero
+finto: è esattamente la misura di qualità del nuovo modello. E siccome nel radar ci
+va solo il quartile alto, quality ≥ 0,75 per costruzione, quindi supera la soglia
+0,60 in modo naturale. Il brain resta nel percorso e continua a poter bloccare.
+
+#### I2 — 🔴 Il tetto di esposizione strozza il portafoglio
+
+Valori attuali: `spot_capital_per_trade_pct` **6%**, `spot_max_exposure_pct` **30%**.
+Il disegno nuovo vuole 8 posizioni all'11% ≈ 88% di esposizione. Con il tetto a 30%
+il risk manager bloccherebbe intorno alla terza posizione con
+`max_exposure_guard` — e il sintomo sarebbe **esattamente quello che vogliamo
+evitare: il bot che sta fermo**, per un motivo di configurazione e non di mercato.
+
+**Soluzione:** portare `spot_capital_per_trade_pct` a **11** e
+`spot_max_exposure_pct` a **90** in `configs/`. ⚠️ Attenzione: questi due vivono anche
+nell'**override runtime** delle impostazioni mobile, che vince sul file. Vanno
+allineati entrambi, altrimenti il file dice una cosa e il bot ne fa un'altra.
+
+#### I3 — 🔴 I token solo-DEX resterebbero bloccati in posizione
+
+Con S8 abbiamo aperto l'universo ai token senza coppia Binance. Ma
+`_refresh_position_prices` aggiorna `current_price` **solo** con il ticker Binance:
+per quei token il prezzo non si aggiornerebbe mai, quindi le uscite non verrebbero
+mai valutate e la posizione resterebbe aperta a tempo indefinito.
+
+**Soluzione:** il refresh dei prezzi deve avere lo stesso fallback dei dati storici
+(S8): ticker Binance dove esiste, quote del pool PancakeSwap altrimenti. Senza
+questo, S8 introduce un bug peggiore del problema che risolve.
+
+#### I4 — `slow_tick` è per-asset, il modello è cross-sezionale
+
+Oggi il ciclo fa: per ogni asset → valuta → decide, in modo indipendente. Il nuovo
+modello deve prima **ordinare tutti** e poi agire sui migliori.
+
+**Soluzione:** non serve riscrivere il ciclo. La passata giornaliera (N10) calcola
+classifica e regime e li salva in `runtime_state` (N11); il ciclo per-asset legge
+quel contesto già pronto. Cambia solo **l'ordine di iterazione**, che diventa
+l'ordine di ranking invece di quello della watchlist (V7).
+
+#### I5 — `_scanner_payload` costruisce sempre `{ASSET}USDT`
+
+Il simbolo Binance è costruito per concatenazione. Per un token solo-DEX quel
+simbolo non esiste, il fetch fallisce in silenzio e l'asset viene scartato con
+`insufficient_ohlcv_history`.
+
+**Soluzione:** il payload porta `price_source` (`binance` | `pool`) e il riferimento
+corrispondente (simbolo o indirizzo pool); il modulo di segnale sceglie la fonte.
+
+#### I6 — Il vecchio regime non vive dove pensavamo
+
+`_spot_market_regime` e `_market_reversal_filter` sono chiamati **dentro
+`evaluate_spot`**, non dentro il modulo di segnale. Spegnere il vecchio motore
+(C6) richiede quindi di intervenire lì, non solo in `momentum.py`. Dettaglio di
+precisione per F6, ma è il genere di cosa che fa perdere un'ora.
+
+#### I7 — Tre tranche, tre notifiche
+
+`_notify_trade_opened` scatta a ogni trade. Con la scala riceveresti tre push
+"trade aperto" per la stessa coin, più una per la chiusura.
+
+**Soluzione:** notifica solo alla **prima tranche** (posizione aperta) e alla
+chiusura. Le tranche 2 e 3 restano nel log e nel grafico, senza push.
+
+#### I8 — Lo snapshot del grafico si appoggia a livelli che non esistono più
+
+`_snapshot_closed_trade` usa `take_profit_1/2`, `stop_loss` e `stop_reference_time`
+— tutti `None` nel nuovo modello. Oltre al payload (N16), va rivisto anche il
+calcolo di `chart_start`, che oggi parte dal riferimento dello stop: dovrà partire
+dal timestamp della **prima tranche**.
+
+#### I9 — Motivi di chiusura nuovi
+
+Le chiusure spot scrivono `notes = "auto_close:<reason>"`. I motivi nuovi
+(`trend_break`, `rs_weakness`) non sono mappati in nessuna traduzione per la UI, e
+`_close_purpose` (lato perp) non li conosce. Da aggiungere quando si tocca la UI.
+
+#### I10 — Volume delle decisioni (nota positiva)
+
+Oggi `_handle_signal` registra una `AgentDecision` per **ogni** asset a **ogni**
+slow tick, anche per gli skip: molte righe al minuto. Col nuovo modello si valuta
+solo alla chiusura di una candela 4h, quindi il volume cala di uno o due ordini di
+grandezza. Va solo evitato che la passata giornaliera registri una decisione per
+asset a ogni giro.
+
+---
 
 ### 5.7 Stato della base di codice — ✅ RISOLTO (2026-08-31)
 
@@ -459,20 +797,24 @@ verificare `git status` prima di iniziare.
 
 | Fase | Contenuto | Dipendenze |
 |---|---|---|
+| **F0b** | **Sbloccare l'integrazione**: tetti di esposizione a 11%/90% in config **e** nell'override runtime (I2); fallback prezzi dal pool in `_refresh_position_prices` (I3); `price_source` nel payload (I5) | — |
 | **F1** | **Mappa indirizzi BSC**: `configs/bsc_token_map.yaml`, quote token, script di verifica pool+liquidità. Fix B1/B3. | — |
 | **F2** | **Universo automatico**: intersezione §4.2, esposta via API, con motivo di esclusione per ogni scarto | F1 |
 | **F3** | **Storico daily**: backfill ≥ 250 candele daily per l'universo, con rate limiter e cache persistita | F2 |
-| **F4** | **Forza relativa**: implementare `relative_strength_v2.py`, percentili, isteresi 75/50, contatore dei 5 giorni | F3 |
+| **F3b** | **Fonte OHLC del pool** per i token senza coppia Binance: integrazione, normalizzazione al formato `Candle`, pulizia delle mèche da singolo swap (S8) | F3 |
+| **F4** | **Forza relativa**: implementare `relative_strength_v2.py`, percentili, isteresi 75/50, contatore dei 5 giorni; il segnale emette `quality = percentile/100` così il brain non scarta tutto (I1) | F3 |
 | **F5** | **Rilevatore di regime**: BTC 100g + pendenza + % alt sopra 50g; on/off del motore | F3 |
-| **F6** | **Spegnimento del vecchio motore**: C2-C8 (**C8 heartbeat per primo**, è quello che forza trade non voluti), verifica V3-V7 | — (fattibile in parallelo) |
+| **F6** | **Spegnimento del vecchio motore**: C2-C8, **compresi i filtri di regime chiamati dentro `evaluate_spot`** e non nel modulo di segnale (I6); verifica V3-V7 | — (fattibile in parallelo) |
 | **F6b** | **Schema DB**: colonne §5.6 con pattern `upgrade_schema`; sizing frazionato della 1ª tranche | F6 |
 | **F7** | **Ingressi a scala**: riscrittura di `_maybe_scale_in_spot` con condizioni invertite (add contro, struttura integra), 3 tranche in ATR, annullamento su rottura 50g | F4, F5, F6b |
 | **F7b** | **Stato della scala**: `ladder_state` (open/complete/cancelled/expired), scadenza N2, accorpamento tranche sotto la size minima N8 | F7 |
-| **F8** | **Uscite strutturali**: priorità §4.5, uscite 2 e 4 **sospese a scala aperta** (N1, N3), media 20g daily, chiusura di regime N4, debolezza RS | F7b |
-| **F8b** | **Guardia di esecuzione**: confronto prezzo Binance / quote PancakeSwap, `max_price_divergence_pct` (N6) | F1, F8 |
-| **F9** | **Vincoli di portafoglio**: max 5 posizioni, max 2 prime tranche/24h, ordinamento per ranking (V7) | F7 |
+| **F8** | **Uscite strutturali**: priorità §4.5, **nessuno scarico parziale** (N13), **nessuna uscita da regime** (S18), rottura trend sospesa a scala aperta (N1), media 20g daily, debolezza RS | F7b |
+| **F8b** | **Guardia di esecuzione**: divergenza Binance/PancakeSwap (N6), impatto sulla pool max 3% (N14) | F1, F8 |
+| **F8c** | **`position_id` colonna vera su `SpotTrade`** (oggi il legame e' il prefisso del trade_id) + payload grafici a liste `entries[]`/`exits[]`, medie 50g/20g, marker; anche sul grafico live (N16) | F8 |
+| **F9** | **Vincoli di portafoglio**: fetta spot separata (S19, I11), numero di posizioni adattivo al capitale (S20, N17), max 2 prime tranche/24h, ordinamento per ranking (V7) | F7 |
 | ~~**F0**~~ | ~~Baseline verde~~ ✅ **FATTO (2026-08-31)**: suite a 384 passed / 2 skipped (§5.7) | — |
-| **F10** | **Dry-run** a size ridotta: verifica che i trigger scattino quando devono. Priorità di verifica: N1 (l'ingresso non viene espulso subito) e N2 (quante scale restano incompiute) | tutte |
+| **F9b** | **UI**: semaforo regime (e quale condizione manca), radar per percentile, motivo di esclusione, stato scala; parametri nuovi in `AgentMobileSettings` (N12); notifica solo alla 1ª tranche (I7); etichette per i motivi di chiusura nuovi (I9) | F9 |
+| **F10** | **Dry-run** a size ridotta con **quote in ombra** (N15): verifica che i trigger scattino e misura divergenza/slippage/impatto pool senza eseguire. Priorità: N1 (l'ingresso non viene espulso subito) e N2 (quante scale restano incompiute) | tutte |
 | **F11** | **Pulizia**: rimozione codice vecchio, aggiornamento `docs/Strategia_Spot.md` e `docs/Uscite_Spot.md`, memorie obsolete | F10 |
 
 **F1 è bloccante per tutto il resto.** F6 può partire in parallelo perché è
@@ -489,20 +831,22 @@ il motore precedente, per il rollback di Q4).
 
 | Parametro | Default | Nota |
 |---|---|---|
-| `regime_btc_sma_days` | 100 | |
+| `regime_btc_ema_on_days` | **20** | BTC sopra questa EMA daily: il motore puo' comprare |
+| `regime_btc_ema_off_days` | **50** | BTC sotto questa EMA daily: il motore smette di comprare |
 | `regime_alt_health_sma_days` | 50 | |
-| `rs_lookback_days` | 30 | finestra forza relativa |
+| `rs_lookback_days` | **14** | finestra forza relativa: le rotazioni crypto durano settimane, 30g arrivava tardi |
 | `rs_enter_percentile` | 75 | |
 | `rs_exit_percentile` | 50 | |
 | `rs_exit_days` | 5 | giorni consecutivi sotto soglia |
 | `asset_trend_sma_days` | 50 | media di struttura dell'asset |
 | `exit_trend_sma_days` | 20 | media di uscita |
-| `pullback_atr_trigger` | 1.5 | 1ª tranche |
+| `pullback_atr_trigger` | **1.0** | 1ª tranche: abbassato per far lavorare di piu' il motore |
 | `ladder_atr_step` | 1.0 | distanza tranche successive |
 | `ladder_fractions` | [0.50, 0.30, 0.20] | |
-| `first_scale_out_atr` | 2.0 | dal costo medio |
-| `first_scale_out_fraction` | 0.30 | |
 | `max_new_entries_per_day` | 2 | |
+| `spot_equity_share_pct` | **40** | quota dell'equity tradabile gestita dallo spot (S19) |
+| `min_tranche_usd` | **20** | soglia economica per tranche: sotto, il gas BSC pesa oltre l'1% (S20) |
+| `max_positions` | 8 | tetto massimo; il numero effettivo lo decide il capitale (S20) |
 | `first_tranche_fraction` | 0.50 | frazione del budget per asset alla 1ª tranche (vedi §4.4) |
 | `ladder_expiry_bars` | 30 | scadenza della scala, candele 4h (N2) |
 | `rs_min_universe` | 25 | sotto questa soglia si usa RS assoluta, non il percentile (N5) |
@@ -511,16 +855,17 @@ il motore precedente, per il rollback di Q4).
 | `max_price_divergence_pct` | 1.5 | scarto massimo prezzo Binance / quote PancakeSwap (N6) |
 | `regime_alt_health_on_pct` | 45 | isteresi del regime: accende sopra 45% |
 | `regime_alt_health_off_pct` | 35 | isteresi del regime: spegne sotto 35% |
-| `regime_exit_max_hours` | 24 | chiusura forzata a regime spento senza rimbalzo (N4) |
+| `max_pool_impact_pct` | 3.0 | quota massima delle riserve della pool per singola tranche (N14) |
+| `shadow_quote_enabled` | true | in dry-run interroga PancakeSwap in sola lettura per misurare divergenza e slippage (N15) |
 
 ### Parametri esistenti da riusare (non duplicare)
 
 | Nuovo concetto | Parametro esistente |
 |---|---|
-| Posizioni massime (Q3) | `ms.spot_max_open_positions` |
-| Peso per asset a scala piena | `ms.spot_capital_per_trade_pct` (= budget pieno della scala) |
+| Posizioni massime (8) | `ms.spot_max_open_positions` — da verificare il valore attuale |
+| Peso per asset a scala piena | `ms.spot_capital_per_trade_pct` — **da 6% a 11%** (I2) |
 | Soglia liquidità pool | `ms.min_pool_liquidity_usd` / `risk_min_pool_liquidity_usd` |
-| Esposizione massima spot | `ms.spot_max_exposure_pct` |
+| Esposizione massima spot | `ms.spot_max_exposure_pct` — **da 30% a 90%**, altrimenti blocca alla 3ª posizione (I2) |
 
 ### Parametri che escono di scena
 
@@ -536,8 +881,8 @@ il motore precedente, per il rollback di Q4).
 
 | Rischio | Mitigazione |
 |---|---|
-| La premessa di bull market non si avvera | L'interruttore §4.1 spegne il motore; è il presidio primario, non un filtro accessorio |
-| L'universo si riduce troppo dopo i filtri (indirizzo + pool + liquidità + Binance) | Misurare la dimensione dell'universo in F2 **prima** di costruirci sopra; se resta troppo piccolo il modello cross-sezionale non regge e va rivista la premessa S8 |
+| La premessa di bull market non si avvera | L'interruttore §4.1 smette di comprare. **Attenzione**: da quando il regime non liquida piu' (S18), in un crollo rapido la protezione e' interamente affidata alle uscite per asset (media 20g, forza relativa). E' una scelta consapevole: evita di svuotare il portafoglio a ogni falso segnale, ma sposta il rischio sulla velocita' di quelle due uscite. Da tenere d'occhio in dry-run |
+| L'universo si riduce troppo dopo i filtri (indirizzo + pool + liquidità + storico) | Misurare la dimensione dell'universo in F2 **prima** di costruirci sopra. Il vincolo Binance è caduto (S8), quindi il rischio è minore, ma resta il fallback a soglia assoluta di N5 se l'universo è comunque piccolo |
 | Costi di esecuzione su DEX (LP fee + slippage + gas) erodono il vantaggio | Isteresi 75/50, max 2 ingressi/giorno, posizioni lunghe: pochi trade per costruzione |
 | ~~Heartbeat giornaliero~~ | ✅ risolto (C8) |
 | ~~Dedup/cooldown incrociati spot/perp~~ | ✅ risolti (V1, V2) |
@@ -545,8 +890,15 @@ il motore precedente, per il rollback di Q4).
 | **Sotto-investimento sui vincitori (N2)** | Scadenza della scala; misurare in dry-run quante scale restano incompiute |
 | Divergenza prezzo Binance / pool BSC (N6) | Guardia `max_price_divergence_pct` prima di ogni esecuzione |
 | Universo troppo piccolo per i percentili (N5) | Fallback a soglia assoluta sotto `rs_min_universe` |
+| **Esecuzione non validata fino al mainnet (N15)** | Quote in ombra durante il dry-run: misura divergenza, slippage e impatto pool senza rischiare capitale. È l'unica verifica possibile prima di Q2 |
+| Riavvio del bot che altera il comportamento (N11) | Stato in `runtime_state`, ripristino conservativo (`weak_days = 0`: mai un'uscita spuria) |
+| **Capitale insufficiente per il disegno (N17)** | Dimensionamento adattivo: con l'equity attuale il motore aprira' 3 posizioni invece di 8, e salira' da solo quando il conto cresce. Da verificare in dry-run che il numero calcolato sia quello atteso |
+| **Spot e perp che si affamano a vicenda (I11)** | Budget separati 40/60: ogni motore vede solo la propria fetta |
+| Costi DEX superiori al movimento catturato (N13) | Eliminato lo scarico parziale: due swap in meno per posizione e bersagli molto piu' ampi, cosi' le fee tornano marginali |
 | Nessuna validazione storica per scelta esplicita (S10) | Dry-run F10 con size ridotta; i parametri restano quelli argomentati, non ottimizzati |
 | Rollback necessario | Q4: flag di selezione motore finché il nuovo non è validato |
+| **Blocchi silenziosi da configurazione (I1, I2)** | Sono i più insidiosi: il bot non dà errore, semplicemente non compra. Vanno risolti in **F0b, prima di tutto il resto**, e verificati in dry-run contando le posizioni effettivamente aperte |
+| **Posizioni bloccate senza prezzo (I3)** | Un token solo-DEX senza fallback sul prezzo non uscirebbe mai. Fallback obbligatorio in F0b, prima di ammettere token non-Binance nell'universo |
 
 ---
 
@@ -554,5 +906,4 @@ il motore precedente, per il rollback di Q4).
 
 - Strategia **C delta-neutral** (funding farming): scheda separata futura.
 - Motore **perp**: non toccato da questo piano.
-- Token solo-DEX senza coppia Binance (S8).
 - Passaggio a mainnet (Q2): decisione operativa separata.
