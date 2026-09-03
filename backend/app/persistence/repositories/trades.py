@@ -10,6 +10,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
 
+#: Motivi di chiusura innescati dall'utente, non dal motore: tasto "Chiudi ora al
+#: mercato" (manual_close) e "Chiudi tutto & pausa" (manual_risk). Vengono esclusi
+#: dal win-rate perche' non misurano il comportamento della strategia; restano
+#: invece nei totali PnL / volume / conteggi (sono operazioni reali).
+MANUAL_CLOSE_REASONS = ("manual_close", "manual_risk")
+
+
+def is_manual_close(trade) -> bool:
+    """True se il trade di chiusura viene da un'azione manuale dell'utente."""
+    notes = getattr(trade, "notes", "") or ""
+    return any(notes.startswith(f"auto_close:{reason}") for reason in MANUAL_CLOSE_REASONS)
+
 
 class SpotTradeRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -54,9 +66,13 @@ class SpotTradeRepository:
         return list(result.scalars().all())
 
     async def win_rate(self, user_id: str) -> dict:
-        """Win rate sui trade di chiusura (quelli con pnl_usd registrato)."""
+        """Win rate sui trade di chiusura (quelli con pnl_usd registrato).
+
+        Le chiusure manuali (tasto "Chiudi ora" / "Chiudi tutto & pausa") sono
+        escluse: misura il motore, non le decisioni dell'utente.
+        """
         trades = await self.list_for_user(user_id, limit=10_000)
-        closed = [t for t in trades if t.pnl_usd is not None]
+        closed = [t for t in trades if t.pnl_usd is not None and not is_manual_close(t)]
         if not closed:
             return {"total": 0, "wins": 0, "win_rate_pct": 0.0}
         wins = sum(1 for t in closed if t.pnl_usd > 0)
@@ -286,9 +302,13 @@ class PerpTradeRepository:
         return result.scalar_one_or_none()
 
     async def win_rate(self, user_id: str) -> dict:
-        """Win rate sui trade di chiusura (quelli con pnl_usd registrato)."""
+        """Win rate sui trade di chiusura (quelli con pnl_usd registrato).
+
+        Le chiusure manuali (tasto "Chiudi ora" / "Chiudi tutto & pausa") sono
+        escluse: misura il motore, non le decisioni dell'utente.
+        """
         trades = await self.list_for_user(user_id, limit=10_000)
-        closed = [t for t in trades if t.pnl_usd is not None]
+        closed = [t for t in trades if t.pnl_usd is not None and not is_manual_close(t)]
         if not closed:
             return {"total": 0, "wins": 0, "win_rate_pct": 0.0}
         wins = sum(1 for t in closed if t.pnl_usd > 0)

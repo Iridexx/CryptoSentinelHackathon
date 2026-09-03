@@ -2928,6 +2928,8 @@ const CLOSE_REASON_LABELS: Record<string, string> = {
   smart_sl_rebuy_all: 'Smart SL Rebuy All',
   regime_derisk: 'Shock BTC — De-risk',
   regime_derisk_stop: 'Shock BTC — Stop',
+  manual_close: 'Chiusura manuale',
+  manual_risk: 'Chiusura manuale (tutte)',
 };
 
 function TradeHistoryTable({

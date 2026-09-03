@@ -775,6 +775,8 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   profit_lock: { label: 'Profit Lock', className: 'text-accent-green' },
   regime_derisk: { label: 'Shock BTC — De-risk', className: 'text-amber-400' },
   regime_derisk_stop: { label: 'Shock BTC — Stop', className: 'text-accent-red' },
+  manual_close: { label: 'Chiusura manuale', className: 'text-sky-400' },
+  manual_risk: { label: 'Chiusura manuale (tutte)', className: 'text-sky-400' },
 };
 
 const TradeHistoryList: FC<{
