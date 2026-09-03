@@ -698,6 +698,23 @@ export function riskCloseAll(adminToken: string): Promise<RiskCloseAllResponse> 
   });
 }
 
+export interface ClosePositionResponse {
+  status: string;
+  market: string;
+  position_id: string;
+  exit_price: string;
+  pnl_usd: string;
+}
+
+export function closePosition(market: 'spot' | 'perp', positionId: string, adminToken: string): Promise<ClosePositionResponse> {
+  return request<ClosePositionResponse>('/api/v1/agent/risk/close-position', {
+    method: 'POST',
+    timeoutMs: 60_000,
+    body: { market, position_id: positionId },
+    token: adminToken,
+  });
+}
+
 export interface ResetDrawdownResponse {
   status: string;
   total_equity_usd: string;

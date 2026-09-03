@@ -17,6 +17,7 @@ import {
   saveAgentSettings,
   setKillSwitch,
   riskCloseAll,
+  closePosition,
   resetDrawdown,
   adjustEquity,
   validateOnboarding,
@@ -903,7 +904,36 @@ const TradeHistoryList: FC<{
   );
 };
 
-const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }> = ({ data, onTrade }) => {
+type ClosePositionHandler = ((market: 'spot' | 'perp', positionId: string, asset: string) => void) | undefined;
+
+const ClosePositionButton: FC<{
+  market: 'spot' | 'perp';
+  positionId: string;
+  asset: string;
+  adminToken?: string;
+  busy?: boolean;
+  onClose?: ClosePositionHandler;
+}> = ({ market, positionId, asset, adminToken, busy, onClose }) => {
+  if (!onClose) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onClose(market, positionId, asset)}
+      disabled={!adminToken || busy}
+      className="mt-2 w-full rounded-lg bg-accent-red/15 px-3 py-2 text-xs font-semibold text-accent-red disabled:opacity-40"
+    >
+      {busy ? 'Chiudo...' : 'Chiudi ora al mercato'}
+    </button>
+  );
+};
+
+const SpotPane: FC<{
+  data: SpotView | null;
+  onTrade: (tradeId: string) => void;
+  adminToken?: string;
+  onClosePosition?: ClosePositionHandler;
+  closingPosition?: boolean;
+}> = ({ data, onTrade, adminToken, onClosePosition, closingPosition }) => {
   const hasPositions = (data?.open_positions.length ?? 0) > 0;
   const hasHistory = (data?.history.length ?? 0) > 0;
   const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
@@ -929,36 +959,38 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
       {hasPositions ? (
         <div className="space-y-2">
           {data!.open_positions.map((position) => (
-            <button
-              key={position.position_id}
-              type="button"
-              onClick={() => position.open_trade_id && onTrade(position.open_trade_id)}
-              disabled={!position.open_trade_id}
-              className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
-            >
-              <div className="text-[11px] text-gray-500 mb-1">
-                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-white">{position.asset}</p>
-                <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
-                  {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
-                </p>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
-                <span>Entry {fmtPriceFull(position.entry_price)}</span>
-                <span>Now {fmtPriceFull(position.current_price)}</span>
-                <span>{position.status}</span>
-              </div>
-              <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-gray-500">
-                <span>Mode: <span className={!position.fee_mode || position.fee_mode === 'none' ? 'text-gray-400' : 'text-accent-yellow'}>{position.fee_mode === 'none' ? 'nessuna' : position.fee_mode === 'all' ? 'swap+slip' : position.fee_mode ?? '-'}</span></span>
-                <span>Swap {position.swap_fee_usd != null ? fmtUsd(position.swap_fee_usd) : '$0.00'}</span>
-                <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
-              </div>
-              <div className="mt-1.5 text-xs text-gray-500">
-                <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
-              </div>
-            </button>
+            <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => position.open_trade_id && onTrade(position.open_trade_id)}
+                disabled={!position.open_trade_id}
+                className="block w-full text-left transition active:scale-[0.99] disabled:cursor-default"
+              >
+                <div className="text-[11px] text-gray-500 mb-1">
+                  {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-white">{position.asset}</p>
+                  <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
+                    {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
+                  </p>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                  <span>Entry {fmtPriceFull(position.entry_price)}</span>
+                  <span>Now {fmtPriceFull(position.current_price)}</span>
+                  <span>{position.status}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                  <span>Mode: <span className={!position.fee_mode || position.fee_mode === 'none' ? 'text-gray-400' : 'text-accent-yellow'}>{position.fee_mode === 'none' ? 'nessuna' : position.fee_mode === 'all' ? 'swap+slip' : position.fee_mode ?? '-'}</span></span>
+                  <span>Swap {position.swap_fee_usd != null ? fmtUsd(position.swap_fee_usd) : '$0.00'}</span>
+                  <span>Slip. {position.slippage_usd != null ? fmtUsd(position.slippage_usd) : '$0.00'}</span>
+                </div>
+                <div className="mt-1.5 text-xs text-gray-500">
+                  <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
+                </div>
+              </button>
+              <ClosePositionButton market="spot" positionId={position.position_id} asset={position.asset} adminToken={adminToken} busy={closingPosition} onClose={onClosePosition} />
+            </div>
           ))}
         </div>
       ) : hasActivity && (
@@ -978,7 +1010,13 @@ const SpotPane: FC<{ data: SpotView | null; onTrade: (tradeId: string) => void }
   );
 };
 
-const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }> = ({ data, onTrade }) => {
+const PerpPane: FC<{
+  data: PerpView | null;
+  onTrade: (tradeId: string) => void;
+  adminToken?: string;
+  onClosePosition?: ClosePositionHandler;
+  closingPosition?: boolean;
+}> = ({ data, onTrade, adminToken, onClosePosition, closingPosition }) => {
   const hasPositions = (data?.open_positions.length ?? 0) > 0;
   const hasHistory = (data?.history.length ?? 0) > 0;
   const hasActivity = hasPositions || hasHistory || Number(data?.realized_pnl_usd ?? 0) !== 0 || Number(data?.unrealized_pnl_usd ?? 0) !== 0;
@@ -1001,44 +1039,46 @@ const PerpPane: FC<{ data: PerpView | null; onTrade: (tradeId: string) => void }
       {hasPositions ? (
         <div className="space-y-2">
           {data!.open_positions.map((position) => (
-            <button
-              key={position.position_id}
-              type="button"
-              onClick={() => position.open_trade_id && onTrade(position.open_trade_id)}
-              disabled={!position.open_trade_id}
-              className="block w-full rounded-xl bg-dark-800 px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-default"
-            >
-              <div className="text-[11px] text-gray-500 mb-1">
-                {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
-                  <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
-                  {position.smart_sl_active && (
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${position.smart_sl_levels_sold?.some(Boolean) ? 'bg-amber-900/40 text-amber-400' : 'bg-dark-700 text-gray-400'}`}>
-                      SSL {position.smart_sl_levels_sold?.filter(Boolean).length ?? 0}/2
-                    </span>
-                  )}
+            <div key={position.position_id} className="rounded-xl bg-dark-800 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => position.open_trade_id && onTrade(position.open_trade_id)}
+                disabled={!position.open_trade_id}
+                className="block w-full text-left transition active:scale-[0.99] disabled:cursor-default"
+              >
+                <div className="text-[11px] text-gray-500 mb-1">
+                  {new Date(position.opened_at).toLocaleString('it-IT', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </div>
-                <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
-                  {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
-                </p>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
-                <span>Size {Number(position.size).toFixed(4)}</span>
-                <span>Entry {fmtPriceFull(position.entry_price)}</span>
-                <span>Now {fmtPriceFull(position.current_price)}</span>
-              </div>
-              <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-gray-500">
-                <span>Margin {position.margin_usd != null ? fmtUsd(position.margin_usd) : '$0.00'}</span>
-                <span>Liq {position.liquidation_price ? fmtPrice(position.liquidation_price) : '-'}</span>
-                <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
-              </div>
-              <div className="mt-1.5 text-xs text-gray-500">
-                <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
-              </div>
-            </button>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-white">{position.asset} {position.side}</p>
+                    <span className="rounded-full bg-dark-700 px-2 py-1 text-xs text-accent-blue">{position.leverage}x</span>
+                    {position.smart_sl_active && (
+                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${position.smart_sl_levels_sold?.some(Boolean) ? 'bg-amber-900/40 text-amber-400' : 'bg-dark-700 text-gray-400'}`}>
+                        SSL {position.smart_sl_levels_sold?.filter(Boolean).length ?? 0}/2
+                      </span>
+                    )}
+                  </div>
+                  <p className={Number(position.pnl_unrealized) >= 0 ? 'text-accent-green text-sm font-bold' : 'text-accent-red text-sm font-bold'}>
+                    {fmtUsd(position.pnl_unrealized)} / {position.pnl_pct ?? '+0.00'}%
+                  </p>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                  <span>Size {Number(position.size).toFixed(4)}</span>
+                  <span>Entry {fmtPriceFull(position.entry_price)}</span>
+                  <span>Now {fmtPriceFull(position.current_price)}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-3 gap-2 text-xs text-gray-500">
+                  <span>Margin {position.margin_usd != null ? fmtUsd(position.margin_usd) : '$0.00'}</span>
+                  <span>Liq {position.liquidation_price ? fmtPrice(position.liquidation_price) : '-'}</span>
+                  <span>Funding {position.funding_rate ? fmtPct(Number(position.funding_rate) * 100) : '-'}</span>
+                </div>
+                <div className="mt-1.5 text-xs text-gray-500">
+                  <span>{position.open_trade_id ? 'Tocca per dettagli ›' : ''}</span>
+                </div>
+              </button>
+              <ClosePositionButton market="perp" positionId={position.position_id} asset={position.asset} adminToken={adminToken} busy={closingPosition} onClose={onClosePosition} />
+            </div>
           ))}
         </div>
       ) : hasActivity && (
@@ -3335,6 +3375,21 @@ const AgentTab: FC<AgentTabProps> = ({
     }
   };
 
+  const handleClosePosition = async (market: 'spot' | 'perp', positionId: string, asset: string) => {
+    if (!window.confirm(`Chiudere ORA la posizione ${market.toUpperCase()} ${asset} al prezzo di mercato?\n\nNon mette in pausa l'agente.`)) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      const r = await closePosition(market, positionId, adminToken);
+      window.alert(`Posizione chiusa a ${Number(r.exit_price).toFixed(6)} · PnL ${Number(r.pnl_usd) >= 0 ? '+' : ''}${Number(r.pnl_usd).toFixed(2)}$.`);
+      await refresh(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Close position failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleResetDrawdown = async () => {
     if (!window.confirm('Ricalibrare il riferimento del drawdown?\n\nRiporta il picco di equity al valore corrente e azzera drawdown e max drawdown. Sblocca il blocco "drawdown cap". Trade, posizioni e storico NON vengono toccati.')) return;
     setSaving(true);
@@ -3509,8 +3564,8 @@ const AgentTab: FC<AgentTabProps> = ({
       {watchlistError && pane !== 'coins' && (
         <p className="rounded-lg bg-accent-red/10 px-3 py-2 text-xs text-accent-red">{watchlistError}</p>
       )}
-      {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
-      {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} />}
+      {pane === 'spot' && <SpotPane data={spot} onTrade={(tradeId) => void handleTradeDetail(tradeId)} adminToken={adminToken} onClosePosition={(m, id, a) => void handleClosePosition(m, id, a)} closingPosition={saving} />}
+      {pane === 'perp' && <PerpPane data={perp} onTrade={(tradeId) => void handleTradeDetail(tradeId)} adminToken={adminToken} onClosePosition={(m, id, a) => void handleClosePosition(m, id, a)} closingPosition={saving} />}
       {pane === 'global' && <GlobalPane data={global} status={status} equity={equity} equityRange={equityRange} onEquityRange={setEquityRange} decisions={decisions} assetBreakdown={assetBreakdown} claudeUsage={claudeUsage} adminToken={adminToken} onResetDrawdown={() => void handleResetDrawdown()} resettingDrawdown={saving} />}
       {pane === 'wallet' && <WalletPane execWallets={execWallets} spot={spot} perp={perp} />}
       {pane === 'bank' && <BankPane adminToken={adminToken} />}

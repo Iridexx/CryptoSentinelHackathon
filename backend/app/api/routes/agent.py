@@ -288,6 +288,28 @@ async def dev_reset_db(request: ResetDbRequest, session: SessionDep, _: AdminAcc
     return result
 
 
+class ClosePositionRequest(BaseModel):
+    market: Literal["spot", "perp"]
+    position_id: str = Field(..., min_length=1, max_length=80)
+
+
+@router.post("/risk/close-position")
+async def risk_close_position(request: ClosePositionRequest, session: SessionDep, _: AdminAccessDep) -> dict:
+    """Chiude UNA posizione aperta al prezzo di mercato, senza mettere in pausa
+    l'agente (a differenza di ``/risk/close-all``). Utile per liberare una
+    posizione rimasta appesa.
+    """
+
+    try:
+        return await get_agent_service().close_single_position(
+            session, market=request.market, position_id=request.position_id
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="position_not_found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/risk/reset-drawdown")
 async def risk_reset_drawdown(session: SessionDep, _: AdminAccessDep) -> dict:
     """Ricalibra il riferimento del drawdown: riporta il picco di equity al valore

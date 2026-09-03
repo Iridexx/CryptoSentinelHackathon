@@ -361,6 +361,53 @@ class AgentService:
             **self.status(),
         }
 
+    async def close_single_position(
+        self, session: AsyncSession, *, market: str, position_id: str, reason: str = "manual_close"
+    ) -> dict:
+        """Chiude UNA sola posizione (spot o perp) al prezzo di mercato.
+
+        Non tocca il kill switch e non mette in pausa l'agente: serve a liberare
+        una posizione rimasta appesa senza fermare tutto. Best-effort sul prezzo
+        live, con fallback sull'ultimo ``current_price`` memorizzato.
+        """
+        user_id = str(self.settings.default_user_id)
+        now = datetime.now(UTC)
+        if market == "spot":
+            pos = await SpotPositionRepository(session).get(position_id)
+        elif market == "perp":
+            pos = await PerpPositionRepository(session).get(position_id)
+        else:
+            raise ValueError("market_must_be_spot_or_perp")
+
+        if pos is None or getattr(pos, "user_id", user_id) != user_id:
+            raise LookupError("position_not_found")
+        if pos.status != "open":
+            raise ValueError("position_not_open")
+
+        try:
+            if market == "spot":
+                await self._refresh_position_prices(session, [pos], [])
+            else:
+                await self._refresh_position_prices(session, [], [pos])
+        except Exception:  # noqa: BLE001 — fallback sul prezzo salvato
+            pass
+
+        if market == "spot":
+            pnl = await self._close_spot_position(session, pos, pos.current_price, reason, now)
+        else:
+            pnl = await self._close_perp_position(session, pos, pos.current_price, reason, now)
+
+        await self._update_portfolio_state(session, [], [], now)
+        await session.commit()
+        logger.info("risk_close_single_position", market=market, position_id=position_id, reason=reason)
+        return {
+            "status": "closed",
+            "market": market,
+            "position_id": position_id,
+            "exit_price": str(pos.current_price),
+            "pnl_usd": str(pnl),
+        }
+
     async def evaluate_spot(self, payload: dict, session: AsyncSession) -> dict:
         signal = await self.spot_signal.evaluate(payload)
         # Filtro regime mercato: blocca i nuovi ingressi spot in downtrend forte di BTC.
@@ -2292,7 +2339,7 @@ class AgentService:
         # Marcatore "da quando" il drawdown ha sfondato il cap: lo legge la UI del
         # banner di blocco. Scritto solo al primo tick oltre soglia, cancellato al rientro.
         try:
-            dd_cap = abs(Decimal(str(self._ms().drawdown_cap_pct)))
+            dd_cap = abs(Decimal(str(self._ms.drawdown_cap_pct)))
         except (ArithmeticError, TypeError, ValueError):
             dd_cap = abs(Decimal(str(self.settings.risk_max_drawdown_pct)))
         await pnl_repo.mark_drawdown_block(user_id, now if drawdown_pct >= dd_cap else None)

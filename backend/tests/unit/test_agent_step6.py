@@ -23,6 +23,7 @@ from backend.app.agent.signals.spot.momentum import SpotMomentumSignal
 from backend.app.agent.watchlist import set_selected_watchlist
 from backend.app.api.routes import views as view_routes
 from backend.app.persistence.repositories.decisions import AgentDecisionRepository
+from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.positions import PerpPositionRepository, SpotPositionRepository
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
 from backend.app.persistence.models.pnl import PortfolioState
@@ -2359,6 +2360,34 @@ async def test_spot_close_at_breakeven_is_labeled_breakeven(db) -> None:
         trades = await SpotTradeRepository(session).list_for_user(str(USER_ID))
         closes = [t for t in trades if t.trade_id.startswith("cls_")]
         assert closes and "auto_close:breakeven" in (closes[0].notes or "")
+
+
+@pytest.mark.asyncio
+async def test_close_single_position_closes_one_without_pausing(db) -> None:
+    """close_single_position chiude UNA posizione e NON tocca il kill switch."""
+    service = AgentService(settings(), spot_registry=SimpleNamespace(), perp_registry=SimpleNamespace())
+    service.price_feed = _OfflineFeed()  # fallback su current_price
+    now = datetime.now(UTC)
+    async with get_session_factory()() as session:
+        await PnlRepository(session).upsert_portfolio(
+            str(USER_ID), total_equity_usd=Decimal("1000"), initial_equity_usd=Decimal("1000"),
+            peak_equity_usd=Decimal("1000"),
+        )
+        await PerpPositionRepository(session).save(_perp_pos("p-stuck", Decimal("95"), stop=Decimal("80")))
+
+    async with get_session_factory()() as session:
+        result = await service.close_single_position(session, market="perp", position_id="p-stuck")
+        assert result["status"] == "closed"
+        pos = await PerpPositionRepository(session).get("p-stuck")
+        assert pos.status == "closed"
+
+    assert service.risk.kill_switch == KillSwitchState.RUNNING
+
+    async with get_session_factory()() as session:
+        with pytest.raises(LookupError):
+            await service.close_single_position(session, market="perp", position_id="does-not-exist")
+        with pytest.raises(ValueError):
+            await service.close_single_position(session, market="perp", position_id="p-stuck")  # gia' chiusa
 
 
 @pytest.mark.asyncio
