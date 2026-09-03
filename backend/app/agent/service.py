@@ -443,11 +443,16 @@ class AgentService:
 
         period = self.settings.spot_market_regime_ema_period
         lookback = self.settings.spot_market_regime_low_lookback
+        # Serve abbastanza storia perché la EMA converga: con solo `period+5` candele
+        # il seed (SMA delle prime `period`) pesa ~80% e la "EMA50" diventa di fatto
+        # la media del prezzo di mezza giornata fa → above_ema sballato e blocco che
+        # non si sgancia. ~5×period di candele portano il peso del seed sotto l'1%.
+        history = max(period * 5, lookback) + 5
         try:
             candles = await self.price_feed.fetch(
                 symbol=self.settings.spot_market_regime_symbol,
                 interval=self.settings.spot_market_regime_interval,
-                limit=max(period + 5, lookback + 5),
+                limit=history,
                 market="spot",
             )
         except Exception:
@@ -523,7 +528,10 @@ class AgentService:
 
         period = max(1, int(self.settings.market_reversal_ema_period))
         confirmations = max(1, int(self.settings.market_reversal_confirmation_candles))
-        limit = max(period + confirmations + 3, period + 5)
+        # Stessa ragione di _spot_market_regime: la EMA ha bisogno di storia per
+        # convergere, altrimenti il seed SMA la falsa e "above_ema"/"ema_rising"
+        # diventano rumore.
+        limit = max(period * 5, period + confirmations) + 5
         try:
             candles = await self.price_feed.fetch(
                 symbol=self.settings.market_reversal_symbol,
