@@ -56,7 +56,7 @@ generale non è un filtro da calibrare, è un on/off dell'intero motore.
 | S1 | Selezione asset | **Forza relativa contro BTC su 30 giorni**, cross-sezionale sull'universo. Non un gate assoluto per asset. |
 | S2 | Timing d'ingresso | **Ritracciamento dentro la salita**, non capitolazione. L'asset deve restare sopra la propria media 50g. |
 | S3 | Ingressi per asset | **Sempre 2-3 tranche a size decrescente** (50/30/20). Mai ingresso singolo. Distanze in ATR, non in % fissa. |
-| S4 | Stop loss di prezzo | **Nessuno.** Le uscite sono strutturali (rottura trend, perdita forza relativa, regime). |
+| S4 | Stop loss di prezzo | **Nessuno.** Le uscite sono strutturali: rottura del trend e perdita di forza relativa. Il regime **non** e' un'uscita (S18). |
 | S5 | Interruttore generale | **Asimmetrico**: accende con BTC sopra la **EMA 20 daily**, spegne solo sotto la **EMA 50 daily**. Piu' la salute delle alt (45% accende / 35% spegne). |
 | S19 | Capitale | **Budget separati per mercato**: 40% spot / 60% perp dell'equity tradabile (configurabile). Ogni motore dimensiona sulla **propria fetta**, non sul totale: cosi' non si affamano a vicenda e la somma non puo' superare il 100%. |
 | S20 | Dimensionamento | **Adattivo al capitale**: numero di posizioni e di tranche derivati da quanto capitale c'e', imponendo che ogni tranche superi una soglia economica (`min_tranche_usd`). Crescendo il conto si arriva da soli alla configurazione piena, senza rimettere le mani nei parametri. |
@@ -80,7 +80,7 @@ generale non è un filtro da calibrare, è un on/off dell'intero motore.
 |---|---|---|
 | Q1 | Come si popola `SPOT_TOKEN_MAP`? Manuale curata, o si collega il risolutore CMC? | Vedi §3 — è il blocco principale. **Indizio**: in HEAD esiste già il test `test_build_spot_swap_params_resolves_via_cmc`, che si aspetta un kwarg `token_resolver` di `AgentService` **mai implementato** (il test fallisce da prima di questo piano). Il cablaggio CMC è stato tentato e abbandonato: capire perché prima di ripercorrerlo. |
 | Q2 | Il passaggio a mainnet: oggi `execute_swap` è gated e `execution_mode=live` impone `bsc_network=testnet` | Serve una decisione operativa separata |
-| ~~Q3~~ | ~~Numero massimo di posizioni~~ | ✅ **RISOLTA (2026-09-02)**: **8 posizioni**, ~11% ciascuna. Piu' slot da riempire = motore piu' attivo, e meno capitale per singola coin. |
+| ~~Q3~~ | ~~Numero massimo di posizioni~~ | ✅ **RISOLTA (2026-09-02)**: **8 e' il tetto**, non il numero fisso. Il numero effettivo lo calcola il capitale (S20): con l'equity di oggi sono 3. |
 | Q4 | Il vecchio motore si rimuove o si tiene dietro un flag di rollback? | Proposta: flag, rimozione dopo validazione |
 | ~~Q5~~ | ~~Dedup incrociato spot/perp~~ | ✅ **RISOLTA ed ESEGUITA (2026-08-31)**: rimosso. Il dedup è ora **per mercato** (`manager.py`), spot e perp indipendenti sullo stesso asset. |
 | ~~Q6~~ | ~~Heartbeat trade giornaliero~~ | ✅ **RISOLTA ed ESEGUITA (2026-08-31)**: rimosso del tutto (funzione, costanti, chiamata in `slow_tick`, chiave di risposta, test). |
@@ -282,7 +282,7 @@ all'equity totale.
 |---|---|
 | Fetta spot | **40%** dell'equity tradabile (il resto al perp) |
 | Posizioni massime | **8**, ma solo se il capitale lo consente (S20) |
-| Peso per asset a scala piena | **11%** della fetta spot |
+| Peso per asset a scala piena | **derivato** (S20): fetta spot / numero di posizioni sostenibile |
 | Nuove prime tranche nelle stesse 24h | max 2 |
 | Capitale non impiegato | resta in USDT, nessun obbligo di essere investito |
 
@@ -493,7 +493,7 @@ perche' sei uscito.
 | Campo | Contenuto |
 |---|---|
 | `entries[]` | per ogni tranche: timestamp, prezzo, size, indice (1/2/3) |
-| `exits[]` | per ogni uscita: timestamp, prezzo, size, motivo (scarico / trend / RS / regime) |
+| `exits[]` | per ogni uscita: timestamp, prezzo, size, motivo (rottura trend / debolezza RS / chiusura manuale) |
 | `levels` | le serie **media 50g e media 20g** — sono le regole vere di uscita, al posto delle rette SL/TP che non esistono piu' |
 | `markers` | scala annullata, scala scaduta, regime spento, debolezza RS |
 
@@ -673,6 +673,45 @@ tranche** (da 3 a 2), mai a tranche unica: l'ingresso scalato e' un punto fermo 
 1.000 €. Non ha effetto sul portafoglio esistente, ma se venisse reinizializzato
 ripartirebbe da 200. Da allineare.
 
+#### I12 — Il budget separato tocca anche il perp
+
+S19 non e' implementabile solo lato spot. Se lo spot passa a dimensionare sulla
+propria fetta (40%) e il perp continua a calcolare sull'equity totale, la divisione
+non esiste: il perp potrebbe da solo impegnare piu' del 60% che gli spetta.
+
+**Soluzione:** il cambio va fatto in `RiskManager.evaluate`, che gia' distingue i due
+mercati: dove oggi usa `equity` (totale meno Riserva) deve usare
+`equity × quota_del_mercato`. E' una riga sola, ma vale per entrambi i mercati e
+**cambia il sizing dei nuovi trade perp**. Non tocca la logica del perp e non tocca
+le posizioni gia' aperte, ma va detto e va verificato: al momento c'e' **1 posizione
+perp aperta**.
+
+#### I13 — Domande operative sulla fetta, senza risposta
+
+Tre casi che il piano non copriva:
+
+| Caso | Decisione presa |
+|---|---|
+| Lo spot e' spento (regime off): il perp puo' usare la sua fetta? | **No.** Le quote restano fisse. Un budget che si allarga e si stringe da solo rende il perp imprevedibile e vanifica la separazione. |
+| L'equity cambia di giorno in giorno: quando si ricalcola la fetta? | Nella **passata giornaliera** (N10), a partire dall'equity tradabile del momento. |
+| L'equity scende e le posizioni aperte superano la fetta | **Nessuna vendita forzata.** Si smette semplicemente di aprire finche' non si rientra: vendere per rispettare un tetto sarebbe uno stop loss travestito, contro S4. |
+
+La Riserva resta scorporata **prima** della divisione: fetta spot =
+(equity totale − Riserva) × 40%.
+
+#### I14 — Criteri di accettazione del dry-run
+
+F10 diceva solo "verifica che i trigger scattino": troppo vago per capire se il
+motore funziona. Cosa si misura, concretamente:
+
+| Cosa | Atteso |
+|---|---|
+| Numero di posizioni aperte a regime acceso | quello calcolato da S20 (oggi **3**), non zero e non il tetto |
+| Scale completate vs scadute | se quasi tutte scadono, il passo fra le tranche e' troppo largo (N2) |
+| Trade espulsi entro 48h dall'ingresso | **vicino a zero**: se sono molti, N1 non e' stato risolto davvero |
+| Divergenza Binance/pool misurata dalle quote in ombra | sotto `max_price_divergence_pct` nella maggior parte dei casi |
+| Ingressi bloccati per motivo | nessun blocco silenzioso da configurazione (I1, I2) |
+
 #### I1 — 🔴 Il brain scarterebbe ogni trade
 
 `_handle_signal` passa sempre dal meta-controller. Nel fallback locale (senza API
@@ -696,10 +735,18 @@ il risk manager bloccherebbe intorno alla terza posizione con
 `max_exposure_guard` — e il sintomo sarebbe **esattamente quello che vogliamo
 evitare: il bot che sta fermo**, per un motivo di configurazione e non di mercato.
 
-**Soluzione:** portare `spot_capital_per_trade_pct` a **11** e
-`spot_max_exposure_pct` a **90** in `configs/`. ⚠️ Attenzione: questi due vivono anche
-nell'**override runtime** delle impostazioni mobile, che vince sul file. Vanno
-allineati entrambi, altrimenti il file dice una cosa e il bot ne fa un'altra.
+**Soluzione (rivista dopo S19/S20):** non si tratta piu' di scrivere due numeri
+fissi. Con i budget separati le percentuali si riferiscono alla **fetta spot**, e la
+size per posizione e' **derivata** dal capitale, non configurata:
+
+- `spot_max_exposure_pct` → **90** (percentuale della fetta spot, non dell'equity
+  totale): serve solo a lasciare un margine di respiro, non a limitare;
+- `spot_capital_per_trade_pct` → **calcolato** come `fetta spot / posizioni
+  sostenibili`, quindi smette di essere un parametro che imposti a mano.
+
+⚠️ Entrambi vivono anche nell'**override runtime** delle impostazioni mobile, che
+vince sul file: vanno allineati in tutti e due i posti, altrimenti il file dice una
+cosa e il bot ne fa un'altra.
 
 #### I3 — 🔴 I token solo-DEX resterebbero bloccati in posizione
 
@@ -797,7 +844,7 @@ verificare `git status` prima di iniziare.
 
 | Fase | Contenuto | Dipendenze |
 |---|---|---|
-| **F0b** | **Sbloccare l'integrazione**: tetti di esposizione a 11%/90% in config **e** nell'override runtime (I2); fallback prezzi dal pool in `_refresh_position_prices` (I3); `price_source` nel payload (I5) | — |
+| **F0b** | **Sbloccare l'integrazione**: equity per mercato in `RiskManager` (S19, I11, I12); esposizione spot riferita alla fetta (I2), in config **e** nell'override runtime; fallback prezzi dal pool (I3); `price_source` nel payload (I5) | — |
 | **F1** | **Mappa indirizzi BSC**: `configs/bsc_token_map.yaml`, quote token, script di verifica pool+liquidità. Fix B1/B3. | — |
 | **F2** | **Universo automatico**: intersezione §4.2, esposta via API, con motivo di esclusione per ogni scarto | F1 |
 | **F3** | **Storico daily**: backfill ≥ 250 candele daily per l'universo, con rate limiter e cache persistita | F2 |
@@ -814,7 +861,7 @@ verificare `git status` prima di iniziare.
 | **F9** | **Vincoli di portafoglio**: fetta spot separata (S19, I11), numero di posizioni adattivo al capitale (S20, N17), max 2 prime tranche/24h, ordinamento per ranking (V7) | F7 |
 | ~~**F0**~~ | ~~Baseline verde~~ ✅ **FATTO (2026-08-31)**: suite a 384 passed / 2 skipped (§5.7) | — |
 | **F9b** | **UI**: semaforo regime (e quale condizione manca), radar per percentile, motivo di esclusione, stato scala; parametri nuovi in `AgentMobileSettings` (N12); notifica solo alla 1ª tranche (I7); etichette per i motivi di chiusura nuovi (I9) | F9 |
-| **F10** | **Dry-run** a size ridotta con **quote in ombra** (N15): verifica che i trigger scattino e misura divergenza/slippage/impatto pool senza eseguire. Priorità: N1 (l'ingresso non viene espulso subito) e N2 (quante scale restano incompiute) | tutte |
+| **F10** | **Dry-run** con i criteri di accettazione di I14, quote in ombra (N15): verifica che i trigger scattino e misura divergenza/slippage/impatto pool senza eseguire. Priorità: N1 (l'ingresso non viene espulso subito) e N2 (quante scale restano incompiute) | tutte |
 | **F11** | **Pulizia**: rimozione codice vecchio, aggiornamento `docs/Strategia_Spot.md` e `docs/Uscite_Spot.md`, memorie obsolete | F10 |
 
 **F1 è bloccante per tutto il resto.** F6 può partire in parallelo perché è
@@ -846,8 +893,7 @@ il motore precedente, per il rollback di Q4).
 | `max_new_entries_per_day` | 2 | |
 | `spot_equity_share_pct` | **40** | quota dell'equity tradabile gestita dallo spot (S19) |
 | `min_tranche_usd` | **20** | soglia economica per tranche: sotto, il gas BSC pesa oltre l'1% (S20) |
-| `max_positions` | 8 | tetto massimo; il numero effettivo lo decide il capitale (S20) |
-| `first_tranche_fraction` | 0.50 | frazione del budget per asset alla 1ª tranche (vedi §4.4) |
+| `max_positions` | 8 | **tetto**; il numero effettivo lo decide il capitale (S20). Mappato su `ms.spot_max_open_positions` |
 | `ladder_expiry_bars` | 30 | scadenza della scala, candele 4h (N2) |
 | `rs_min_universe` | 25 | sotto questa soglia si usa RS assoluta, non il percentile (N5) |
 | `rs_absolute_enter` | 1.05 | soglia RS assoluta d'ingresso, universo piccolo (N5) |
@@ -862,10 +908,10 @@ il motore precedente, per il rollback di Q4).
 
 | Nuovo concetto | Parametro esistente |
 |---|---|
-| Posizioni massime (8) | `ms.spot_max_open_positions` — da verificare il valore attuale |
-| Peso per asset a scala piena | `ms.spot_capital_per_trade_pct` — **da 6% a 11%** (I2) |
+| Posizioni massime (tetto 8) | `ms.spot_max_open_positions` |
+| Size per posizione | `ms.spot_capital_per_trade_pct`, ora **derivata** dal capitale invece che impostata (S20) |
 | Soglia liquidità pool | `ms.min_pool_liquidity_usd` / `risk_min_pool_liquidity_usd` |
-| Esposizione massima spot | `ms.spot_max_exposure_pct` — **da 30% a 90%**, altrimenti blocca alla 3ª posizione (I2) |
+| Esposizione massima spot | `ms.spot_max_exposure_pct` → **90%, riferito alla fetta spot** (I2, S19) |
 
 ### Parametri che escono di scena
 
@@ -905,5 +951,7 @@ il motore precedente, per il rollback di Q4).
 ## 9. FUORI SCOPE
 
 - Strategia **C delta-neutral** (funding farming): scheda separata futura.
-- Motore **perp**: non toccato da questo piano.
+- Motore **perp**: la sua **logica** non si tocca. ⚠️ Ma S19 (budget separati) tocca
+  per forza anche il suo **dimensionamento**: se lo spot passa alla propria fetta e il
+  perp continua a calcolare sull'equity totale, la divisione non regge. Vedi I12.
 - Passaggio a mainnet (Q2): decisione operativa separata.
