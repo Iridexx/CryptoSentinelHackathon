@@ -17,6 +17,7 @@ from backend.app.persistence.models.trade_charts import TradeChartSnapshot
 from backend.app.persistence.models.trades import PerpTrade, SpotTrade
 from backend.app.persistence.repositories.pnl import PnlRepository
 from backend.app.persistence.repositories.trade_charts import TradeChartRepository
+from backend.app.persistence.repositories.trades import is_manual_close
 from backend.app.persistence.views import ViewService, _close_reason
 from backend.app.schemas.views import GlobalView, PerpView, SpotView
 
@@ -179,8 +180,14 @@ async def asset_breakdown(
             (Decimal(position.size) * Decimal(position.current_price) for position in asset_positions),
             Decimal("0"),
         )
-        wins = sum(1 for trade in asset_trades if (trade.notes or "").lower().find("profit") >= 0)
-        win_rate = Decimal(wins) / Decimal(len(asset_trades)) * Decimal("100") if asset_trades else Decimal("0")
+        # Win-rate = metrica del motore: solo trade di chiusura con PnL registrato,
+        # escluse le chiusure manuali (tasto "Chiudi ora" / "Chiudi tutto & pausa").
+        closed_trades = [
+            trade for trade in asset_trades
+            if getattr(trade, "pnl_usd", None) is not None and not is_manual_close(trade)
+        ]
+        wins = sum(1 for trade in closed_trades if Decimal(str(trade.pnl_usd)) > 0)
+        win_rate = Decimal(wins) / Decimal(len(closed_trades)) * Decimal("100") if closed_trades else Decimal("0")
         pnl_pct = pnl / current_equity * Decimal("100") if current_equity > 0 else Decimal("0")
         allocation_pct = exposure / current_equity * Decimal("100") if current_equity > 0 else Decimal("0")
         items.append(
