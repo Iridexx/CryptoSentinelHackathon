@@ -170,6 +170,7 @@ class AgentService:
             perp_regime_derisk_trail_mult=getattr(self.settings, "perp_regime_derisk_trail_mult", 0.6),
             perp_regime_derisk_freeze_rebuy=getattr(self.settings, "perp_regime_derisk_freeze_rebuy", True),
             perp_regime_derisk_require_contrarian=getattr(self.settings, "perp_regime_derisk_require_contrarian", True),
+            perp_regime_flip_enabled=getattr(self.settings, "perp_regime_flip_enabled", True),
             perp_smart_sl_enabled=getattr(self.settings, "perp_smart_sl_enabled", True),
             perp_smart_sl_l1_frac=getattr(self.settings, "perp_smart_sl_l1_frac", 0.333),
             perp_smart_sl_l2_frac=getattr(self.settings, "perp_smart_sl_l2_frac", 0.666),
@@ -1987,10 +1988,11 @@ class AgentService:
         # il filtro shock blocca le nuove aperture, il de-risk qui sotto agisce
         # sull'esposizione gia' in essere.
         derisk_on = getattr(ms, "perp_regime_derisk_enabled", False)
-        shock_state, shock_direction = "NORMAL", None
-        if derisk_on:
-            _shock = self._trend_shock_snapshot()
-            shock_state, shock_direction = _shock["state"], _shock["direction"]
+        flip_on = getattr(ms, "perp_regime_flip_enabled", True)
+        # Letto sempre (nessun fetch, solo il record persistito): serve anche
+        # all'uscita automatica delle posizioni flip, indipendente dal toggle derisk.
+        _shock = self._trend_shock_snapshot()
+        shock_state, shock_direction = _shock["state"], _shock["direction"]
         regime_blocked = derisk_on and shock_state == "BLOCKED"
 
         for pos in perp_positions:
@@ -2019,6 +2021,36 @@ class AgentService:
                 except (ValueError, KeyError):
                     pass
 
+            # ── Uscita di una posizione flip quando lo shock che l'ha aperta rientra ──
+            # La flip e' un hedge, non una strategia: appena il regime non conferma
+            # piu' la sua direzione, si chiude e si torna al comportamento normale.
+            _flip_dir = _regime_flip_direction(pos)
+            if _flip_dir is not None:
+                shock_still_confirms = shock_state == "BLOCKED" and shock_direction == _flip_dir
+                if not shock_still_confirms:
+                    _margin = pos.entry_price * pos.size / Decimal(max(int(pos.leverage or 1), 1))
+                    _pnl = await self._close_perp_position(session, pos, price, "regime_flip_exit", now)
+                    if pos.status == "closed":
+                        logger.info(
+                            "regime_flip_closed",
+                            asset=pos.asset, side=pos.side, flip_direction=_flip_dir,
+                            shock_state=shock_state, shock_direction=shock_direction,
+                            price=float(price), pnl_usd=float(_pnl),
+                        )
+                        asyncio.create_task(
+                            notifier.notify_trade_closed(
+                                user_id=user_id,
+                                trade_id=f"cls_{pos.position_id}",
+                                asset=pos.asset,
+                                market="perp",
+                                pnl_usd=_pnl,
+                                pnl_pct=_pnl / _margin * 100 if _margin > 0 else Decimal("0"),
+                                close_reason="regime_flip_exit",
+                                is_dry_run=ms.execution_mode == "dry_run",
+                            )
+                        )
+                        continue
+
             # ── De-risk di regime sulle posizioni aperte ──────────────────────
             # Una posizione e' "contraria" se lo shock BTC e' attivo nella direzione
             # opposta al suo lato (long in regime bearish, short in regime bullish).
@@ -2028,21 +2060,35 @@ class AgentService:
                 or (shock_direction == "bearish" and is_long)
                 or (shock_direction == "bullish" and not is_long)
             )
-            derisk_frac = Decimal(str(ms.perp_regime_derisk_fraction)) / Decimal("100")
+            # Con flip attivo il de-risk chiude il 100% (non una frazione): l'esposizione
+            # non si riduce e basta, si inverte subito nella direzione confermata.
+            derisk_frac = Decimal("1") if flip_on else Decimal(str(ms.perp_regime_derisk_fraction)) / Decimal("100")
             if regime_contrarian and derisk_frac > 0 and not _regime_derisk_done(pos):
                 _size_before = pos.size
-                _margin = pos.entry_price * pos.size / Decimal(max(int(pos.leverage or 1), 1))
-                _pnl = await self._close_perp_position(
-                    session, pos, price, "regime_derisk", now,
-                    partial=True, fraction=derisk_frac,
+                _leverage = int(pos.leverage or ms.perp_min_leverage)
+                _margin_before = pos.margin_usd if pos.margin_usd and pos.margin_usd > 0 else (
+                    pos.entry_price * pos.size / Decimal(max(_leverage, 1))
                 )
+                _atr_v = pos.entry_atr
+                # "regime_flip" per il close che precede la riapertura opposta: va
+                # etichettato diverso dal vecchio de-risk parziale, non e' la stessa cosa.
+                _close_reason = "regime_flip" if flip_on else "regime_derisk"
+                if flip_on:
+                    _pnl = await self._close_perp_position(session, pos, price, _close_reason, now)
+                    _closed_ok = pos.status == "closed"
+                else:
+                    _pnl = await self._close_perp_position(
+                        session, pos, price, _close_reason, now,
+                        partial=True, fraction=derisk_frac,
+                    )
+                    _closed_ok = pos.size < _size_before
                 # Marca il flag solo se la riduzione e' andata a buon fine: se la venue
                 # non era raggiungibile la posizione e' ancora intera e va ritentata.
-                if pos.size < _size_before:
+                if _closed_ok:
                     _mark_regime_derisk_done(pos)
                     session.add(pos)
                     logger.info(
-                        "regime_derisk_partial_close",
+                        "regime_derisk_full_close" if flip_on else "regime_derisk_partial_close",
                         asset=pos.asset, side=pos.side, fraction=float(derisk_frac),
                         shock_direction=shock_direction, price=float(price), pnl_usd=float(_pnl),
                     )
@@ -2053,11 +2099,16 @@ class AgentService:
                             asset=pos.asset,
                             market="perp",
                             pnl_usd=_pnl,
-                            pnl_pct=_pnl / _margin * 100 if _margin > 0 else Decimal("0"),
-                            close_reason="regime_derisk",
+                            pnl_pct=_pnl / _margin_before * 100 if _margin_before > 0 else Decimal("0"),
+                            close_reason=_close_reason,
                             is_dry_run=ms.execution_mode == "dry_run",
                         )
                     )
+                    if flip_on and shock_direction is not None:
+                        await self._open_regime_flip(
+                            session, pos, price, shock_direction, _margin_before, _leverage, _atr_v, now,
+                            user_id, notifier,
+                        )
                 if pos.size <= 0:
                     continue
 
@@ -2793,7 +2844,9 @@ class AgentService:
             "amount_in_atomic": amount_in_atomic,
         }
 
-    async def _simulate_trade(self, session: AsyncSession, signal: dict, size_quote: Decimal) -> dict:
+    async def _simulate_trade(
+        self, session: AsyncSession, signal: dict, size_quote: Decimal, *, smart_sl_state: str | None = None
+    ) -> dict:
         now = datetime.now(UTC)
         trade_id = f"dry_{uuid4().hex}"
         price = Decimal(str(signal.get("price", "0")))
@@ -2902,6 +2955,7 @@ class AgentService:
                     open_trade_id=trade_id,
                     opened_at=now,
                     updated_at=now,
+                    smart_sl_state=smart_sl_state,
                 )
             )
             return {"status": "prepared", "mode": "dry_run", "trade_id": trade_id}
@@ -2995,6 +3049,89 @@ class AgentService:
         )
         result = await self.perp_registry.active.open_position(order)
         return {"status": result.status.value, "provider": self.perp_registry.active_name.value, "reason": result.reason}
+
+    async def _open_regime_flip(
+        self,
+        session: AsyncSession,
+        pos: PerpPosition,
+        price: Decimal,
+        shock_direction: str,
+        margin_usd: Decimal,
+        leverage: int,
+        atr_v: Decimal | None,
+        now: datetime,
+        user_id: str,
+        notifier,
+    ) -> None:
+        """Apre l'opposto della posizione appena chiusa per de-risk di regime.
+
+        Non e' un nuovo segnale discrezionale: e' un hedge con lo stesso capitale
+        e la stessa leva gia' in gioco, nella direzione che lo shock BTC ha appena
+        confermato (ADX/DI + NATR + volume + return). Serve a fermare l'emorragia
+        sulla posizione contraria, non a inseguire un guadagno — si chiude da sola
+        (regime_flip_exit, vedi _regime_flip_direction) appena lo shock rientra o
+        cambia direzione, e a quel punto torna a comandare il segnale normale.
+        """
+        if not atr_v or atr_v <= 0:
+            logger.info("regime_flip_skipped", asset=pos.asset, reason="no_atr")
+            return
+        if margin_usd is None or margin_usd <= 0:
+            logger.info("regime_flip_skipped", asset=pos.asset, reason="no_margin")
+            return
+        flip_side = "short" if pos.side == "long" else "long"
+        sl_mult = Decimal(str(self.settings.perp_atr_stop_multiplier))
+        tp1_mult = Decimal(str(self.settings.perp_tp1_atr_multiplier))
+        tp2_mult = Decimal(str(self.settings.perp_tp2_atr_multiplier))
+        if flip_side == "long":
+            stop_loss = price - atr_v * sl_mult
+            take_profit_1 = price + atr_v * tp1_mult
+            take_profit_2 = price + atr_v * tp2_mult
+        else:
+            stop_loss = price + atr_v * sl_mult
+            take_profit_1 = price - atr_v * tp1_mult
+            take_profit_2 = price - atr_v * tp2_mult
+        flip_signal = {
+            "signal_id": f"regime_flip_{pos.position_id}",
+            "market": "perp",
+            "asset": pos.asset,
+            "side": flip_side,
+            "price": str(price),
+            "leverage": leverage,
+            "stop_loss": stop_loss,
+            "take_profit_1": take_profit_1,
+            "take_profit_2": take_profit_2,
+            "components": {"atr": atr_v},
+        }
+        if self._ms.execution_mode == "dry_run":
+            smart_sl_state = json.dumps({"regime_flip_direction": shock_direction})
+            execution = await self._simulate_trade(session, flip_signal, margin_usd, smart_sl_state=smart_sl_state)
+        else:
+            # Live: l'ordine parte sulla venue, ma il position-tracking (e quindi
+            # l'auto-exit della flip) e' gestito dal flusso di conferma esistente,
+            # non da questo metodo — stesso limite delle entry normali in live.
+            execution = await self._execute_perp(flip_signal, margin_usd)
+        if execution.get("status") not in ("prepared", "confirmed"):
+            logger.info("regime_flip_failed", asset=pos.asset, reason=execution.get("reason"))
+            return
+        logger.info(
+            "regime_flip_opened",
+            asset=pos.asset, from_side=pos.side, to_side=flip_side,
+            shock_direction=shock_direction, price=float(price),
+            leverage=leverage, margin_usd=float(margin_usd),
+        )
+        asyncio.create_task(
+            notifier.notify_trade_opened(
+                user_id=user_id,
+                trade_id=execution.get("trade_id") or f"flip_{pos.position_id}",
+                asset=pos.asset,
+                market="perp",
+                direction=flip_side,
+                entry_price=price,
+                size_usd=margin_usd,
+                stop_loss=stop_loss,
+                is_dry_run=self._ms.execution_mode == "dry_run",
+            )
+        )
 
     # ------------------------------------------------------------------
     # Integrazione notifiche agente
@@ -3154,6 +3291,8 @@ def _close_purpose(reason: str) -> str:
         "time_stop": "close",
         "regime_derisk": "close",
         "regime_derisk_stop": "stop_loss",
+        "regime_flip": "close",
+        "regime_flip_exit": "close",
     }.get(reason, "close")
 
 
@@ -3230,6 +3369,17 @@ def _mark_regime_derisk_done(pos) -> None:
         state = {}
     state["regime_derisk_done"] = True
     pos.smart_sl_state = json.dumps(state)
+
+
+def _regime_flip_direction(pos) -> str | None:
+    """Direzione shock ('bullish'/'bearish') che ha aperto questa posizione come
+    flip, se lo e'. None per una posizione normale (da segnale)."""
+    if not pos.smart_sl_state:
+        return None
+    try:
+        return json.loads(pos.smart_sl_state).get("regime_flip_direction")
+    except (ValueError, AttributeError):
+        return None
 
 
 def _perp_trailing_mult(

@@ -66,6 +66,7 @@ def _mobile_settings(**overrides) -> AgentMobileSettings:
         perp_fee_mode="none",
         perp_regime_derisk_enabled=True,
         perp_regime_derisk_fraction=50.0,
+        perp_regime_flip_enabled=False,
         execution_mode="dry_run",
     )
     base.update(overrides)
@@ -285,3 +286,38 @@ async def test_residual_exit_is_labelled_as_regime_stop(db) -> None:
     reasons = [(t.notes or "").replace("auto_close:", "") for t in trades if t.direction == "close"]
     assert "regime_derisk_stop" in reasons
     assert "trailing_stop" not in reasons
+
+
+@pytest.mark.asyncio
+async def test_flip_closes_full_and_reopens_opposite_side(db) -> None:
+    """Con flip attivo: chiude il 100% del long e riapre uno short, stessa leva."""
+    from backend.app.persistence.repositories.positions import PerpPositionRepository
+
+    _set_regime("BLOCKED", "bearish")
+    pos = _position("long")
+
+    await _tick(pos, Decimal("99"), _mobile_settings(perp_regime_flip_enabled=True))
+
+    assert pos.status == "closed"
+    async with get_session_factory()() as session:
+        open_positions = await PerpPositionRepository(session).open_for_user(str(USER_ID))
+    flips = [p for p in open_positions if p.asset == "ADA" and p.side == "short"]
+    assert len(flips) == 1
+    flip = flips[0]
+    assert flip.leverage == pos.leverage
+    assert json.loads(flip.smart_sl_state)["regime_flip_direction"] == "bearish"
+
+
+@pytest.mark.asyncio
+async def test_flip_exits_when_shock_recovers(db) -> None:
+    """La posizione flip si chiude da sola appena lo shock che l'ha aperta rientra."""
+    _set_regime("BLOCKED", "bearish")
+    flip = _position("short")
+    flip.position_id = "flip_pos"
+    flip.smart_sl_state = json.dumps({"regime_flip_direction": "bearish"})
+    ms = _mobile_settings(perp_regime_flip_enabled=True)
+
+    _set_regime("NORMAL", None)
+    await _tick(flip, Decimal("100"), ms)
+
+    assert flip.status == "closed"

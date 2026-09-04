@@ -57,6 +57,9 @@ class AgentMobileSettings(BaseModel):
     perp_regime_derisk_trail_mult: float = Field(default=0.6, ge=0.1, le=2.0)
     perp_regime_derisk_freeze_rebuy: bool = True
     perp_regime_derisk_require_contrarian: bool = True
+    # Flip: chiude il 100% della posizione contrarian e riapre l'opposto (stessa
+    # leva) nella direzione dello shock, invece del de-risk parziale.
+    perp_regime_flip_enabled: bool = True
     # Smart Stop Loss perp
     perp_smart_sl_enabled: bool = True
     perp_smart_sl_l1_frac: float = Field(default=0.333, ge=0.1, le=0.5)

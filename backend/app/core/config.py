@@ -282,6 +282,7 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "regime_derisk_trail_mult": "perp_regime_derisk_trail_mult",
         "regime_derisk_freeze_rebuy": "perp_regime_derisk_freeze_rebuy",
         "regime_derisk_require_contrarian": "perp_regime_derisk_require_contrarian",
+        "regime_flip_enabled": "perp_regime_flip_enabled",
         "smart_sl_enabled": "perp_smart_sl_enabled",
         "smart_sl_l1_frac": "perp_smart_sl_l1_frac",
         "smart_sl_l2_frac": "perp_smart_sl_l2_frac",
@@ -802,6 +803,10 @@ class Settings(BaseSettings):
     perp_regime_derisk_trail_mult: float = Field(default=0.6, alias="PERP_REGIME_DERISK_TRAIL_MULT")
     perp_regime_derisk_freeze_rebuy: bool = Field(default=True, alias="PERP_REGIME_DERISK_FREEZE_REBUY")
     perp_regime_derisk_require_contrarian: bool = Field(default=True, alias="PERP_REGIME_DERISK_REQUIRE_CONTRARIAN")
+    # Flip: invece del de-risk parziale, chiude il 100% della posizione contrarian
+    # e riapre subito l'opposto (stessa leva) nella direzione confermata dallo
+    # shock BTC — un hedge per fermare l'emorragia, non una nuova strategia.
+    perp_regime_flip_enabled: bool = Field(default=True, alias="PERP_REGIME_FLIP_ENABLED")
     # Smart Stop Loss
     perp_smart_sl_enabled: bool = Field(default=True, alias="PERP_SMART_SL_ENABLED")
     perp_smart_sl_l1_frac: float = Field(default=0.333, alias="PERP_SMART_SL_L1_FRAC")

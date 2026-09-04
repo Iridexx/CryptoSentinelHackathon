@@ -159,6 +159,7 @@ const defaultSettings: AgentMobileSettings = {
   perp_regime_derisk_trail_mult: 0.6,
   perp_regime_derisk_freeze_rebuy: true,
   perp_regime_derisk_require_contrarian: true,
+  perp_regime_flip_enabled: true,
   perp_smart_sl_enabled: true,
   perp_smart_sl_l1_frac: 0.333,
   perp_smart_sl_l2_frac: 0.666,
@@ -775,6 +776,8 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   profit_lock: { label: 'Profit Lock', className: 'text-accent-green' },
   regime_derisk: { label: 'Shock BTC — De-risk', className: 'text-amber-400' },
   regime_derisk_stop: { label: 'Shock BTC — Stop', className: 'text-accent-red' },
+  regime_flip: { label: 'Flip Trade — Apertura', className: 'text-amber-400' },
+  regime_flip_exit: { label: 'Flip Trade — Chiusa', className: 'text-sky-400' },
   manual_close: { label: 'Chiusura manuale', className: 'text-sky-400' },
   manual_risk: { label: 'Chiusura manuale (tutte)', className: 'text-sky-400' },
 };
@@ -2175,6 +2178,55 @@ const SetupPane: FC<{
                 <NumberInput label="Volume threshold" showHelp={h} help="Quante volte il volume di Bitcoin deve superare la sua media per contare come allarme. Vale un punto." value={settings.perp_trend_shock_volume_threshold} onChange={(perp_trend_shock_volume_threshold) => patch({ perp_trend_shock_volume_threshold })} />
                 <NumberInput label="Recovery checks" showHelp={h} help="Quanti controlli consecutivi tranquilli servono prima di tornare a operare. Più alto, più prudente nel rientrare." value={settings.perp_trend_shock_recovery_confirmations} onChange={(perp_trend_shock_recovery_confirmations) => patch({ perp_trend_shock_recovery_confirmations })} />
               </div>
+            )}
+          </Collapsible>
+
+          <Collapsible title="De-risk posizioni su shock BTC" count={6}>
+            <ToggleInput
+              label="De-risk di regime"
+              showHelp={h} help={'Quando lo shock BTC blocca le nuove aperture, agisce anche sulle posizioni già aperte in direzione contraria al regime (long durante uno shock ribassista, short durante uno rialzista).'}
+              checked={settings.perp_regime_derisk_enabled}
+              onChange={(perp_regime_derisk_enabled) => patch({ perp_regime_derisk_enabled })}
+            />
+            {settings.perp_regime_derisk_enabled && (
+              <>
+                <ToggleInput
+                  label="Flip (chiudi e inverti)"
+                  showHelp={h} help={'ON (consigliato): chiude il 100% della posizione contraria e ne riapre subito una opposta, stessa leva e stesso capitale, nella direzione confermata dallo shock — un hedge per fermare la perdita, non un nuovo segnale discrezionale. Si chiude da sola appena lo shock rientra.\n\nOFF: comportamento precedente, chiude solo una quota (vedi sotto) e stringe il trailing sul residuo, senza aprire nulla di nuovo.'}
+                  checked={settings.perp_regime_flip_enabled}
+                  onChange={(perp_regime_flip_enabled) => patch({ perp_regime_flip_enabled })}
+                />
+                {!settings.perp_regime_flip_enabled && (
+                  <NumberInput
+                    label="Quota chiusa (%)"
+                    showHelp={h} help="Percentuale della posizione contraria chiusa quando scatta il de-risk (senza flip)."
+                    value={settings.perp_regime_derisk_fraction}
+                    step={5}
+                    onChange={(perp_regime_derisk_fraction) => patch({ perp_regime_derisk_fraction: Math.min(100, Math.max(0, perp_regime_derisk_fraction)) })}
+                  />
+                )}
+                {!settings.perp_regime_flip_enabled && (
+                  <NumberInput
+                    label="Moltiplicatore trailing residuo"
+                    showHelp={h} help="Quanto si stringe il trailing sulla quota rimasta dopo il de-risk parziale, rispetto al trailing normale. Più basso = più stretto."
+                    value={settings.perp_regime_derisk_trail_mult}
+                    step={0.05}
+                    onChange={(perp_regime_derisk_trail_mult) => patch({ perp_regime_derisk_trail_mult })}
+                  />
+                )}
+                <ToggleInput
+                  label="Richiedi posizione contraria"
+                  showHelp={h} help={'ON: agisce solo sulle posizioni contro il regime (default). OFF: agisce su ogni posizione aperta, anche quelle a favore dello shock.'}
+                  checked={settings.perp_regime_derisk_require_contrarian}
+                  onChange={(perp_regime_derisk_require_contrarian) => patch({ perp_regime_derisk_require_contrarian })}
+                />
+                <ToggleInput
+                  label="Congela i rientri Smart SL"
+                  showHelp={h} help="Mentre il regime resta avverso, lo Smart Stop Loss non ricompra: evita di aggiungere esposizione dentro un crollo confermato."
+                  checked={settings.perp_regime_derisk_freeze_rebuy}
+                  onChange={(perp_regime_derisk_freeze_rebuy) => patch({ perp_regime_derisk_freeze_rebuy })}
+                />
+              </>
             )}
           </Collapsible>
 

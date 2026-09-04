@@ -397,6 +397,7 @@ export interface AgentMobileSettings {
   perp_regime_derisk_trail_mult: number;
   perp_regime_derisk_freeze_rebuy: boolean;
   perp_regime_derisk_require_contrarian: boolean;
+  perp_regime_flip_enabled: boolean;
   perp_smart_sl_enabled: boolean;
   perp_smart_sl_l1_frac: number;
   perp_smart_sl_l2_frac: number;
