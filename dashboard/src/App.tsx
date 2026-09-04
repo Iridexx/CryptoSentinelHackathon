@@ -1410,7 +1410,7 @@ function AnalyticsPanel({
             <EquityChart equity={equity.data} range={equityRange} onRange={onEquityRange} />
             <Table
               columns={['Time', 'Equity', 'PnL', 'ROI', 'Drawdown']}
-              rows={equity.data.items.slice(-12).map((item) => [
+              rows={equity.data.items.slice(-12).reverse().map((item) => [
                 shortDate(item.timestamp_utc),
                 money(item.equity_usd),
                 item.pnl_usd,
