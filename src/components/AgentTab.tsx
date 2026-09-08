@@ -483,7 +483,7 @@ const EquityChart: FC<{
             {showPortfolio ? 'Portafoglio totale ▾' : 'Solo trading ▾'}
           </button>
         ) : (
-          <h3 className="text-xs font-semibold uppercase text-gray-500">PnL cumulato</h3>
+          <h3 className="text-xs font-semibold uppercase text-gray-500">PnL nel periodo</h3>
         )}
         <div className="flex gap-1">
           {EQUITY_RANGES.map((r) => (
@@ -525,7 +525,7 @@ const EquityChart: FC<{
         <div className="py-6 text-center text-xs text-gray-500">Nessun dato nel periodo selezionato</div>
       ) : (
         <>
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img" aria-label="Curva PnL cumulato">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img" aria-label="Curva PnL nel periodo">
             <defs>
               <linearGradient id="pnlFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.28" />

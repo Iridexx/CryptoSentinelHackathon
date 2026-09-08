@@ -109,15 +109,33 @@ async def equity_curve(
     )
     total_deposits = sum((Decimal(str(a.amount)) for a in adjustments), Decimal("0"))
     base_initial = initial - total_deposits  # base prima di ogni versamento
+
+    def _contributed_at(ts) -> Decimal:
+        return base_initial + _deposits_up_to(adjustments, ts) if adjustments else initial
+
+    # Rebase al primo snapshot della finestra selezionata, come fa il benchmark BTC
+    # (base = primo prezzo della finestra). Cosi' curva PnL e curva BTC partono
+    # entrambe da 0% al bordo sinistro e sono confrontabili: cambiare 24h/7g/Tutto
+    # sposta ENTRAMBE le percentuali, non solo quella di BTC.
+    base_equity = _market_equity(snapshots[0], market) if snapshots else Decimal("0")
+    base_pnl_usd = base_equity - _contributed_at(snapshots[0].timestamp_utc) if snapshots else Decimal("0")
+    base_pf_equity = (
+        Decimal(str(snapshots[0].total_portfolio_equity_usd))
+        if snapshots and snapshots[0].total_portfolio_equity_usd is not None
+        else base_equity
+    )
+    base_pf_pnl_usd = (
+        base_pf_equity - _contributed_at(snapshots[0].timestamp_utc) if snapshots else Decimal("0")
+    )
+
     items = []
     for snapshot in snapshots:
         equity = _market_equity(snapshot, market)
-        if adjustments:
-            contributed = base_initial + _deposits_up_to(adjustments, snapshot.timestamp_utc)
-        else:
-            contributed = initial
-        pnl_usd = equity - contributed
-        pnl_pct = (pnl_usd / contributed * Decimal("100")) if contributed > 0 else Decimal("0")
+        contributed = _contributed_at(snapshot.timestamp_utc)
+        # PnL maturato DENTRO la finestra (netto dei versamenti fatti nella finestra),
+        # rapportato al capitale a inizio finestra.
+        pnl_usd = (equity - contributed) - base_pnl_usd
+        pnl_pct = (pnl_usd / base_equity * Decimal("100")) if base_equity > 0 else Decimal("0")
         item = {
             "timestamp_utc": snapshot.timestamp_utc.isoformat(),
             "equity_usd": _q2(equity),
@@ -130,10 +148,10 @@ async def equity_curve(
         if market == "global" and snapshot.total_portfolio_equity_usd is not None:
             pf_equity = Decimal(str(snapshot.total_portfolio_equity_usd))
             item["portfolio_equity_usd"] = _q2(pf_equity)
-            pf_pnl = pf_equity - contributed
+            pf_pnl = (pf_equity - contributed) - base_pf_pnl_usd
             item["portfolio_pnl_usd"] = _signed(_q2(pf_pnl))
             item["portfolio_pnl_pct"] = _signed(
-                _q2((pf_pnl / contributed * Decimal("100")) if contributed > 0 else Decimal("0"))
+                _q2((pf_pnl / base_pf_equity * Decimal("100")) if base_pf_equity > 0 else Decimal("0"))
             )
         btc_pct = benchmark.get(snapshot.timestamp_utc.isoformat())
         if btc_pct is not None:
