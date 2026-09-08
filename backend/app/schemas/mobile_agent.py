@@ -51,6 +51,11 @@ class AgentMobileSettings(BaseModel):
     perp_trend_shock_return_enabled: bool = True
     perp_trend_shock_return_lookback_minutes: int = Field(default=30, ge=5, le=240)
     perp_trend_shock_return_threshold_pct: float = Field(default=1.5, ge=0.1, le=20.0)
+    # NATR percentile e volume relativo sono gambe correlate (una candela violenta
+    # le fa scattare entrambe): da sole valgono score 2 su un evento solo. Con
+    # questo flag il BLOCKED richiede anche una gamba di movimento reale (ADX o
+    # return oltre soglia).
+    perp_trend_shock_require_real_move: bool = True
     # De-risk di regime sulle posizioni aperte
     perp_regime_derisk_enabled: bool = True
     perp_regime_derisk_fraction: float = Field(default=50.0, ge=0.0, le=100.0)
@@ -60,6 +65,10 @@ class AgentMobileSettings(BaseModel):
     # Flip: chiude il 100% della posizione contrarian e riapre l'opposto (stessa
     # leva) nella direzione dello shock, invece del de-risk parziale.
     perp_regime_flip_enabled: bool = True
+    # Minuti di shock BLOCCATO continuativo (stessa direzione) prima che il
+    # de-risk/flip tocchi le posizioni aperte. Evita di liquidare e ribaltare sul
+    # primo tick, che cade spesso sul rimbalzo di uno spike. 0 = immediato.
+    perp_regime_flip_confirm_minutes: float = Field(default=10.0, ge=0.0, le=120.0)
     # Smart Stop Loss perp
     perp_smart_sl_enabled: bool = True
     perp_smart_sl_l1_frac: float = Field(default=0.333, ge=0.1, le=0.5)

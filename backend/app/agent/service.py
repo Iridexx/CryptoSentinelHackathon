@@ -165,12 +165,14 @@ class AgentService:
             perp_trend_shock_return_enabled=getattr(self.settings, "perp_trend_shock_return_enabled", True),
             perp_trend_shock_return_lookback_minutes=getattr(self.settings, "perp_trend_shock_return_lookback_minutes", 30),
             perp_trend_shock_return_threshold_pct=getattr(self.settings, "perp_trend_shock_return_threshold_pct", 1.5),
+            perp_trend_shock_require_real_move=getattr(self.settings, "perp_trend_shock_require_real_move", True),
             perp_regime_derisk_enabled=getattr(self.settings, "perp_regime_derisk_enabled", True),
             perp_regime_derisk_fraction=getattr(self.settings, "perp_regime_derisk_fraction", 50.0),
             perp_regime_derisk_trail_mult=getattr(self.settings, "perp_regime_derisk_trail_mult", 0.6),
             perp_regime_derisk_freeze_rebuy=getattr(self.settings, "perp_regime_derisk_freeze_rebuy", True),
             perp_regime_derisk_require_contrarian=getattr(self.settings, "perp_regime_derisk_require_contrarian", True),
             perp_regime_flip_enabled=getattr(self.settings, "perp_regime_flip_enabled", True),
+            perp_regime_flip_confirm_minutes=getattr(self.settings, "perp_regime_flip_confirm_minutes", 10.0),
             perp_smart_sl_enabled=getattr(self.settings, "perp_smart_sl_enabled", True),
             perp_smart_sl_l1_frac=getattr(self.settings, "perp_smart_sl_l1_frac", 0.333),
             perp_smart_sl_l2_frac=getattr(self.settings, "perp_smart_sl_l2_frac", 0.666),
@@ -747,8 +749,20 @@ class AgentService:
 
         prev_state = self._trend_shock_state_persisted()
         prev_rc = self._trend_shock_recovery_count()
+        _prev_snap = self._trend_shock_snapshot()
+        prev_direction = _prev_snap.get("direction")
+        prev_blocked_since = self._trend_shock_blocked_since()
 
-        if score >= 2:
+        # natr_percentile e volume relativo sono gambe correlate: un solo evento
+        # violento (una candela di liquidazioni) le fa scattare entrambe -> score 2
+        # senza nessuna prova che BTC si stia davvero muovendo. Con require_real_move
+        # il BLOCKED pretende anche una gamba di movimento reale: ADX in trend
+        # oppure return assoluto oltre soglia.
+        real_move = adx_triggered or return_triggered
+        require_real_move = getattr(ms, "perp_trend_shock_require_real_move", True)
+        enters_blocked = score >= 2 and (real_move or not require_real_move)
+
+        if enters_blocked:
             new_state = "BLOCKED"
             new_rc = 0
         elif prev_state == "BLOCKED":
@@ -765,17 +779,29 @@ class AgentService:
             new_state = "NORMAL"
             new_rc = 0
 
+        # Da quando lo shock e' BLOCCATO in modo continuativo nella stessa direzione:
+        # riparte ogni volta che lo stato entra in BLOCKED da fuori o cambia verso.
+        # Il de-risk/flip aspetta che questa finestra sia abbastanza vecchia.
+        if new_state == "BLOCKED":
+            fresh_block = prev_state != "BLOCKED" or prev_direction != direction
+            blocked_since = now if fresh_block else (prev_blocked_since or now)
+        else:
+            blocked_since = None
+
         # Persisti sempre: il de-risk di regime legge questo record dal ciclo di
         # protezione (ogni 5s) e ha bisogno anche di direzione/score, non solo
         # dello stato, per decidere quali posizioni aperte sono contro il regime.
         self._set_trend_shock_persisted(
             new_state, new_rc, direction=direction, score=score, adx=adx_value,
+            blocked_since=blocked_since,
         )
 
         value = {
             "state": new_state,
             "enabled": True,
             "score": score,
+            "real_move": real_move,
+            "blocked_since": blocked_since.isoformat() if blocked_since else None,
             "adx": round(adx_value, 2) if adx_value is not None else None,
             "di_plus": round(di_plus, 2) if di_plus is not None else None,
             "di_minus": round(di_minus, 2) if di_minus is not None else None,
@@ -800,6 +826,16 @@ class AgentService:
                 "btc_global_regime_filter_blocked",
                 adx=value["adx"], di_plus=value["di_plus"], di_minus=value["di_minus"],
                 direction=direction, natr_percentile=value["natr_percentile"],
+                relative_volume=value["relative_volume"], return_pct=value["return_pct"],
+                score=score, real_move=real_move,
+            )
+        elif (
+            score >= 2 and not enters_blocked
+            and new_state != "BLOCKED" and prev_state != "BLOCKED"
+        ):
+            logger.info(
+                "btc_global_regime_filter_spike_ignored",
+                adx=value["adx"], natr_percentile=value["natr_percentile"],
                 relative_volume=value["relative_volume"], return_pct=value["return_pct"],
                 score=score,
             )
@@ -839,6 +875,7 @@ class AgentService:
         direction: str | None = None,
         score: int | None = None,
         adx: float | None = None,
+        blocked_since: datetime | None = None,
     ) -> None:
         set_runtime_value(
             str(self.settings.default_user_id),
@@ -849,9 +886,20 @@ class AgentService:
                 "direction": direction,
                 "score": score,
                 "adx": round(adx, 2) if adx is not None else None,
+                "blocked_since": blocked_since.isoformat() if blocked_since else None,
                 "updated_at": datetime.now(UTC).isoformat(),
             }),
         )
+
+    def _trend_shock_blocked_since(self) -> datetime | None:
+        raw = get_runtime_value(str(self.settings.default_user_id), "btc_trend_shock")
+        if not raw:
+            return None
+        try:
+            val = json.loads(raw).get("blocked_since")
+            return datetime.fromisoformat(val) if val else None
+        except (ValueError, AttributeError, TypeError):
+            return None
 
     def _trend_shock_snapshot(self) -> dict:
         """Stato del filtro shock letto dal record persistito (nessun fetch di rete).
@@ -860,17 +908,19 @@ class AgentService:
         secondi e non puo' permettersi il calcolo completo del filtro.
         """
         raw = get_runtime_value(str(self.settings.default_user_id), "btc_trend_shock")
+        _empty = {"state": "NORMAL", "direction": None, "score": None, "adx": None, "blocked_since": None}
         if not raw:
-            return {"state": "NORMAL", "direction": None, "score": None, "adx": None}
+            return dict(_empty)
         try:
             data = json.loads(raw)
         except (ValueError, AttributeError):
-            return {"state": "NORMAL", "direction": None, "score": None, "adx": None}
+            return dict(_empty)
         return {
             "state": data.get("state", "NORMAL"),
             "direction": data.get("direction"),
             "score": data.get("score"),
             "adx": data.get("adx"),
+            "blocked_since": data.get("blocked_since"),
         }
 
     async def evaluate_perp(self, payload: dict, session: AsyncSession) -> dict:
@@ -1994,6 +2044,24 @@ class AgentService:
         _shock = self._trend_shock_snapshot()
         shock_state, shock_direction = _shock["state"], _shock["direction"]
         regime_blocked = derisk_on and shock_state == "BLOCKED"
+        # Il de-risk/flip liquida e ribalta le posizioni aperte: aspetta che lo shock
+        # sia BLOCCATO da abbastanza tempo, cosi' non reagisce al primo tick di uno
+        # spike che poi rientra (era il caso LINK/BCH dell'8/9). Il freeze dei rebuy
+        # e il resto restano legati allo stato grezzo: sono reversibili e a costo zero.
+        _confirm_min = float(getattr(ms, "perp_regime_flip_confirm_minutes", 0.0) or 0.0)
+        regime_action_confirmed = True
+        if regime_blocked and _confirm_min > 0:
+            _bs = _shock.get("blocked_since")
+            _bs_dt = None
+            if _bs:
+                try:
+                    _bs_dt = datetime.fromisoformat(_bs)
+                except (ValueError, TypeError):
+                    _bs_dt = None
+            # blocked_since assente (record vecchio / test): fail-open, non congelare
+            # la protezione all'infinito.
+            if _bs_dt is not None:
+                regime_action_confirmed = (now - _bs_dt).total_seconds() >= _confirm_min * 60
 
         for pos in perp_positions:
             if pos.status != "open":
@@ -2063,7 +2131,12 @@ class AgentService:
             # Con flip attivo il de-risk chiude il 100% (non una frazione): l'esposizione
             # non si riduce e basta, si inverte subito nella direzione confermata.
             derisk_frac = Decimal("1") if flip_on else Decimal(str(ms.perp_regime_derisk_fraction)) / Decimal("100")
-            if regime_contrarian and derisk_frac > 0 and not _regime_derisk_done(pos):
+            if (
+                regime_contrarian
+                and regime_action_confirmed
+                and derisk_frac > 0
+                and not _regime_derisk_done(pos)
+            ):
                 _size_before = pos.size
                 _leverage = int(pos.leverage or ms.perp_min_leverage)
                 _margin_before = pos.margin_usd if pos.margin_usd and pos.margin_usd > 0 else (
