@@ -16,7 +16,7 @@ normale o e' a favore della posizione.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -100,20 +100,11 @@ def _position(side: str = "long") -> PerpPosition:
     )
 
 
-def _set_regime(
-    state: str, direction: str | None, *, blocked_since: datetime | None = None
-) -> None:
+def _set_regime(state: str, direction: str | None) -> None:
     set_runtime_value(
         str(USER_ID),
         "btc_trend_shock",
-        json.dumps({
-            "state": state,
-            "recovery_count": 0,
-            "direction": direction,
-            "score": 2,
-            "adx": 41.0,
-            "blocked_since": blocked_since.isoformat() if blocked_since else None,
-        }),
+        json.dumps({"state": state, "recovery_count": 0, "direction": direction, "score": 2, "adx": 41.0}),
     )
 
 
@@ -315,49 +306,6 @@ async def test_flip_closes_full_and_reopens_opposite_side(db) -> None:
     flip = flips[0]
     assert flip.leverage == pos.leverage
     assert json.loads(flip.smart_sl_state)["regime_flip_direction"] == "bearish"
-
-
-@pytest.mark.asyncio
-async def test_flip_waits_for_confirmation_window(db) -> None:
-    """Shock appena scattato (blocked_since = adesso): il flip NON parte subito."""
-    _set_regime("BLOCKED", "bearish", blocked_since=NOW)
-    pos = _position("long")
-
-    await _tick(
-        pos, Decimal("99"),
-        _mobile_settings(perp_regime_flip_enabled=True, perp_regime_flip_confirm_minutes=10.0),
-    )
-
-    assert pos.status == "open"
-    assert pos.size == SIZE, "nessuna liquidazione finche' lo shock non e' confermato"
-
-
-@pytest.mark.asyncio
-async def test_flip_fires_once_confirmation_window_elapsed(db) -> None:
-    """Shock BLOCCATO da 15 minuti: superata la finestra, il flip agisce."""
-    _set_regime("BLOCKED", "bearish", blocked_since=NOW - timedelta(minutes=15))
-    pos = _position("long")
-
-    await _tick(
-        pos, Decimal("99"),
-        _mobile_settings(perp_regime_flip_enabled=True, perp_regime_flip_confirm_minutes=10.0),
-    )
-
-    assert pos.status == "closed", "oltre la finestra di conferma il 100% viene chiuso"
-
-
-@pytest.mark.asyncio
-async def test_confirm_window_zero_keeps_immediate_reaction(db) -> None:
-    """confirm_minutes = 0: comportamento storico, reazione al primo tick."""
-    _set_regime("BLOCKED", "bearish", blocked_since=NOW)
-    pos = _position("long")
-
-    await _tick(
-        pos, Decimal("99"),
-        _mobile_settings(perp_regime_derisk_fraction=50.0, perp_regime_flip_confirm_minutes=0.0),
-    )
-
-    assert pos.size == SIZE / 2
 
 
 @pytest.mark.asyncio

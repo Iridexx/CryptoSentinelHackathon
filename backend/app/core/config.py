@@ -284,7 +284,6 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "regime_derisk_freeze_rebuy": "perp_regime_derisk_freeze_rebuy",
         "regime_derisk_require_contrarian": "perp_regime_derisk_require_contrarian",
         "regime_flip_enabled": "perp_regime_flip_enabled",
-        "regime_flip_confirm_minutes": "perp_regime_flip_confirm_minutes",
         "smart_sl_enabled": "perp_smart_sl_enabled",
         "smart_sl_l1_frac": "perp_smart_sl_l1_frac",
         "smart_sl_l2_frac": "perp_smart_sl_l2_frac",
@@ -814,11 +813,6 @@ class Settings(BaseSettings):
     # e riapre subito l'opposto (stessa leva) nella direzione confermata dallo
     # shock BTC — un hedge per fermare l'emorragia, non una nuova strategia.
     perp_regime_flip_enabled: bool = Field(default=True, alias="PERP_REGIME_FLIP_ENABLED")
-    # Minuti di shock BLOCCATO in modo continuativo (stessa direzione) prima che il
-    # de-risk/flip agisca sulle posizioni aperte: evita di liquidare e ribaltare
-    # sul primo tick, che spesso cade proprio sul rimbalzo di uno spike di rumore.
-    # 0 = reazione immediata (comportamento storico).
-    perp_regime_flip_confirm_minutes: float = Field(default=10.0, alias="PERP_REGIME_FLIP_CONFIRM_MINUTES")
     # Smart Stop Loss
     perp_smart_sl_enabled: bool = Field(default=True, alias="PERP_SMART_SL_ENABLED")
     perp_smart_sl_l1_frac: float = Field(default=0.333, alias="PERP_SMART_SL_L1_FRAC")
