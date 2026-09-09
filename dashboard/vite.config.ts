@@ -4,7 +4,7 @@ import path from 'node:path';
 
 export default defineConfig({
   root: __dirname,
-  envDir: path.resolve(__dirname, 'env'),
+  envDir: path.resolve(__dirname, '..'),
   plugins: [react()],
   server: {
     host: '0.0.0.0',
