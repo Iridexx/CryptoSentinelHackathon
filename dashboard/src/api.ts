@@ -58,9 +58,13 @@ export function defaultBackendBaseUrl(): string {
 export function normalizeBackendBaseUrl(baseUrl: string): string {
   const fallback = defaultBackendBaseUrl();
   const value = baseUrl.trim();
-  if (!value || value === LEGACY_BACKEND_URL) return fallback;
+  if (!value) return fallback;
   try {
     const url = new URL(value);
+    const isLocal = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    if (isLocal && url.port === '8000') {
+      url.port = BACKEND_PORT;
+    }
     if (url.port === DASHBOARD_PORT) {
       url.port = BACKEND_PORT;
     }
