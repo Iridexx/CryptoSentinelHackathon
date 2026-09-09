@@ -14,6 +14,7 @@ from .pnl import PnlSnapshot, PortfolioState
 from .positions import PerpPosition, SpotPosition
 from .reserve import ReserveHolding, ReserveSnapshot, ReserveTransaction
 from .runtime_state import RuntimeState
+from .notifications import NotificationEvent
 from .support import SupportMessage, SupportTicket
 from .trade_charts import TradeChartSnapshot
 from .trades import PerpTrade, SpotTrade
@@ -30,6 +31,7 @@ __all__ = [
     "DeviceProfile",
     "EquityAdjustment",
     "DeviceToken",
+    "NotificationEvent",
     "PnlSnapshot",
     "PortfolioState",
     "PerpPosition",

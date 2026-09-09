@@ -17,6 +17,7 @@ from backend.app.schemas.notification_prefs import NotificationPreferences
 logger = get_logger("notifications.agent_notifier")
 
 _MAX_NOTIFIED_IDS = 500
+_PRUNE_EVERY = 20
 
 
 class AgentNotifier:
@@ -29,6 +30,7 @@ class AgentNotifier:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._store = DeviceTokenStore(settings.fcm_token_store_path)
+        self._append_count = 0
 
     # ------------------------------------------------------------------
     # Preferenze utente
@@ -48,6 +50,51 @@ class AgentNotifier:
     def set_preferences(self, user_id: str, prefs: NotificationPreferences) -> None:
         """Persiste in RuntimeState."""
         set_runtime_value(user_id, self.PREFS_KEY, json.dumps(prefs.model_dump()))
+
+    # ------------------------------------------------------------------
+    # Feed persistente (dashboard toast + timeline)
+    # ------------------------------------------------------------------
+
+    async def _record(
+        self,
+        user_id: str,
+        category: str,
+        severity: str,
+        title: str,
+        body: str,
+        data: dict[str, str] | None = None,
+        link_type: str | None = None,
+        link_ref: str | None = None,
+    ) -> None:
+        """Scrive l'evento nel feed notifiche (tabella notification_events).
+
+        Degrada silenziosamente se il DB async non è inizializzato (es. in
+        test unitari che non toccano la persistenza).
+        """
+        try:
+            from backend.app.persistence.database import get_session_factory
+            from backend.app.persistence.repositories.notifications import NotificationRepository
+
+            factory = get_session_factory()
+            async with factory() as session:
+                repo = NotificationRepository(session)
+                await repo.append(
+                    user_id=user_id,
+                    category=category,
+                    severity=severity,
+                    title=title,
+                    body=body,
+                    data_json=data,
+                    link_type=link_type,
+                    link_ref=link_ref,
+                )
+                self._append_count += 1
+                if self._append_count % _PRUNE_EVERY == 0:
+                    pruned = await repo.prune()
+                    if pruned:
+                        logger.info("notification_feed_pruned", deleted=pruned)
+        except Exception as exc:
+            logger.debug("notification_feed_record_failed", error=str(exc))
 
     # ------------------------------------------------------------------
     # Notifiche trade
@@ -84,21 +131,23 @@ class AgentNotifier:
         body = (
             f"{direction.upper()} @ {entry_price:.4f} | Size ${size_usd:.2f}{sl_text}"
         )
+        category = "spot_trade" if market == "spot" else "perp_trade"
+        data = {
+            "topic": topic,
+            "trade_id": trade_id,
+            "asset": asset,
+            "market": market,
+            "direction": direction,
+            "entry_price": str(entry_price),
+            "size_usd": str(size_usd),
+            "dry_run": str(is_dry_run).lower(),
+        }
+        await self._record(
+            user_id, category, "critical", title, body,
+            data=data, link_type="trade", link_ref=f"{market}:{trade_id}",
+        )
         sent = await self._send(
-            user_id=user_id,
-            title=title,
-            body=body,
-            severity="critical",
-            data={
-                "topic": topic,
-                "trade_id": trade_id,
-                "asset": asset,
-                "market": market,
-                "direction": direction,
-                "entry_price": str(entry_price),
-                "size_usd": str(size_usd),
-                "dry_run": str(is_dry_run).lower(),
-            },
+            user_id=user_id, title=title, body=body, severity="critical", data=data,
         )
         if sent:
             self._add_notified(user_id, trade_id)
@@ -129,20 +178,22 @@ class AgentNotifier:
         pnl_sign = "+" if pnl_usd >= 0 else ""
         title = f"Posizione chiusa: {asset.upper()} {market.upper()}"
         body = f"PnL {pnl_sign}{pnl_usd:.2f}$ ({pnl_sign}{pnl_pct:.2f}%) | {close_reason}"
+        category = "spot_trade" if market == "spot" else "perp_trade"
+        data = {
+            "topic": topic,
+            "trade_id": trade_id,
+            "asset": asset,
+            "market": market,
+            "pnl_usd": str(pnl_usd),
+            "pnl_pct": str(pnl_pct),
+            "close_reason": close_reason,
+        }
+        await self._record(
+            user_id, category, "critical", title, body,
+            data=data, link_type="trade", link_ref=f"{market}:{trade_id}",
+        )
         return await self._send(
-            user_id=user_id,
-            title=title,
-            body=body,
-            severity="critical",
-            data={
-                "topic": topic,
-                "trade_id": trade_id,
-                "asset": asset,
-                "market": market,
-                "pnl_usd": str(pnl_usd),
-                "pnl_pct": str(pnl_pct),
-                "close_reason": close_reason,
-            },
+            user_id=user_id, title=title, body=body, severity="critical", data=data,
         )
 
     # ------------------------------------------------------------------
@@ -168,16 +219,14 @@ class AgentNotifier:
 
         title = f"Allarme rischio: {alert_type.replace('_', ' ').title()}"
         body = detail
+        data = {
+            "topic": self.settings.fcm_risk_topic,
+            "alert_type": alert_type,
+            "detail": detail,
+        }
+        await self._record(user_id, "risk", "critical", title, body, data=data)
         sent = await self._send(
-            user_id=user_id,
-            title=title,
-            body=body,
-            severity="critical",
-            data={
-                "topic": self.settings.fcm_risk_topic,
-                "alert_type": alert_type,
-                "detail": detail,
-            },
+            user_id=user_id, title=title, body=body, severity="critical", data=data,
         )
         if sent:
             set_runtime_value(user_id, self.RISK_STATE_KEY, current_state)
@@ -206,18 +255,16 @@ class AgentNotifier:
             f"Spot {spot_trades} | Perp {perp_trades} | "
             f"PnL {pnl_sign}{daily_pnl_usd:.2f}$ | WR {win_rate_pct:.1f}%"
         )
+        data = {
+            "topic": self.settings.fcm_summary_topic,
+            "spot_trades": str(spot_trades),
+            "perp_trades": str(perp_trades),
+            "daily_pnl_usd": str(daily_pnl_usd),
+            "win_rate_pct": str(win_rate_pct),
+        }
+        await self._record(user_id, "summary", "info", title, body, data=data)
         return await self._send(
-            user_id=user_id,
-            title=title,
-            body=body,
-            severity="normal",
-            data={
-                "topic": self.settings.fcm_summary_topic,
-                "spot_trades": str(spot_trades),
-                "perp_trades": str(perp_trades),
-                "daily_pnl_usd": str(daily_pnl_usd),
-                "win_rate_pct": str(win_rate_pct),
-            },
+            user_id=user_id, title=title, body=body, severity="normal", data=data,
         )
 
     # ------------------------------------------------------------------
@@ -246,16 +293,15 @@ class AgentNotifier:
         if idempotency_key and self._is_already_notified(user_id, idempotency_key):
             return False
 
+        title = self._RESERVE_TITLES.get(kind, "Riserva")
+        data = {
+            "topic": self.settings.fcm_summary_topic,
+            "kind": kind,
+            "detail": detail,
+        }
+        await self._record(user_id, "reserve", "normal", title, detail, data=data)
         sent = await self._send(
-            user_id=user_id,
-            title=self._RESERVE_TITLES.get(kind, "Riserva"),
-            body=detail,
-            severity="normal",
-            data={
-                "topic": self.settings.fcm_summary_topic,
-                "kind": kind,
-                "detail": detail,
-            },
+            user_id=user_id, title=title, body=detail, severity="normal", data=data,
         )
         if sent and idempotency_key:
             self._add_notified(user_id, idempotency_key)
@@ -278,16 +324,14 @@ class AgentNotifier:
 
         title = f"Agente critico: {event}"
         body = detail
+        data = {
+            "topic": self.settings.fcm_critical_topic or "cryptosentinel-critical",
+            "event": event,
+            "detail": detail,
+        }
+        await self._record(user_id, "system", "critical", title, body, data=data)
         return await self._send(
-            user_id=user_id,
-            title=title,
-            body=body,
-            severity="critical",
-            data={
-                "topic": self.settings.fcm_critical_topic or "cryptosentinel-critical",
-                "event": event,
-                "detail": detail,
-            },
+            user_id=user_id, title=title, body=body, severity="critical", data=data,
         )
 
     # ------------------------------------------------------------------
