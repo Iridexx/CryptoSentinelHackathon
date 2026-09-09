@@ -1,8 +1,12 @@
 ﻿"""Notification routes."""
 
+from __future__ import annotations
+
+import asyncio
 import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 
 from backend.app.api.dependencies import AdminAccessDep, DeviceAccessDep, ReadAccessDep, SessionDep, SettingsDep
 from backend.app.notifications.service import NotificationService, get_notification_service
@@ -152,6 +156,56 @@ async def get_feed(
         items=[_event_to_item(e) for e in items],
         unread_count=unread,
         cursor=cursor,
+    )
+
+
+@router.get("/feed/stream")
+async def feed_stream(
+    request: Request,
+    _: ReadAccessDep,
+    since: str | None = None,
+):
+    """SSE stream: emette un evento ogni volta che arriva una nuova notifica."""
+    from backend.app.notifications.feed_bus import listen
+    from backend.app.persistence.database import get_session_factory
+
+    async def _generate():
+        cursor = since
+        with listen() as wake:
+            while True:
+                if await request.is_disconnected():
+                    break
+                factory = get_session_factory()
+                async with factory() as session:
+                    repo = NotificationRepository(session)
+                    items = await repo.list(since=cursor, limit=50)
+                    unread = await repo.unread_count()
+
+                if items:
+                    cursor = items[-1].event_id
+                    payload = json.dumps({
+                        "items": [_event_to_item(e).model_dump() for e in items],
+                        "unread_count": unread,
+                        "cursor": cursor,
+                    })
+                    yield f"data: {payload}\n\n"
+                else:
+                    yield f": keepalive\n\n"
+
+                wake.clear()
+                try:
+                    await asyncio.wait_for(wake.wait(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    pass
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

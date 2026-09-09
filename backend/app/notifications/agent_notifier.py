@@ -93,6 +93,8 @@ class AgentNotifier:
                     pruned = await repo.prune()
                     if pruned:
                         logger.info("notification_feed_pruned", deleted=pruned)
+            from backend.app.notifications.feed_bus import notify as _bus_notify
+            _bus_notify()
         except Exception as exc:
             logger.debug("notification_feed_record_failed", error=str(exc))
 
