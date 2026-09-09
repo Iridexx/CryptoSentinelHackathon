@@ -208,8 +208,8 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('overview');
   const [session, setSession] = useState<DashboardSession>(() => ({
     baseUrl: normalizedStoredBackendUrl(),
-    readToken: localStorage.getItem('cs.dashboard.readToken') || '',
-    adminToken: localStorage.getItem('cs.dashboard.adminToken') || '',
+    readToken: localStorage.getItem('cs.dashboard.readToken') || import.meta.env.VITE_API_READ_TOKEN || '',
+    adminToken: localStorage.getItem('cs.dashboard.adminToken') || import.meta.env.VITE_API_ADMIN_TOKEN || '',
   }));
   const [spot, setSpot] = useState<LoadState<SpotView>>(emptyState());
   const [perp, setPerp] = useState<LoadState<PerpView>>(emptyState());
