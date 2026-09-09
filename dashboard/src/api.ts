@@ -49,6 +49,8 @@ const LOCAL_BACKEND_URL = 'http://127.0.0.1:8001';
 type TokenKind = 'read' | 'admin' | 'none';
 
 export function defaultBackendBaseUrl(): string {
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+  if (envBase) return envBase.replace(/\/+$/, '');
   if (typeof window === 'undefined') return LOCAL_BACKEND_URL;
   const { protocol, hostname } = window.location;
   if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') return LOCAL_BACKEND_URL;
