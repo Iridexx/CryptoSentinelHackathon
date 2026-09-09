@@ -93,3 +93,63 @@ class DeviceListResponse(BaseModel):
 
     devices: list[DeviceRecord]
     total: int
+
+
+# ---------------------------------------------------------------------------
+# Dashboard notification feed (plans/Plan_Notifiche.md)
+# ---------------------------------------------------------------------------
+
+
+class FeedEventItem(BaseModel):
+    """Singola riga del feed notifiche dashboard."""
+
+    event_id: str
+    category: str
+    severity: str
+    title: str
+    body: str
+    data: dict | None = None
+    link_type: str | None = None
+    link_ref: str | None = None
+    created_at: str
+    read_at: str | None = None
+
+
+class FeedResponse(BaseModel):
+    """Risposta GET /feed."""
+
+    items: list[FeedEventItem]
+    unread_count: int
+    cursor: str | None = None
+
+
+class FeedReadRequest(BaseModel):
+    """Corpo POST /feed/read — segna come letti."""
+
+    ids: list[str] | None = None
+    all: bool = False
+    before: str | None = None
+
+
+class FeedReadResponse(BaseModel):
+    """Risposta POST /feed/read."""
+
+    unread_count: int
+
+
+class ToastPreferences(BaseModel):
+    """Flag per categoria: il toast compare nel dashboard?"""
+
+    toast_spot_trade: bool = True
+    toast_perp_trade: bool = True
+    toast_risk: bool = True
+    toast_system: bool = True
+    toast_reserve: bool = False
+    toast_summary: bool = False
+
+
+class ToastPreferencesResponse(BaseModel):
+    """Risposta GET/PUT /toast-prefs."""
+
+    preferences: ToastPreferences
+    source: str  # "default" | "persisted"

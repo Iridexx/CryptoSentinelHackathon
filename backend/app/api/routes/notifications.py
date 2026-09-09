@@ -1,18 +1,28 @@
 ﻿"""Notification routes."""
 
-from fastapi import APIRouter, Depends
+import json
 
-from backend.app.api.dependencies import AdminAccessDep, DeviceAccessDep, ReadAccessDep
+from fastapi import APIRouter, Depends, Query
+
+from backend.app.api.dependencies import AdminAccessDep, DeviceAccessDep, ReadAccessDep, SessionDep, SettingsDep
 from backend.app.notifications.service import NotificationService, get_notification_service
+from backend.app.persistence.repositories.notifications import NotificationRepository
+from backend.app.persistence.runtime_state import get_runtime_value, set_runtime_value
 from backend.app.schemas.notifications import (
     DeviceListResponse,
     DeviceRecord,
     DeviceRegistrationRequest,
     DeviceRegistrationResponse,
     DeviceUnregisterRequest,
+    FeedEventItem,
+    FeedReadRequest,
+    FeedReadResponse,
+    FeedResponse,
     NotificationRequest,
     NotificationSendResponse,
     NotificationStatusResponse,
+    ToastPreferences,
+    ToastPreferencesResponse,
 )
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
@@ -85,3 +95,109 @@ async def send_notification(
     """Send a server-side notification via FCM."""
 
     return service.send(request)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard notification feed  (plans/Plan_Notifiche.md, fase 3)
+# ---------------------------------------------------------------------------
+
+TOAST_PREFS_KEY = "toast_preferences"
+
+
+def _event_to_item(evt) -> FeedEventItem:
+    return FeedEventItem(
+        event_id=evt.event_id,
+        category=evt.category,
+        severity=evt.severity,
+        title=evt.title,
+        body=evt.body,
+        data=evt.data_json,
+        link_type=evt.link_type,
+        link_ref=evt.link_ref,
+        created_at=evt.created_at.isoformat(),
+        read_at=evt.read_at.isoformat() if evt.read_at else None,
+    )
+
+
+@router.get("/feed", response_model=FeedResponse)
+async def get_feed(
+    _: ReadAccessDep,
+    session: SessionDep,
+    since: str | None = None,
+    before: str | None = None,
+    categories: str | None = Query(None, description="Comma-separated category filter"),
+    severities: str | None = Query(None, description="Comma-separated severity filter"),
+    unread_only: bool = False,
+    q: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+) -> FeedResponse:
+    """Feed notifiche per il dashboard — supporta cursori since/before."""
+
+    repo = NotificationRepository(session)
+    cat_list = [c.strip() for c in categories.split(",")] if categories else None
+    sev_list = [s.strip() for s in severities.split(",")] if severities else None
+
+    items = await repo.list(
+        since=since,
+        before=before,
+        categories=cat_list,
+        severities=sev_list,
+        unread_only=unread_only,
+        q=q,
+        limit=limit,
+    )
+    unread = await repo.unread_count()
+    cursor = items[-1].event_id if items else None
+    return FeedResponse(
+        items=[_event_to_item(e) for e in items],
+        unread_count=unread,
+        cursor=cursor,
+    )
+
+
+@router.post("/feed/read", response_model=FeedReadResponse)
+async def mark_feed_read(
+    request: FeedReadRequest,
+    _: ReadAccessDep,
+    session: SessionDep,
+) -> FeedReadResponse:
+    """Segna come lette le notifiche specificate (per id o tutte)."""
+
+    repo = NotificationRepository(session)
+    unread = await repo.mark_read(
+        ids=request.ids,
+        all=request.all,
+        before=request.before,
+    )
+    return FeedReadResponse(unread_count=unread)
+
+
+@router.get("/toast-prefs", response_model=ToastPreferencesResponse)
+async def get_toast_prefs(
+    _: ReadAccessDep,
+    settings: SettingsDep,
+) -> ToastPreferencesResponse:
+    """Preferenze toast per categoria (quali notifiche mostrano il toast nel dashboard)."""
+
+    user_id = str(settings.default_user_id)
+    raw = get_runtime_value(user_id, TOAST_PREFS_KEY)
+    if raw:
+        try:
+            prefs = ToastPreferences(**json.loads(raw))
+            return ToastPreferencesResponse(preferences=prefs, source="persisted")
+        except Exception:
+            pass
+    return ToastPreferencesResponse(preferences=ToastPreferences(), source="default")
+
+
+@router.put("/toast-prefs", response_model=ToastPreferencesResponse)
+async def update_toast_prefs(
+    request: ToastPreferences,
+    _: ReadAccessDep,
+    settings: SettingsDep,
+) -> ToastPreferencesResponse:
+    """Salva le preferenze toast per categoria."""
+
+    user_id = str(settings.default_user_id)
+    set_runtime_value(user_id, TOAST_PREFS_KEY, json.dumps(request.model_dump()))
+    return ToastPreferencesResponse(preferences=request, source="persisted")
