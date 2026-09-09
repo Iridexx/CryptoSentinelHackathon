@@ -9,6 +9,9 @@ import type {
   ExecutionProviderSelectionResponse,
   ExecutionStatus,
   ExecutionWalletsResponse,
+  FeedReadRequest,
+  FeedReadResponse,
+  FeedResponse,
   GlobalView,
   HealthPayload,
   KillSwitchState,
@@ -27,6 +30,8 @@ import type {
   SupportTicketListResponse,
   SupportNotificationResponse,
   SupportTicketStatus,
+  ToastPreferences,
+  ToastPreferencesResponse,
   TradeDetail,
 } from './types';
 
@@ -416,4 +421,48 @@ export function reserveRebalance(session: DashboardSession, dryRun: boolean) {
     'admin',
     { method: 'POST', body: JSON.stringify({ dry_run: dryRun }) },
   );
+}
+
+// ── Notification feed ───────────────────────────────────────────────────────
+
+export function fetchFeed(
+  session: DashboardSession,
+  params: {
+    since?: string;
+    before?: string;
+    categories?: string;
+    severities?: string;
+    unread_only?: boolean;
+    q?: string;
+    limit?: number;
+  } = {},
+) {
+  const search = new URLSearchParams();
+  if (params.since) search.set('since', params.since);
+  if (params.before) search.set('before', params.before);
+  if (params.categories) search.set('categories', params.categories);
+  if (params.severities) search.set('severities', params.severities);
+  if (params.unread_only) search.set('unread_only', 'true');
+  if (params.q) search.set('q', params.q);
+  if (params.limit) search.set('limit', String(params.limit));
+  const suffix = search.toString() ? `?${search.toString()}` : '';
+  return requestJson<FeedResponse>(session, `/api/v1/notifications/feed${suffix}`);
+}
+
+export function markFeedRead(session: DashboardSession, body: FeedReadRequest) {
+  return requestJson<FeedReadResponse>(session, '/api/v1/notifications/feed/read', 'read', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchToastPrefs(session: DashboardSession) {
+  return requestJson<ToastPreferencesResponse>(session, '/api/v1/notifications/toast-prefs');
+}
+
+export function saveToastPrefs(session: DashboardSession, prefs: ToastPreferences) {
+  return requestJson<ToastPreferencesResponse>(session, '/api/v1/notifications/toast-prefs', 'read', {
+    method: 'PUT',
+    body: JSON.stringify(prefs),
+  });
 }

@@ -580,3 +580,48 @@ export type NotificationPreferencesResponse = {
   preferences: NotificationPreferences;
   source: 'default' | 'persisted';
 };
+
+// ── Notification feed (dashboard toast + timeline) ──────────────────────────
+
+export type FeedEventItem = {
+  event_id: string;
+  category: 'spot_trade' | 'perp_trade' | 'risk' | 'reserve' | 'system' | 'summary';
+  severity: 'info' | 'normal' | 'critical';
+  title: string;
+  body: string;
+  data?: Record<string, string> | null;
+  link_type?: string | null;
+  link_ref?: string | null;
+  created_at: string;
+  read_at?: string | null;
+};
+
+export type FeedResponse = {
+  items: FeedEventItem[];
+  unread_count: number;
+  cursor: string | null;
+};
+
+export type FeedReadRequest = {
+  ids?: string[];
+  all?: boolean;
+  before?: string;
+};
+
+export type FeedReadResponse = {
+  unread_count: number;
+};
+
+export type ToastPreferences = {
+  toast_spot_trade: boolean;
+  toast_perp_trade: boolean;
+  toast_risk: boolean;
+  toast_system: boolean;
+  toast_reserve: boolean;
+  toast_summary: boolean;
+};
+
+export type ToastPreferencesResponse = {
+  preferences: ToastPreferences;
+  source: 'default' | 'persisted';
+};

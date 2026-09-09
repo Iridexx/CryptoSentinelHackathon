@@ -1609,3 +1609,379 @@ button.danger {
   border-color: #3b82f6;
   color: #fff;
 }
+
+/* ── Toast notifications ──────────────────────────────────────────── */
+
+.toast-host {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: #1c201d;
+  border: 1px solid #3a3f3b;
+  border-radius: 10px;
+  padding: 12px 14px 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  animation: toast-in 0.3s ease-out;
+  overflow: hidden;
+}
+
+.toast--critical {
+  border-color: #ef4444;
+  background: #1e1214;
+}
+
+.toast--normal {
+  border-color: #7fa66a;
+}
+
+.toast--info {
+  border-color: #3b82f6;
+}
+
+.toast__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.toast__icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.toast__title {
+  font-weight: 600;
+  font-size: 13px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast__close {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.5;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.toast__close:hover {
+  opacity: 1;
+}
+
+.toast__body {
+  font-size: 12px;
+  color: #b0b5ab;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+.toast__bar-track {
+  height: 3px;
+  background: #2a2f2b;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.toast__bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 50ms linear;
+}
+
+.toast--critical .toast__bar {
+  background: #ef4444;
+}
+
+.toast--normal .toast__bar {
+  background: #7fa66a;
+}
+
+.toast--info .toast__bar {
+  background: #3b82f6;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+/* DND toggle in topbar */
+.dnd-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.dnd-toggle input[type="checkbox"] {
+  accent-color: #ef4444;
+  min-height: auto;
+}
+
+/* ── Sidebar badge ────────────────────────────────────────────────── */
+
+.sidebar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 10px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Notifications panel ──────────────────────────────────────────── */
+
+.notif-panel {
+  padding: 0 4px;
+}
+
+.notif-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.notif-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.notif-filters select {
+  min-width: 100px;
+}
+
+.notif-search {
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.notif-unread-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #b0b5ab;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.notif-unread-toggle input[type="checkbox"] {
+  accent-color: #3b82f6;
+  min-height: auto;
+}
+
+.notif-actions {
+  flex-shrink: 0;
+}
+
+.notif-empty {
+  text-align: center;
+  color: #6b7280;
+  padding: 40px 0;
+  font-size: 14px;
+}
+
+.notif-day-group {
+  margin-bottom: 20px;
+}
+
+.notif-day-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #141614;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7fa66a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #2a2f2b;
+  margin-bottom: 6px;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.notif-item:hover {
+  background: #1c201d;
+}
+
+.notif-item--unread {
+  background: #1a1f1b;
+}
+
+.notif-item--critical {
+  border-left: 3px solid #ef4444;
+}
+
+.notif-item--normal {
+  border-left: 3px solid #7fa66a;
+}
+
+.notif-item--info {
+  border-left: 3px solid #3b82f6;
+}
+
+.notif-item__icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.notif-item__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-item__title {
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.notif-item__time {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 400;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.notif-item__body {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.notif-item__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.notif-load-more {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin: 12px 0;
+}
+
+/* ── Notification item animation ──────────────────────────────────── */
+
+.notif-item {
+  animation: notif-fade-in 0.25s ease-out;
+}
+
+.notif-item--read-transition {
+  transition: opacity 0.3s, background 0.3s;
+  opacity: 0.7;
+}
+
+@keyframes notif-fade-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar badge pulse */
+.sidebar-badge {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Sticky toolbar on notifiche page */
+.notif-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #141614;
+  padding: 8px 0 12px;
+}
+
+/* Day header sits below the toolbar */
+.notif-day-header {
+  top: 52px;
+}
+
+/* Smooth unread dot disappear */
+.notif-item__dot {
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.notif-item:not(.notif-item--unread) .notif-item__dot {
+  opacity: 0;
+  transform: scale(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-item {
+    animation: none;
+  }
+  .sidebar-badge {
+    animation: none;
+  }
+  .notif-item--read-transition {
+    transition: none;
+  }
+  .notif-item__dot {
+    transition: none;
+  }
+}

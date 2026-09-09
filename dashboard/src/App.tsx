@@ -23,6 +23,7 @@ import {
   fetchSupportTicket,
   fetchSupportTickets,
   fetchSupportNotifications,
+  fetchToastPrefs,
   markSupportTicketRead,
   markAllSupportTicketsRead,
   fetchTradeDetail,
@@ -54,6 +55,9 @@ import {
   type DashboardSession,
   type EquityAdjustment,
 } from './api';
+import { useNotifications } from './notifications';
+import NotificationsPanel from './NotificationsPanel';
+import ToastHost from './ToastHost';
 import type {
   AgentDecisionResponse,
   AgentSettings,
@@ -85,11 +89,12 @@ import type {
   SupportTicketListResponse,
   SupportNotificationResponse,
   SupportTicketStatus,
+  ToastPreferences,
   TradeChart,
   TradeDetail,
 } from './types';
 
-type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'bank' | 'analytics' | 'health' | 'wallet' | 'support' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
+type Tab = 'overview' | 'spot' | 'perp' | 'global' | 'bank' | 'analytics' | 'health' | 'wallet' | 'support' | 'notifiche' | 'logs' | 'settings' | 'onboarding' | 'markets' | 'export';
 type LoadState<T> = { data: T | null; loading: boolean; error: string | null };
 type LogPriorityFilter = 'action' | 'critical' | 'error' | 'warning' | 'info' | 'all';
 type LogCategoryFilter = 'all' | 'agent' | 'storage' | 'risk' | 'execution' | 'notifications' | 'market' | 'api' | 'support';
@@ -110,6 +115,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'health', label: 'Health' },
   { id: 'wallet', label: 'Wallet' },
   { id: 'support', label: 'Support' },
+  { id: 'notifiche', label: 'Notifiche' },
   { id: 'logs', label: 'Logs' },
   { id: 'settings', label: 'Settings' },
   { id: 'onboarding', label: 'Onboarding' },
@@ -239,9 +245,31 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [walletDraft, setWalletDraft] = useState('');
   const [notifPrefs, setNotifPrefs] = useState<LoadState<NotificationPreferencesResponse>>(emptyState());
+  const [dnd, setDnd] = useState(() => localStorage.getItem('cs.dashboard.dnd') === '1');
+  const [toastPrefs, setToastPrefs] = useState<ToastPreferences | null>(null);
 
   const canRead = Boolean(session.readToken);
   const canAdmin = Boolean(session.adminToken);
+
+  const notifications = useNotifications(canRead ? session : null, toastPrefs, dnd);
+
+  useEffect(() => {
+    localStorage.setItem('cs.dashboard.dnd', dnd ? '1' : '0');
+  }, [dnd]);
+
+  useEffect(() => {
+    if (!canRead) return;
+    fetchToastPrefs(session).then((r) => setToastPrefs(r.preferences)).catch(() => {});
+  }, [canRead, session.baseUrl, session.readToken]);
+
+  useEffect(() => {
+    const base = 'CryptoSentinel';
+    if (notifications.unreadCount > 0) {
+      document.title = `(${notifications.unreadCount}) ${base}`;
+    } else {
+      document.title = base;
+    }
+  }, [notifications.unreadCount]);
 
   useEffect(() => {
     setSession((current) => {
@@ -616,6 +644,10 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <ToastHost
+        newItems={notifications.newItems}
+        soundEnabled={!dnd}
+      />
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">CS</span>
@@ -628,6 +660,9 @@ export default function App() {
           {tabs.map((item) => (
             <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}>
               {item.label}
+              {item.id === 'notifiche' && notifications.unreadCount > 0 && (
+                <span className="sidebar-badge">{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -661,6 +696,10 @@ export default function App() {
               onChange={(event) => setSession((current) => ({ ...current, adminToken: event.target.value }))}
             />
             <button onClick={() => void refreshCore(true)}>Refresh</button>
+            <label className="dnd-toggle">
+              <input type="checkbox" checked={dnd} onChange={(e) => setDnd(e.target.checked)} />
+              DND
+            </label>
           </div>
         </header>
 
@@ -797,6 +836,7 @@ export default function App() {
         {tab === 'markets' && (
           <MarketsPanel markets={markets} onRefresh={() => void refreshMarkets()} canRead={canRead} />
         )}
+        {tab === 'notifiche' && <NotificationsPanel notifications={notifications} />}
         {tab === 'export' && <ExportPanel payload={exportPayload} />}
       </main>
     </div>
