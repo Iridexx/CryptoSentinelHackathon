@@ -1971,6 +1971,23 @@ button.danger {
   transform: scale(0);
 }
 
+/* ── Close position button ─────────────────────────────────────────── */
+
+.close-pos-btn {
+  padding: 3px 10px;
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #3b1518;
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.close-pos-btn:hover:not(:disabled) {
+  background: #ef4444;
+  color: #fff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .notif-item {
     animation: none;

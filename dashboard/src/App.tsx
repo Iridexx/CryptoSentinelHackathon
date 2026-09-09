@@ -23,6 +23,7 @@ import {
   fetchSupportTicket,
   fetchSupportTickets,
   fetchSupportNotifications,
+  closePosition,
   fetchToastPrefs,
   markSupportTicketRead,
   markAllSupportTicketsRead,
@@ -510,6 +511,18 @@ export default function App() {
     if (response) setNotice(`Kill switch set to ${state}`);
   }
 
+  async function handleClosePosition(market: 'spot' | 'perp', positionId: string) {
+    if (!canAdmin) { setNotice('Admin token required'); return; }
+    if (!confirm(`Chiudere la posizione ${positionId} (${market}) a mercato?`)) return;
+    try {
+      const res = await closePosition(session, market, positionId);
+      setNotice(`Posizione chiusa: ${res.status}${res.trade_id ? ` (trade ${res.trade_id})` : ''}`);
+      void refreshCore(true);
+    } catch (e: unknown) {
+      setNotice(`Errore chiusura: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   async function refreshMarkets() {
     if (!canRead) return;
     const response = await load(setMarkets, () => fetchMarkets(session, 100).then((payload) => payload.items));
@@ -712,14 +725,14 @@ export default function App() {
         {tab === 'overview' && (
           <div className="grid overview-grid">
             <GlobalPanel global={global} equity={equity} />
-            <SpotPanel spot={spot} session={session} />
-            <PerpPanel perp={perp} session={session} />
+            <SpotPanel spot={spot} session={session} canAdmin={canAdmin} onClose={handleClosePosition} />
+            <PerpPanel perp={perp} session={session} canAdmin={canAdmin} onClose={handleClosePosition} />
             <HealthPanel live={live} ready={ready} heartbeat={heartbeat} execution={execution} coverage={coverage} />
             <KillSwitchPanel agent={agent} onSet={(state) => void updateKillSwitch(state)} canAdmin={canAdmin} />
           </div>
         )}
-        {tab === 'spot' && <SpotPanel spot={spot} session={session} expanded />}
-        {tab === 'perp' && <PerpPanel perp={perp} session={session} expanded />}
+        {tab === 'spot' && <SpotPanel spot={spot} session={session} expanded canAdmin={canAdmin} onClose={handleClosePosition} />}
+        {tab === 'perp' && <PerpPanel perp={perp} session={session} expanded canAdmin={canAdmin} onClose={handleClosePosition} />}
         {tab === 'global' && <GlobalPanel global={global} equity={equity} expanded />}
         {tab === 'bank' && <BankPanel session={session} canAdmin={canAdmin} />}
         {tab === 'analytics' && (
@@ -1245,7 +1258,7 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
   );
 }
 
-function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotView>; session: DashboardSession; expanded?: boolean }) {
+function SpotPanel({ spot, session, expanded = false, canAdmin = false, onClose }: { spot: LoadState<SpotView>; session: DashboardSession; expanded?: boolean; canAdmin?: boolean; onClose?: (market: 'spot' | 'perp', positionId: string) => void }) {
   const data = spot.data;
   const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
@@ -1269,7 +1282,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Time', 'Asset', 'Size', 'Entry', 'Price Now', 'SL', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status']}
+                columns={['Time', 'Asset', 'Size', 'Entry', 'Price Now', 'SL', 'Invested', 'Value', 'PnL $', 'PnL %', 'Status', ...(canAdmin ? [''] : [])]}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
@@ -1279,7 +1292,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
                   const value = invested + Number(item.pnl_unrealized);
                   const pnl = Number(item.pnl_unrealized);
                   const pct = item.pnl_pct ?? '+0.00';
-                  return [
+                  const row: React.ReactNode[] = [
                     shortDate(item.opened_at),
                     item.asset,
                     item.size,
@@ -1292,6 +1305,12 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
                     <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
                     item.status,
                   ];
+                  if (canAdmin) {
+                    row.push(
+                      <button className="close-pos-btn" onClick={(e) => { e.stopPropagation(); onClose?.('spot', item.position_id); }}>Chiudi</button>,
+                    );
+                  }
+                  return row;
                 })}
               />
               {openTrade && <TradeDetailInline tradeId={openTrade} session={session} />}
@@ -1309,7 +1328,7 @@ function SpotPanel({ spot, session, expanded = false }: { spot: LoadState<SpotVi
   );
 }
 
-function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpView>; session: DashboardSession; expanded?: boolean }) {
+function PerpPanel({ perp, session, expanded = false, canAdmin = false, onClose }: { perp: LoadState<PerpView>; session: DashboardSession; expanded?: boolean; canAdmin?: boolean; onClose?: (market: 'spot' | 'perp', positionId: string) => void }) {
   const data = perp.data;
   const [openTrade, setOpenTrade] = useState<string | null>(null);
   return (
@@ -1333,7 +1352,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
             <>
               <p className="hint">Clicca una posizione per il dettaglio.</p>
               <Table
-                columns={['Time', 'Asset', 'Side', 'Leverage', 'Entry', 'Now', 'SL', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status']}
+                columns={['Time', 'Asset', 'Side', 'Leverage', 'Entry', 'Now', 'SL', 'Margine', 'Nozionale', 'Value', 'PnL', '%', 'Status', ...(canAdmin ? [''] : [])]}
                 onRowClick={(i) => {
                   const tid = data.open_positions[i].open_trade_id;
                   if (tid) setOpenTrade((cur) => (cur === tid ? null : tid));
@@ -1344,7 +1363,7 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
                   const value = margin + Number(item.pnl_unrealized);
                   const pnl = Number(item.pnl_unrealized);
                   const pct = item.pnl_pct ?? '0.00';
-                  return [
+                  const row: React.ReactNode[] = [
                     shortDate(item.opened_at),
                     item.asset,
                     <span className={item.side === 'long' ? 'ok-text' : 'error-text'}>{item.side}</span>,
@@ -1359,6 +1378,12 @@ function PerpPanel({ perp, session, expanded = false }: { perp: LoadState<PerpVi
                     <span className={pnl >= 0 ? 'ok-text' : 'error-text'}>{pct}%</span>,
                     item.status,
                   ];
+                  if (canAdmin) {
+                    row.push(
+                      <button className="close-pos-btn" onClick={(e) => { e.stopPropagation(); onClose?.('perp', item.position_id); }}>Chiudi</button>,
+                    );
+                  }
+                  return row;
                 })}
               />
               {openTrade && <TradeDetailInline tradeId={openTrade} session={session} />}

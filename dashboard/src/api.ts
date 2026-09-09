@@ -423,6 +423,17 @@ export function reserveRebalance(session: DashboardSession, dryRun: boolean) {
   );
 }
 
+// ── Close position ──────────────────────────────────────────────────────────
+
+export function closePosition(session: DashboardSession, market: 'spot' | 'perp', positionId: string) {
+  return requestJson<{ status: string; trade_id?: string; detail?: string }>(
+    session,
+    '/api/v1/agent/risk/close-position',
+    'admin',
+    { method: 'POST', body: JSON.stringify({ market, position_id: positionId }) },
+  );
+}
+
 // ── Notification feed ───────────────────────────────────────────────────────
 
 export function fetchFeed(
