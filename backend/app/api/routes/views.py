@@ -721,7 +721,12 @@ def _range_since(value: str) -> datetime | None:
 #: candle pull for a few minutes, bounded by a hard timeout, stale-on-error.
 _BTC_KLINES_CACHE: dict[int, tuple[float, list]] = {}
 _BTC_KLINES_TTL_S = 300.0
-_BTC_KLINES_TIMEOUT_S = 6.0
+# Un fetch di 1000 candele 1h a Binance impiega ~3s da scarico; sotto carico
+# (piu' client che pollano, il fast-loop che scansiona ~150 simboli) 6s non
+# bastava quasi mai per il bucket "Tutto" (1000 candele): il fetch scadeva
+# sempre in timeout, la cache non si popolava mai, e la curva restava senza
+# BTC ad ogni richiesta invece che solo alla primissima.
+_BTC_KLINES_TIMEOUT_S = 12.0
 
 
 async def _btc_1h_klines(limit: int) -> list:
