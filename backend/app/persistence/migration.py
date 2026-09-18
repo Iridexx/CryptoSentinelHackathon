@@ -48,6 +48,7 @@ async def upgrade_schema(session: AsyncSession) -> None:
         ("stop_reference_field", "VARCHAR(8)"),
         ("max_price",           "NUMERIC(30, 18)"),
         ("initial_stop_loss",   "NUMERIC(30, 18)"),
+        ("funding_accrued_at",  "DATETIME"),
     ]
     for col, defn in perp_pos_cols:
         if not await _has_column("perp_positions", col):
@@ -55,6 +56,15 @@ async def upgrade_schema(session: AsyncSession) -> None:
                 text(f"ALTER TABLE perp_positions ADD COLUMN {col} {defn}")
             )
             logger.info("schema_column_added", table="perp_positions", column=col)
+    # Baseline per l'accumulo incrementale del funding: riparte da "adesso" (usa
+    # updated_at, l'ultimo tick noto) invece che dall'apertura originale, per non
+    # rifare un backfill retroattivo sull'importo gia' (erroneamente) accumulato.
+    await session.execute(text("""
+        UPDATE perp_positions
+        SET funding_accrued_at = updated_at
+        WHERE status = 'open'
+          AND funding_accrued_at IS NULL
+    """))
     # Ricostruisce initial_stop_loss per posizioni aperte precedenti all'introduzione del campo.
     await session.execute(text("""
         UPDATE perp_positions

@@ -1065,11 +1065,23 @@ class AgentService:
                 continue
             raw_pnl = (price - pos.entry_price) * pos.size if pos.side == "long" else (pos.entry_price - price) * pos.size
             pos.current_price = price
-            # Aggiorna funding accrued se la posizione ha fee_mode != "none"
+            # Aggiorna funding accrued se la posizione ha fee_mode != "none".
+            # Accumulo INCREMENTALE: solo le ore trascorse dall'ultimo tick, sulla
+            # size corrente in quella finestra. Ricalcolare da zero su
+            # size-attuale x ore-dall'apertura sovrastimerebbe il costo ogni volta
+            # che una Smart SL rebuy riporta la size al 100% dopo un periodo in cui
+            # era ridotta (la finestra ridotta verrebbe ri-pesata come se fosse
+            # sempre stata piena).
             if pos.funding_rate is not None and pos.fee_mode and pos.fee_mode != "none":
-                hours = (now - pos.opened_at.replace(tzinfo=pos.opened_at.tzinfo or UTC)).total_seconds() / 3600
-                notional = pos.entry_price * pos.size
-                pos.funding_accrued_usd = accrue_funding(pos.funding_rate, notional, hours, pos.side)
+                last_accrual = pos.funding_accrued_at or pos.opened_at
+                last_accrual = last_accrual.replace(tzinfo=last_accrual.tzinfo or UTC)
+                hours = (now - last_accrual).total_seconds() / 3600
+                if hours > 0:
+                    notional = pos.entry_price * pos.size
+                    pos.funding_accrued_usd = (pos.funding_accrued_usd or Decimal("0")) + accrue_funding(
+                        pos.funding_rate, notional, hours, pos.side
+                    )
+                    pos.funding_accrued_at = now
             # Detrae la fee di apertura (taker o maker) dal P&L netto.
             # Lo slippage è già nell'entry_price, quindi si sottrae solo la parte
             # "pura" della fee: opening_fee_usd − slippage_usd già incluso nel prezzo.
@@ -1678,8 +1690,11 @@ class AgentService:
                         pos.opening_fee_usd = Decimal(lv["pre_sell_opening_fee"])
                     if lv.get("pre_sell_slippage"):
                         pos.slippage_usd = Decimal(lv["pre_sell_slippage"])
-                    if lv.get("pre_sell_funding"):
-                        pos.funding_accrued_usd = Decimal(lv["pre_sell_funding"])
+                    # funding_accrued_usd NON va ripristinato: e' accumulato in modo
+                    # incrementale ad ogni tick (vedi update_positions) e riflette
+                    # gia' correttamente il costo reale sulla size ridotta tenuta
+                    # nel frattempo. Sovrascriverlo con pre_sell_funding lo
+                    # azzererebbe perdendo il costo maturato durante l'attesa.
 
                     lv["status"] = "rebought"
                     lv["reentries"] += 1
@@ -1750,7 +1765,6 @@ class AgentService:
 
                             max_fee = Decimal("0")
                             max_slip = Decimal("0")
-                            max_fund = Decimal("0")
                             for idx in sold_levels:
                                 lv = state["levels"][idx]
                                 if lv.get("pre_sell_opening_fee"):
@@ -1761,16 +1775,12 @@ class AgentService:
                                     v = Decimal(lv["pre_sell_slippage"])
                                     if v > max_slip:
                                         max_slip = v
-                                if lv.get("pre_sell_funding"):
-                                    v = Decimal(lv["pre_sell_funding"])
-                                    if v > max_fund:
-                                        max_fund = v
                             if max_fee:
                                 pos.opening_fee_usd = max_fee
                             if max_slip:
                                 pos.slippage_usd = max_slip
-                            if max_fund:
-                                pos.funding_accrued_usd = max_fund
+                            # funding_accrued_usd NON va ripristinato: vedi commento
+                            # nel ramo di rebuy "delta" qui sopra.
 
                             for idx in sold_levels:
                                 lv = state["levels"][idx]

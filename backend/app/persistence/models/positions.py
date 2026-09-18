@@ -83,6 +83,7 @@ class PerpPosition(Base):
     maker_fee_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)     # sempre calcolato (confronto)
     slippage_usd: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)      # solo taker
     funding_accrued_usd: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False, default=Decimal("0"))
+    funding_accrued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # ultimo tick di accumulo incrementale
     smart_sl_state: Mapped[str | None] = mapped_column(Text, nullable=True)
     tp1_reached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")  # open / closed
