@@ -420,6 +420,8 @@ const EquityChart: FC<{
 }> = ({ equity, range, onRange, view = 'trading', onView }) => {
   const items = equity?.items ?? [];
   const n = items.length;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const hasPortfolio = items.some((i) => i.portfolio_pnl_pct != null);
   const showPortfolio = view === 'portfolio' && hasPortfolio;
@@ -471,6 +473,34 @@ const EquityChart: FC<{
       ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
       : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
   };
+  const fmtTooltipDate = (iso: string) => {
+    const d = new Date(iso);
+    return range === '24h'
+      ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const updateHoverFromClientX = (clientX: number) => {
+    const svg = svgRef.current;
+    if (!svg || n === 0) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const svgX = ((clientX - rect.left) / rect.width) * W;
+    const rawIdx = n <= 1 ? 0 : ((svgX - padL) / plotW) * (n - 1);
+    setHoverIdx(Math.max(0, Math.min(n - 1, Math.round(rawIdx))));
+  };
+  const handlePointerMove = (e: { clientX: number }) => {
+    updateHoverFromClientX(e.clientX);
+  };
+  const clearHover = () => setHoverIdx(null);
+
+  const hovIdx = hoverIdx != null ? Math.min(hoverIdx, n - 1) : null;
+  const hovItem = hovIdx != null ? items[hovIdx] : null;
+  const hovX = hovIdx != null ? xAt(hovIdx) : null;
+  const hovPnl = hovIdx != null ? pnl[hovIdx] : null;
+  const hovBtc = hovIdx != null && hasBtc ? btc[hovIdx] : null;
+  const tooltipW = 90;
+  const tooltipFlip = hovX != null && hovX > W - tooltipW - padR;
 
   return (
     <div className="space-y-3">
@@ -525,7 +555,19 @@ const EquityChart: FC<{
         <div className="py-6 text-center text-xs text-gray-500">Nessun dato nel periodo selezionato</div>
       ) : (
         <>
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img" aria-label="Curva PnL nel periodo">
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ height: 'auto', touchAction: 'none' }}
+            role="img"
+            aria-label="Curva PnL nel periodo"
+            onPointerDown={handlePointerMove}
+            onPointerMove={handlePointerMove}
+            onPointerUp={clearHover}
+            onPointerLeave={clearHover}
+            onPointerCancel={clearHover}
+          >
             <defs>
               <linearGradient id="pnlFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.28" />
@@ -558,6 +600,31 @@ const EquityChart: FC<{
             {/* dot finali */}
             {hasBtc && lastBtc != null && <circle cx={xAt(n - 1)} cy={yAt(lastBtc)} r="3" fill={BTC_COLOR} />}
             {n > 0 && <circle cx={xAt(n - 1)} cy={yAt(lastPnl)} r="3.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1" />}
+
+            {/* crosshair + tooltip (scrub col dito) */}
+            {hovIdx != null && hovX != null && hovItem != null && (
+              <g pointerEvents="none">
+                <line x1={hovX} x2={hovX} y1={padT} y2={H - padB} stroke="#ffffff" strokeOpacity="0.3" strokeWidth="1" strokeDasharray="3 3" />
+                {hovBtc != null && <circle cx={hovX} cy={yAt(hovBtc)} r="4" fill={BTC_COLOR} stroke="#0b0e14" strokeWidth="1.5" />}
+                {hovPnl != null && <circle cx={hovX} cy={yAt(hovPnl)} r="4.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1.5" />}
+                <g
+                  transform={`translate(${tooltipFlip ? hovX - tooltipW - 10 : hovX + 10},${padT})`}
+                >
+                  <rect x="0" y="0" width={tooltipW} height={hovBtc != null ? 44 : 30} rx="4" fill="#1a1f2e" stroke="#2d3348" strokeWidth="1" />
+                  <text x="6" y="13" fontSize="9" fill="#9ca3af">{fmtTooltipDate(hovItem.timestamp_utc)}</text>
+                  {hovPnl != null && (
+                    <text x="6" y="25" fontSize="10" fontWeight="bold" fill={PNL_COLOR}>
+                      {fmtSignedPct(hovPnl)}
+                    </text>
+                  )}
+                  {hovBtc != null && (
+                    <text x="6" y="37" fontSize="10" fontWeight="bold" fill={BTC_COLOR}>
+                      {fmtSignedPct(hovBtc)}
+                    </text>
+                  )}
+                </g>
+              </g>
+            )}
           </svg>
 
           <div className="flex justify-between px-1 text-[10px] text-gray-500">

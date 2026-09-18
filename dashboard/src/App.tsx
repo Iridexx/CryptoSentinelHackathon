@@ -733,7 +733,9 @@ export default function App() {
         )}
         {tab === 'spot' && <SpotPanel spot={spot} session={session} expanded canAdmin={canAdmin} onClose={handleClosePosition} />}
         {tab === 'perp' && <PerpPanel perp={perp} session={session} expanded canAdmin={canAdmin} onClose={handleClosePosition} />}
-        {tab === 'global' && <GlobalPanel global={global} equity={equity} expanded />}
+        {tab === 'global' && (
+          <GlobalPanel global={global} equity={equity} expanded equityRange={equityRange} onEquityRange={setEquityRange} />
+        )}
         {tab === 'bank' && <BankPanel session={session} canAdmin={canAdmin} />}
         {tab === 'analytics' && (
           <AnalyticsPanel
@@ -910,7 +912,13 @@ function RiskGuardrailBanner({ guardrail }: { guardrail: GlobalView['risk_guardr
   );
 }
 
-function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<GlobalView>; equity: LoadState<EquityCurveResponse>; expanded?: boolean }) {
+function GlobalPanel({ global, equity, expanded = false, equityRange, onEquityRange }: {
+  global: LoadState<GlobalView>;
+  equity: LoadState<EquityCurveResponse>;
+  expanded?: boolean;
+  equityRange?: EquityRange;
+  onEquityRange?: (r: EquityRange) => void;
+}) {
   const data = global.data;
   return (
     <Panel title="Global Agent" className={expanded ? 'wide' : ''}>
@@ -958,7 +966,7 @@ function GlobalPanel({ global, equity, expanded = false }: { global: LoadState<G
           {(equity.data?.items.length ?? 0) < 2 ? (
             <Empty title="No PnL history" detail="Global tracking is ready and waiting for confirmed activity." />
           ) : (
-            <EquityChart equity={equity.data} />
+            <EquityChart equity={equity.data} range={equityRange} onRange={onEquityRange} />
           )}
         </>
       )}
@@ -3254,12 +3262,17 @@ function EquityChart({ equity, range, onRange }: {
 }) {
   const items = equity?.items ?? [];
   if (items.length < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
-  const points = items.map((pt) => ({
-    pct: Number(pt.pnl_pct),
-    btc: pt.btc_pct != null ? Number(pt.btc_pct) : null,
-    label: new Date(pt.timestamp_utc).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-    equity: pt.equity_usd,
-  }));
+  const points = items.map((pt) => {
+    const d = new Date(pt.timestamp_utc);
+    return {
+      pct: Number(pt.pnl_pct),
+      btc: pt.btc_pct != null ? Number(pt.btc_pct) : null,
+      label: range === '24h'
+        ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+        : d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      equity: pt.equity_usd,
+    };
+  });
   const lastPnl = points[points.length - 1].pct;
   const hasBtc = (equity?.benchmark_available ?? false) && points.some((p) => p.btc != null);
   const lastBtc = hasBtc ? points[points.length - 1].btc ?? 0 : null;
