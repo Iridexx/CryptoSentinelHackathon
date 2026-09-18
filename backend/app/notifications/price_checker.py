@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+import anyio
+
 from backend.app.core.logging import get_logger
 from backend.app.data.market_data.base import ProviderError
 from backend.app.data.market_data.registry import (
@@ -100,7 +102,11 @@ async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
     union_coins: list[str] = []
     union_vs: set[str] = {"usd"}
     for device_id, tokens in device_tokens.items():
-        store = get_alert_store(device_id)
+        # get_alert_store() puo' leggere sincronamente dal DB alla prima
+        # istanza per device (poi e' cache in-process). Va in un thread:
+        # questo loop gira nell'event loop asyncio, e una lettura sqlite
+        # bloccante qui congelerebbe l'intero server per la sua durata.
+        store = await anyio.to_thread.run_sync(get_alert_store, device_id)
         config = store.get_config()
         if config is None:
             continue
@@ -134,7 +140,13 @@ async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
     )
 
     for store, config, tokens in units:
-        _evaluate_and_send(svc, store, config, tokens, prices)
+        # _evaluate_and_send() e' sincrona: invia FCM e, se qualcosa scatta,
+        # persiste lo stato su SQLite con store.update_state() — che in caso
+        # di contesa con il motore async ritenta con time.sleep() bloccante
+        # (alert_store._persist_locked). Chiamata qui direttamente
+        # bloccherebbe l'intero event loop, e con lui ogni richiesta HTTP in
+        # corso, per tutta la durata dell'invio/del retry. Va sempre in un thread.
+        await anyio.to_thread.run_sync(_evaluate_and_send, svc, store, config, tokens, prices)
 
 
 def _evaluate_and_send(

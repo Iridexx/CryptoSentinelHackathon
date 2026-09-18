@@ -1525,20 +1525,27 @@ class AgentService:
         if not sl_in_loss:
             return
 
-        # Carica o inizializza lo stato
-        if pos.smart_sl_state:
-            state = json.loads(pos.smart_sl_state)
-        else:
-            state = {
+        # Carica o inizializza lo stato. `smart_sl_state` e' condiviso col
+        # tracking del regime-flip (vedi _regime_flip_direction), che ci scrive
+        # chiavi extra come "regime_flip_direction" senza "levels". Se manca
+        # "levels" lo stato SL a scalini va inizializzato da capo, ma le altre
+        # chiavi vanno preservate (mergiate, non sostituite) — sovrascriverle
+        # farebbe perdere a _regime_flip_direction/_regime_derisk_done
+        # l'informazione che leggono da questo stesso campo.
+        state = json.loads(pos.smart_sl_state) if pos.smart_sl_state else {}
+        if "levels" not in state:
+            state.update({
                 "original_size": str(pos.size),
                 "original_entry": str(pos.entry_price),
                 "levels": [
                     {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None, "rebuy_confirm_since": None},
                     {"status": "idle", "sell_price": None, "reentries": 0, "confirm_since": None, "rebuy_confirm_since": None},
                 ],
-            }
+            })
         if "original_entry" not in state:
             state["original_entry"] = str(pos.entry_price)
+        if "original_size" not in state:
+            state["original_size"] = str(pos.size)
         orig_entry = Decimal(state["original_entry"])
         orig_size = Decimal(state["original_size"])
 
