@@ -709,6 +709,15 @@ async def test_agent_service_dry_run_persists_perp_decision_and_trade(db) -> Non
         spot_registry=SimpleNamespace(),
         perp_registry=SimpleNamespace(),
     )
+    # Il filtro shock BTC chiama Binance dal vivo: se il mercato reale e' in un
+    # momento di trend forte (capita spesso) il test fallisce per un motivo
+    # che non ha nulla a che fare con cio' che verifica (persistenza della
+    # decisione/trade). Stub deterministico: sempre NORMAL, cosi' il test
+    # dipende solo dal FakeSignal sopra, non dalle condizioni di mercato.
+    async def _no_shock() -> dict:
+        return {"state": "NORMAL", "enabled": True}
+
+    service._btc_trend_shock_filter = _no_shock
     async with get_session_factory()() as session:
         result = await service.evaluate_perp({}, session)
         decisions = await AgentDecisionRepository(session).recent_for_user(str(USER_ID))
