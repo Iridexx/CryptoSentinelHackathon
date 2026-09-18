@@ -10,6 +10,7 @@ import structlog
 from sqlalchemy import event
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from backend.app.persistence.models import Base
 
@@ -30,7 +31,20 @@ async def init_db(database_url: str, *, echo: bool = False) -> None:
         return
 
     connect_args = {"timeout": 30} if database_url.startswith("sqlite") else {}
-    _engine = create_async_engine(database_url, echo=echo, future=True, connect_args=connect_args)
+    # SQLAlchemy usa NullPool di default per sqlite+aiosqlite: ogni richiesta apre
+    # una connessione fisica nuova. Sotto un burst di richieste concorrenti queste
+    # finiscono a contendersi il lock del file SQLite direttamente (fino al
+    # busy_timeout di 30s ciascuna, in serie se una tiene la sessione aperta
+    # durante una chiamata esterna lenta), invece di mettersi in coda in modo
+    # economico dentro il processo. Un pool vero e limitato fa la coda qui.
+    pool_kwargs = (
+        {"poolclass": AsyncAdaptedQueuePool, "pool_size": 5, "max_overflow": 5, "pool_timeout": 30}
+        if database_url.startswith("sqlite")
+        else {}
+    )
+    _engine = create_async_engine(
+        database_url, echo=echo, future=True, connect_args=connect_args, **pool_kwargs
+    )
     if database_url.startswith("sqlite"):
         @event.listens_for(_engine.sync_engine, "connect")
         def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
