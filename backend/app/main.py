@@ -36,15 +36,15 @@ configure_logging(settings)
 logger = get_logger("api")
 
 
-def _dashboard_cors_origin_regex(port: int) -> str:
-    """Allow local and Tailscale dashboard dev origins without wildcard CORS."""
-    escaped_port = re.escape(str(port))
+def _dashboard_cors_origin_regex(*ports: int) -> str:
+    """Allow local and Tailscale dev origins (dashboard + app) without wildcard CORS."""
+    escaped_ports = "|".join(re.escape(str(p)) for p in ports)
     return (
         r"^https?://("
         r"localhost|"
         r"127\.0\.0\.1|"
         r"100(?:\.\d{1,3}){3}"
-        rf"):{escaped_port}$"
+        rf"):({escaped_ports})$"
     )
 
 
@@ -185,7 +185,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_origin_regex=_dashboard_cors_origin_regex(settings.dashboard_port),
+        allow_origin_regex=_dashboard_cors_origin_regex(settings.dashboard_port, settings.app_port),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-API-Token", "X-Request-ID"],

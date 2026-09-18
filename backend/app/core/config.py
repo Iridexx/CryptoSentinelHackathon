@@ -475,6 +475,7 @@ class Settings(BaseSettings):
     api_base_url: str = Field(default="http://127.0.0.1:8000", alias="API_BASE_URL")
     cors_origins: list[str] = Field(default_factory=list, alias="CORS_ORIGINS")
     dashboard_port: int = Field(default=5176, alias="DASHBOARD_PORT")
+    app_port: int = Field(default=5173, alias="APP_PORT")
     default_user_id: UUID = Field(
         default=UUID("00000000-0000-0000-0000-000000000001"),
         alias="DEFAULT_USER_ID",
