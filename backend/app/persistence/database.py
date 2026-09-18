@@ -36,9 +36,15 @@ async def init_db(database_url: str, *, echo: bool = False) -> None:
     # finiscono a contendersi il lock del file SQLite direttamente (fino al
     # busy_timeout di 30s ciascuna, in serie se una tiene la sessione aperta
     # durante una chiamata esterna lenta), invece di mettersi in coda in modo
-    # economico dentro il processo. Un pool vero e limitato fa la coda qui.
+    # economico dentro il processo. Un pool vero fa la coda qui — ma troppo
+    # stretto (provato con 5+5) esaurisce comunque sotto carico reale (2 client
+    # che pollano piu' endpoint ciascuno + i loop dell'agente), facendo fallire
+    # del tutto le richieste in eccesso dopo 30s invece di solo rallentarle
+    # (QueuePool limit ... connection timed out). WAL regge bene molti lettori
+    # concorrenti — il tetto serve solo a non aprire connessioni illimitate,
+    # non a strozzare il traffico normale.
     pool_kwargs = (
-        {"poolclass": AsyncAdaptedQueuePool, "pool_size": 5, "max_overflow": 5, "pool_timeout": 30}
+        {"poolclass": AsyncAdaptedQueuePool, "pool_size": 20, "max_overflow": 20, "pool_timeout": 30}
         if database_url.startswith("sqlite")
         else {}
     )
