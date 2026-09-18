@@ -251,25 +251,26 @@ class ExecutionService:
         return f"{balance:.8f}".rstrip("0").rstrip("."), "ok"
 
     async def _available_wallet_views(self) -> list[ExecutionWalletAddressView]:
-        views: list[ExecutionWalletAddressView] = []
-        for address in configured_wallet_addresses(self.base_settings):
-            balance_bnb, balance_status = await self._wallet_bnb_balance(address)
-            views.append(
-                ExecutionWalletAddressView(
-                    address=address,
-                    active=address == self.settings.wallet_address,
-                    network=f"BSC {self.settings.bsc_network}",
-                    balance_bnb=balance_bnb,
-                    balance_status=balance_status,
-                )
+        addresses = configured_wallet_addresses(self.base_settings)
+        # In parallelo, non in serie: con N indirizzi il tempo totale era N x 4s
+        # (il tetto di _wallet_bnb_balance) invece del tempo del piu' lento.
+        balances = await asyncio.gather(*(self._wallet_bnb_balance(a) for a in addresses))
+        return [
+            ExecutionWalletAddressView(
+                address=address,
+                active=address == self.settings.wallet_address,
+                network=f"BSC {self.settings.bsc_network}",
+                balance_bnb=balance_bnb,
+                balance_status=balance_status,
             )
-        return views
+            for address, (balance_bnb, balance_status) in zip(addresses, balances)
+        ]
 
     async def _rpc_endpoint_views(self) -> list[RpcEndpointView]:
         active_index = get_active_rpc_index(self.settings)
         displayed_active = active_index if active_index is not None else (0 if self.settings.bsc_rpc_urls else None)
-        views: list[RpcEndpointView] = []
-        for index, url in enumerate(self.settings.bsc_rpc_urls):
+
+        async def _check_one(index: int, url: str) -> RpcEndpointView:
             started = time.perf_counter()
             reachable = False
             latency_ms: int | None = None
@@ -281,25 +282,34 @@ class ExecutionService:
                 self.settings.tatum_rpc_api_key,
             )
             try:
-                raw_chain_id = await client.call("eth_chainId")
+                # Un solo endpoint lento/irraggiungibile non deve far pagare a
+                # tutta la wallets() view l'intero bsc_rpc_timeout_seconds (8s):
+                # con piu' endpoint pubblici, in serie senza un tetto stretto,
+                # il caso peggiore osservato era 3x8s = 24s solo qui.
+                raw_chain_id = await asyncio.wait_for(client.call("eth_chainId"), timeout=4.0)
                 latency_ms = round((time.perf_counter() - started) * 1000)
                 chain_id = int(str(raw_chain_id), 16)
                 reachable = True
                 status = "reachable" if chain_id == self.settings.bsc_chain_id else "chain_mismatch"
             except Exception:
                 latency_ms = round((time.perf_counter() - started) * 1000)
-            views.append(
-                RpcEndpointView(
-                    index=index,
-                    label=rpc_endpoint_label(url),
-                    active=index == displayed_active,
-                    reachable=reachable,
-                    latency_ms=latency_ms,
-                    chain_id=chain_id,
-                    status=status,
-                )
+            return RpcEndpointView(
+                index=index,
+                label=rpc_endpoint_label(url),
+                active=index == displayed_active,
+                reachable=reachable,
+                latency_ms=latency_ms,
+                chain_id=chain_id,
+                status=status,
             )
-        return views
+
+        # In parallelo, non in serie: gli endpoint sono indipendenti, quindi il
+        # tempo totale e' quello del piu' lento (max 4s) invece della somma.
+        return list(
+            await asyncio.gather(
+                *(_check_one(index, url) for index, url in enumerate(self.settings.bsc_rpc_urls))
+            )
+        )
 
     async def competition_registration_status(self) -> dict[str, Any]:
         if not self.settings.wallet_address:
