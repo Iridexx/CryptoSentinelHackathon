@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.agent.brain import ClaudeMetaController, MetaControllerError
+from backend.app.agent.brain import BrainDecision, ClaudeMetaController, MetaControllerError
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
@@ -2774,6 +2774,15 @@ class AgentService:
         }
 
     async def _brain_decision(self, session: AsyncSession, signal: dict, risk_decision) -> object:
+        if not risk_decision.allowed:
+            # L'esecuzione richiede risk manager E brain: se il rischio ha gia' detto no la
+            # risposta di Claude non puo' cambiare l'esito. Niente chiamata (costo, latenza
+            # nella scansione sequenziale, e un errore API non mette l'agente in DEGRADED).
+            return BrainDecision(
+                action="block",
+                confidence=Decimal("0"),
+                reasoning=f"risk_blocked_no_claude; risk blocked: {risk_decision.reason}",
+            )
         try:
             decision, usage = await self.brain.decide(signal=signal, risk=risk_decision.__dict__)
         except MetaControllerError:
