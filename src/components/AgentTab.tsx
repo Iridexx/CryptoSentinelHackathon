@@ -175,6 +175,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_delta_l2: 0.16,
   perp_smart_sl_confirmation_candles: 2,
   perp_smart_sl_max_reentries: 1,
+  perp_instant_exit_enabled: false,
+  perp_instant_exit_level_pct: 25,
   perp_smart_sl_tp_adjust_after_rebuy: true,
   perp_smart_sl_tp_recovery_delta_pct: 7,
   spot_breakeven_mode: 'atr' as const,
@@ -814,13 +816,15 @@ const ToggleInput: FC<{
   checked: boolean;
   help?: string;
   showHelp?: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
-}> = ({ label, checked, help, showHelp, onChange }) => (
-  <label className="flex items-center justify-between gap-3 rounded-lg border border-dark-700 bg-dark-800 px-3 py-2">
+}> = ({ label, checked, help, showHelp, disabled = false, onChange }) => (
+  <label className={`flex items-center justify-between gap-3 rounded-lg border border-dark-700 bg-dark-800 px-3 py-2 ${disabled ? 'opacity-50' : ''}`}>
     <span className="min-w-0 text-sm font-semibold text-white">{label}{showHelp && help && <HelpTip text={help} />}</span>
     <input
       type="checkbox"
       checked={checked}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.checked)}
       className="h-5 w-5 accent-accent-blue"
     />
@@ -846,6 +850,7 @@ const CLOSE_REASON_LABELS: Record<string, { label: string; className: string }> 
   time_stop: { label: 'Time Stop', className: 'text-gray-300' },
   time_stop_atr: { label: 'Time Stop (ATR)', className: 'text-gray-300' },
   smart_sl_sell_l1: { label: 'Smart SL Sell L1', className: 'text-amber-400' },
+  instant_exit: { label: 'Uscita istantanea', className: 'text-amber-400' },
   smart_sl_sell_l2: { label: 'Smart SL Sell L2', className: 'text-amber-400' },
   smart_sl_rebuy_l1: { label: 'Smart SL Rebuy L1', className: 'text-sky-400' },
   smart_sl_rebuy_l2: { label: 'Smart SL Rebuy L2', className: 'text-sky-400' },
@@ -2335,14 +2340,30 @@ const SetupPane: FC<{
             )}
           </Collapsible>
 
+          <Collapsible title="Uscita totale istantanea" count={2}>
+            <ToggleInput
+              label="Uscita totale istantanea"
+              showHelp={h} help={'Quando il prezzo raggiunge una certa quota della strada fra ingresso e stop, chiude tutta la posizione subito (al primo controllo, ogni pochi secondi), senza aspettare la conferma di 5 minuti dello Smart Stop Loss. Se è attiva, lo Smart Stop Loss Perp viene sospeso automaticamente; quando la spegni, torna com\'era.'}
+              checked={settings.perp_instant_exit_enabled}
+              onChange={(perp_instant_exit_enabled) => patch({ perp_instant_exit_enabled })}
+            />
+            {settings.perp_instant_exit_enabled && (
+              <>
+                <NumberInput label="Livello di uscita %" showHelp={h} help={'A che punto della strada fra ingresso e stop originale chiudere tutto. 25 vuol dire un quarto del percorso verso lo stop. Più è basso, più esce presto e più spesso (e più pesano le commissioni).'} value={settings.perp_instant_exit_level_pct} step={1} onChange={(perp_instant_exit_level_pct) => patch({ perp_instant_exit_level_pct: Math.min(90, Math.max(5, perp_instant_exit_level_pct)) })} />
+                <p className="px-1 text-xs text-amber-400">Lo Smart Stop Loss Perp è sospeso finché questa uscita è attiva.</p>
+              </>
+            )}
+          </Collapsible>
+
           <Collapsible title="Parametri Smart Stop Loss" count={20}>
             <ToggleInput
               label="Smart Stop Loss Perp"
-              showHelp={h} help={'Invece di subire lo stop in un colpo solo, vende a pezzi mentre il prezzo scende verso lo stop, per ridurre la perdita. Può poi ricomprare se il prezzo rimbalza.'}
-              checked={settings.perp_smart_sl_enabled}
+              showHelp={h} help={'Invece di subire lo stop in un colpo solo, vende a pezzi mentre il prezzo scende verso lo stop, per ridurre la perdita. Può poi ricomprare se il prezzo rimbalza. Resta sospeso finché l\'uscita totale istantanea è attiva.'}
+              checked={settings.perp_smart_sl_enabled && !settings.perp_instant_exit_enabled}
+              disabled={settings.perp_instant_exit_enabled}
               onChange={(perp_smart_sl_enabled) => patch({ perp_smart_sl_enabled })}
             />
-            {settings.perp_smart_sl_enabled && (
+            {settings.perp_smart_sl_enabled && !settings.perp_instant_exit_enabled && (
               <div className="grid grid-cols-2 gap-3">
                 <NumberInput label="L1 frac" showHelp={h} help={'Dove sta il primo livello di vendita, come frazione della strada fra ingresso e stop. A 0.35 scatta al 35% del percorso verso lo stop.'} value={settings.perp_smart_sl_l1_frac} step={0.01} onChange={(perp_smart_sl_l1_frac) => patch({ perp_smart_sl_l1_frac })} />
                 <NumberInput label="L2 frac" showHelp={h} help="Dove sta il secondo livello di vendita, sempre come frazione della strada verso lo stop." value={settings.perp_smart_sl_l2_frac} step={0.01} onChange={(perp_smart_sl_l2_frac) => patch({ perp_smart_sl_l2_frac })} />
@@ -3372,7 +3393,8 @@ const AgentTab: FC<AgentTabProps> = ({
         fetchPerpView().then(setPerp),
         fetchGlobalView().then(setGlobal),
         fetchAgentSettings().then((r) => {
-          if (!settingsDirtyRef.current) setSettings(r.settings);
+          // Campi nuovi assenti da un backend non ancora aggiornato: valgono i default dell'app.
+          if (!settingsDirtyRef.current) setSettings({ ...defaultSettings, ...r.settings });
         }),
         fetchEquityCurve(equityRangeRef.current).then(setEquity),
         fetchAgentDecisions().then(setDecisions),
@@ -3496,7 +3518,7 @@ const AgentTab: FC<AgentTabProps> = ({
       const response = await saveAgentSettings(settings, adminToken);
       settingsDirtyRef.current = false;
       setSettingsDirty(false);
-      setSettings(response.settings);
+      setSettings({ ...defaultSettings, ...response.settings });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Save failed');
     } finally {

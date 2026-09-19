@@ -197,6 +197,8 @@ class AgentService:
             perp_smart_sl_delta_l2=getattr(self.settings, "perp_smart_sl_delta_l2", 0.16),
             perp_smart_sl_confirmation_candles=getattr(self.settings, "perp_smart_sl_confirmation_candles", 2),
             perp_smart_sl_max_reentries=getattr(self.settings, "perp_smart_sl_max_reentries", 1),
+            perp_instant_exit_enabled=getattr(self.settings, "perp_instant_exit_enabled", False),
+            perp_instant_exit_level_pct=getattr(self.settings, "perp_instant_exit_level_pct", 25.0),
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -2040,6 +2042,8 @@ class AgentService:
         _shock = self._trend_shock_snapshot()
         shock_state, shock_direction = _shock["state"], _shock["direction"]
         regime_blocked = derisk_on and shock_state == "BLOCKED"
+        instant_exit_on = bool(getattr(ms, "perp_instant_exit_enabled", False))
+        instant_exit_pct = getattr(ms, "perp_instant_exit_level_pct", 25.0)
 
         for pos in perp_positions:
             if pos.status != "open":
@@ -2301,7 +2305,10 @@ class AgentService:
                         )
 
             # ── Smart Stop Loss (vende parzialmente prima del SL classico) ──
-            if ms.perp_smart_sl_enabled and pos.initial_stop_loss is not None:
+            # Sospeso quando l'uscita totale istantanea e' attiva: le due logiche si
+            # contenderebbero la stessa posizione (una vende a pezzi con conferma a
+            # candela, l'altra esce di tutto al primo tocco del livello).
+            if ms.perp_smart_sl_enabled and not instant_exit_on and pos.initial_stop_loss is not None:
                 await self._process_smart_sl(
                     session, pos, price, ms, now,
                     freeze_rebuy=regime_contrarian and ms.perp_regime_derisk_freeze_rebuy,
@@ -2322,6 +2329,22 @@ class AgentService:
                         reason = "regime_derisk_stop"
                     else:
                         reason = "trailing_stop"
+
+            # Uscita totale istantanea: al primo controllo dopo il tocco del livello (ciclo veloce,
+            # ogni pochi secondi), a prezzo di mercato. Viene prima dello stop classico: il suo
+            # livello sta piu' vicino all'ingresso. Le posizioni flip di regime restano fuori: sono
+            # coperture a stop stretto, gestite dalla loro uscita dedicata.
+            if reason is None and instant_exit_on and _regime_flip_direction(pos) is None:
+                instant_level = _instant_exit_level(pos, instant_exit_pct)
+                if instant_level is not None and (
+                    (is_long and price <= instant_level) or (not is_long and price >= instant_level)
+                ):
+                    reason = "instant_exit"
+                    logger.info(
+                        "instant_exit_triggered",
+                        asset=pos.asset, side=pos.side, level=float(instant_level),
+                        price=float(price), level_pct=float(instant_exit_pct),
+                    )
 
             if reason is None and pos.stop_loss is not None:
                 if (is_long and price <= pos.stop_loss) or (not is_long and price >= pos.stop_loss):
@@ -3364,6 +3387,30 @@ def _close_purpose(reason: str) -> str:
         "regime_flip": "close",
         "regime_flip_exit": "close",
     }.get(reason, "close")
+
+
+def _instant_exit_level(pos, level_pct) -> Decimal | None:
+    """Prezzo del livello di uscita totale istantanea, o None se non si applica.
+
+    E' `level_pct` % della strada tra ingresso e stop ORIGINALE (`initial_stop_loss`), dalla
+    parte della perdita: la stessa distanza su cui lo Smart SL mette L1 e L2. Non si applica
+    senza stop iniziale registrato (posizioni vecchie) e quando lo stop e' gia' a breakeven o
+    in profitto: in quel caso la posizione e' protetta e non c'e' una perdita da limitare.
+    """
+    initial_stop = pos.initial_stop_loss
+    if initial_stop is None:
+        return None
+    entry = pos.entry_price
+    is_long = pos.side == "long"
+    if pos.stop_loss is not None and (
+        (is_long and pos.stop_loss >= entry) or (not is_long and pos.stop_loss <= entry)
+    ):
+        return None
+    distance = abs(entry - initial_stop)
+    if distance == 0:
+        return None
+    share = Decimal(str(level_pct)) / Decimal("100")
+    return entry - share * distance if is_long else entry + share * distance
 
 
 def _level_fill_price(pos, reason: str, market_price: Decimal) -> Decimal:

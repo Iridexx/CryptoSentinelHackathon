@@ -188,6 +188,8 @@ const settingFields = [
   'perp_direction_risk_cap_pct',
   'perp_direction_risk_cap_safety_mult',
   'perp_direction_risk_cap_recent_stops_minutes',
+  'perp_instant_exit_enabled',
+  'perp_instant_exit_level_pct',
 ];
 
 const AUTO_REFRESH_MS = 45_000;
@@ -2816,6 +2818,8 @@ const SETTING_LABELS: Record<string, string> = {
   perp_direction_risk_cap_pct: 'Tetto direzionale — rischio max % (sempre)',
   perp_direction_risk_cap_safety_mult: 'Tetto direzionale — margine di sicurezza ×',
   perp_direction_risk_cap_recent_stops_minutes: 'Tetto direzionale — stop recenti (min, 0 = off)',
+  perp_instant_exit_enabled: 'Uscita totale istantanea perp (sospende lo Smart SL)',
+  perp_instant_exit_level_pct: 'Uscita istantanea — livello % dello stop',
 };
 
 // Impostazioni testuali con valori ammessi: select invece di testo libero (un valore
@@ -3035,6 +3039,7 @@ const CLOSE_REASON_LABELS: Record<string, string> = {
   time_stop_atr: 'Time Stop (ATR)',
   profit_lock: 'Profit Lock',
   smart_sl_sell_l1: 'Smart SL Sell L1',
+  instant_exit: 'Uscita istantanea',
   smart_sl_sell_l2: 'Smart SL Sell L2',
   smart_sl_rebuy_l1: 'Smart SL Rebuy L1',
   smart_sl_rebuy_l2: 'Smart SL Rebuy L2',

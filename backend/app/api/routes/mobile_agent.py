@@ -157,6 +157,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_direction_risk_cap_mode=getattr(settings, "perp_direction_risk_cap_mode", "solo_in_perdita"),
         perp_direction_risk_cap_loss_pct=getattr(settings, "perp_direction_risk_cap_loss_pct", 0.5),
         perp_direction_risk_cap_pct=getattr(settings, "perp_direction_risk_cap_pct", 6.0),
+        perp_instant_exit_enabled=getattr(settings, "perp_instant_exit_enabled", False),
+        perp_instant_exit_level_pct=getattr(settings, "perp_instant_exit_level_pct", 25.0),
         perp_direction_risk_cap_safety_mult=getattr(settings, "perp_direction_risk_cap_safety_mult", 1.3),
         perp_direction_risk_cap_recent_stops_minutes=getattr(
             settings, "perp_direction_risk_cap_recent_stops_minutes", 0

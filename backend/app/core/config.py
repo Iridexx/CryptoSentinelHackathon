@@ -300,6 +300,8 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "smart_sl_delta_l2": "perp_smart_sl_delta_l2",
         "smart_sl_confirmation_candles": "perp_smart_sl_confirmation_candles",
         "smart_sl_max_reentries": "perp_smart_sl_max_reentries",
+        "instant_exit_enabled": "perp_instant_exit_enabled",
+        "instant_exit_level_pct": "perp_instant_exit_level_pct",
         "direction_risk_cap_enabled": "perp_direction_risk_cap_enabled",
         "direction_risk_cap_mode": "perp_direction_risk_cap_mode",
         "direction_risk_cap_loss_pct": "perp_direction_risk_cap_loss_pct",
@@ -836,6 +838,8 @@ class Settings(BaseSettings):
     perp_smart_sl_delta_l2: float = Field(default=0.16, alias="PERP_SMART_SL_DELTA_L2")
     perp_smart_sl_confirmation_candles: int = Field(default=2, alias="PERP_SMART_SL_CONFIRMATION_CANDLES")
     perp_smart_sl_max_reentries: int = Field(default=1, alias="PERP_SMART_SL_MAX_REENTRIES")
+    perp_instant_exit_enabled: bool = Field(default=False, alias="PERP_INSTANT_EXIT_ENABLED")
+    perp_instant_exit_level_pct: float = Field(default=25.0, alias="PERP_INSTANT_EXIT_LEVEL_PCT")
     perp_direction_risk_cap_enabled: bool = Field(default=True, alias="PERP_DIRECTION_RISK_CAP_ENABLED")
     perp_direction_risk_cap_mode: str = Field(default="solo_in_perdita", alias="PERP_DIRECTION_RISK_CAP_MODE")
     perp_direction_risk_cap_loss_pct: float = Field(default=0.5, alias="PERP_DIRECTION_RISK_CAP_LOSS_PCT")

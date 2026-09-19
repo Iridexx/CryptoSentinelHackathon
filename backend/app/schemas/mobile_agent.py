@@ -83,6 +83,12 @@ class AgentMobileSettings(BaseModel):
     perp_smart_sl_delta_l2: float = Field(default=0.16, ge=0.02, le=0.5)
     perp_smart_sl_confirmation_candles: int = Field(default=2, ge=1, le=10)
     perp_smart_sl_max_reentries: int = Field(default=1, ge=0, le=5)
+    # Uscita totale istantanea: quando il prezzo raggiunge `level_pct` % della distanza tra
+    # ingresso e stop originale la posizione si chiude per intero, al primo controllo del
+    # ciclo veloce (senza attendere la conferma a candela dello Smart SL). Se attiva, lo Smart
+    # Stop Loss perp e' sospeso automaticamente (il suo valore salvato non viene toccato).
+    perp_instant_exit_enabled: bool = False
+    perp_instant_exit_level_pct: float = Field(default=25.0, ge=5.0, le=90.0)
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

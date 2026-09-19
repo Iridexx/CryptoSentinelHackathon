@@ -91,6 +91,12 @@ perp:
   smart_sl_tp_recovery_delta_pct: 7    # delta extra % oltre copertura perdite (guadagno minimo)
   smart_sl_confirmation_candles: 2   # candele 5min di conferma (sell e rebuy above_entry)
   smart_sl_max_reentries: 1          # max cicli sell→rebuy
+  # Uscita totale istantanea: chiude tutta la posizione quando il prezzo raggiunge level_pct %
+  # della distanza tra ingresso e stop originale (stesso tragitto su cui lo Smart SL mette L1/L2),
+  # al primo controllo del ciclo veloce, senza la conferma a candela. Se attiva sospende lo Smart
+  # Stop Loss perp. Spenta di default.
+  instant_exit_enabled: false
+  instant_exit_level_pct: 25.0
   # Tetto di rischio direzionale: nessun nuovo ingresso nella stessa direzione quando le
   # posizioni gia' aperte stanno perdendo (le alt si muovono insieme a BTC: 4 long = 1 scommessa
   # con size x4). Agisce solo all'apertura, non chiude nulla.
