@@ -34,7 +34,10 @@ export function useNotifications(
   const [hasMore, setHasMore] = useState(true);
 
   const cursorRef = useRef<string | null>(null);
-  const initialLoadDone = useRef(false);
+  // Stato (non ref): l'effect di stream/polling deve rieseguirsi quando il primo caricamento
+  // finisce. Con un ref usciva subito, perche' letto prima che il caricamento fosse concluso,
+  // e non ripartiva piu': nessuna notifica dal vivo fino al refresh della pagina.
+  const [ready, setReady] = useState(false);
   const dndRef = useRef(dnd);
   const toastPrefsRef = useRef(toastPrefs);
   // I ref si aggiornano dopo il commit, non durante il render.
@@ -70,6 +73,7 @@ export function useNotifications(
 
   const doInitialLoad = useCallback(async () => {
     if (!session) return;
+    setReady(false);
     setLoading(true);
     try {
       const res = await fetchFeed(session, { limit: 50 });
@@ -80,11 +84,12 @@ export function useNotifications(
         cursorRef.current = res.items[0].event_id;
       }
       setError(null);
-      initialLoadDone.current = true;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+      // Anche dopo un errore: il polling recupera i dati e riporta lo stato a posto.
+      setReady(true);
     }
   }, [session]);
 
@@ -96,7 +101,7 @@ export function useNotifications(
 
   // SSE with polling fallback
   useEffect(() => {
-    if (!session || !initialLoadDone.current) return;
+    if (!session || !ready) return;
 
     let aborted = false;
     const ctrl = new AbortController();
@@ -132,7 +137,7 @@ export function useNotifications(
 
     // Polling fallback: runs alongside SSE but only fires when SSE isn't delivering
     const doPoll = async () => {
-      if (aborted || !initialLoadDone.current) return;
+      if (aborted) return;
       try {
         const since = cursorRef.current ?? undefined;
         const res = await fetchFeed(session, { since, limit: 200 });
@@ -158,7 +163,7 @@ export function useNotifications(
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [session, applyFresh]);
+  }, [session, applyFresh, ready]);
 
   useEffect(() => {
     if (newItems.length > 0) {

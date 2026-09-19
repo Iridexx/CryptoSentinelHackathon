@@ -422,6 +422,20 @@ export default function App() {
     }
   }
 
+  // Alla prima apertura della scheda Settings i dati si caricano da soli (il tasto Load
+  // resta per ricaricare). Non riscrive la bozza se e' gia' stata caricata: le modifiche
+  // non salvate non vanno perse tornando sulla scheda.
+  useEffect(() => {
+    if (tab !== 'settings' || !canRead) return;
+    const first = window.setTimeout(() => {
+      if (!settings.data && !settings.loading) void refreshSettings();
+      if (!notifPrefs.data && !notifPrefs.loading) void refreshNotifPrefs();
+    }, 0);
+    return () => window.clearTimeout(first);
+    // Solo all'apertura della scheda o al cambio di backend/token.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, canRead, session.baseUrl, session.readToken]);
+
   async function refreshSettings() {
     if (!canRead) return;
     const response = await load(setSettings, () => fetchSettings(session));
@@ -731,7 +745,7 @@ export default function App() {
 
         {tab === 'overview' && (
           <div className="grid overview-grid">
-            <GlobalPanel global={global} equity={equity} />
+            <GlobalPanel global={global} equity={equity} equityRange={equityRange} onEquityRange={setEquityRange} />
             <SpotPanel spot={spot} session={session} canAdmin={canAdmin} onClose={handleClosePosition} />
             <PerpPanel perp={perp} session={session} canAdmin={canAdmin} onClose={handleClosePosition} />
             <HealthPanel live={live} ready={ready} heartbeat={heartbeat} execution={execution} coverage={coverage} />
@@ -970,11 +984,7 @@ function GlobalPanel({ global, equity, expanded = false, equityRange, onEquityRa
               <Metric label="Vol con riserva" value={`${(data.volatility_budget.total_daily_vol_pct ?? 0).toFixed(1)}%`} tone="warn" />
             </div>
           )}
-          {(equity.data?.items.length ?? 0) < 2 ? (
-            <Empty title="No PnL history" detail="Global tracking is ready and waiting for confirmed activity." />
-          ) : (
-            <EquityChart equity={equity.data} range={equityRange} onRange={onEquityRange} />
-          )}
+          <EquityChart equity={equity.data} range={equityRange} onRange={onEquityRange} />
         </>
       )}
     </Panel>
@@ -1071,11 +1081,14 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
   const [range, setRange] = useState<EquityRange>('7d');
   const [chartMode, setChartMode] = useState<'pct' | 'usd'>('pct');
   const loadingRef = useRef(false);
+  const hasDataRef = useRef(false);
 
-  const load = useCallback(async () => {
+  // `manual`: clic su Refresh o dopo un'azione. Il polling periodico e' silenzioso: senza
+  // questo l'indicatore "aggiornamento…" lampeggiava ogni 30 secondi.
+  const load = useCallback(async (manual = false) => {
     if (loadingRef.current) return;  // never overlap a poll with a manual Refresh
     loadingRef.current = true;
-    setLoading(true);
+    if (manual || !hasDataRef.current) setLoading(true);
     try {
       const [v, t, s, h] = await Promise.all([
         fetchReserve(session),
@@ -1088,6 +1101,7 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
       if (h) setHistory(h);
       if (!dirty) setSettings(s.settings);
       setErr('');
+      hasDataRef.current = true;
       setLastLoadedAt(Date.now());
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Errore di caricamento');
@@ -1110,7 +1124,7 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
     setErr('');
     try {
       await fn();
-      await load();
+      await load(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '';
       const code = msg.split(' - ').pop()?.replace(/[^a-z_]/g, '') ?? '';
@@ -1140,7 +1154,7 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
               agg. {new Date(lastLoadedAt).toLocaleTimeString('it-IT')}
             </span>
           )}
-          <button onClick={() => void load()} disabled={loading || busy}>
+          <button onClick={() => void load(true)} disabled={loading || busy}>
             {loading ? '…' : 'Refresh'}
           </button>
         </span>
@@ -3287,7 +3301,26 @@ function EquityChart({ equity, range, onRange }: {
   onRange?: (r: EquityRange) => void;
 }) {
   const items = equity?.items ?? [];
-  if (items.length < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
+  const RANGES: EquityRange[] = ['24h', '7d', 'all'];
+  const rangeLabel: Record<EquityRange, string> = { '24h': '24h', '7d': '7g', 'all': 'Tutto' };
+  const rangeSelector = onRange && range && (
+    <div className="equity-ranges">
+      {RANGES.map((r) => (
+        <button key={r} className={r === range ? 'active' : ''} onClick={() => onRange(r)}>{rangeLabel[r]}</button>
+      ))}
+    </div>
+  );
+  // Con pochi dati il selettore resta: senza, da "24h" non si potrebbe passare a 7g o Tutto.
+  if (items.length < 2) {
+    return (
+      <div className="equity-chart">
+        <div className="equity-chart-head">
+          <p className="muted">Dati insufficienti per il grafico.</p>
+          {rangeSelector}
+        </div>
+      </div>
+    );
+  }
   const points = items.map((pt) => {
     const d = new Date(pt.timestamp_utc);
     return {
@@ -3302,8 +3335,6 @@ function EquityChart({ equity, range, onRange }: {
   const lastPnl = points[points.length - 1].pct;
   const hasBtc = (equity?.benchmark_available ?? false) && points.some((p) => p.btc != null);
   const lastBtc = hasBtc ? points[points.length - 1].btc ?? 0 : null;
-  const RANGES: EquityRange[] = ['24h', '7d', 'all'];
-  const rangeLabel: Record<EquityRange, string> = { '24h': '24h', '7d': '7g', 'all': 'Tutto' };
   return (
     <div className="equity-chart">
       <div className="equity-chart-head">
@@ -3319,13 +3350,7 @@ function EquityChart({ equity, range, onRange }: {
             </div>
           )}
         </div>
-        {onRange && range && (
-          <div className="equity-ranges">
-            {RANGES.map((r) => (
-              <button key={r} className={r === range ? 'active' : ''} onClick={() => onRange(r)}>{rangeLabel[r]}</button>
-            ))}
-          </div>
-        )}
+        {rangeSelector}
       </div>
       <EquityLineChart points={points} />
     </div>
