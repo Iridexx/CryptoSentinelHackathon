@@ -14,6 +14,7 @@ import httpx
 
 from backend.app.agent.signals.common.indicators import Candle
 from backend.app.core.logging import get_logger
+from backend.app.core.tls import shared_ssl_context
 
 logger = get_logger("agent.cex_fallback")
 
@@ -110,7 +111,7 @@ async def _kucoin_klines(client: httpx.AsyncClient, symbol: str, interval: str, 
 
 async def fetch_klines_fallback(*, symbol: str, interval: str, limit: int, futures: bool, timeout: float) -> list[Candle]:
     """Prova Bitget poi KuCoin; ritorna le prime candele non vuote o []."""
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, verify=shared_ssl_context()) as client:
         for name, fn in (("bitget", _bitget_klines), ("kucoin", _kucoin_klines)):
             try:
                 candles = await fn(client, symbol, interval, limit, futures)
@@ -126,7 +127,7 @@ async def fetch_klines_fallback(*, symbol: str, interval: str, limit: int, futur
 async def fetch_price_fallback(*, symbol: str, futures: bool, timeout: float) -> Decimal | None:
     """Ultimo prezzo da Bitget poi KuCoin; None se nessuno lo espone."""
     base, quote = _split_base_quote(symbol)
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, verify=shared_ssl_context()) as client:
         try:
             if futures:
                 response = await client.get(

@@ -11,6 +11,7 @@ from typing import Literal
 import httpx
 
 from backend.app.agent.signals.common.indicators import Candle
+from backend.app.core.tls import shared_ssl_context
 
 BinanceMarket = Literal["futures", "spot"]
 
@@ -64,7 +65,7 @@ class BinanceKlineFeed:
         if start_time is not None:
             params["startTime"] = int(start_time.timestamp() * 1000)
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds, verify=shared_ssl_context()) as client:
                 response = await client.get(f"{base_url}{path}", params=params)
             if response.status_code >= 400:
                 return []
@@ -122,7 +123,7 @@ class BinanceKlineFeed:
         symbols_param = json.dumps([s.upper() for s in symbols], separators=(",", ":"))
         result: dict[str, Decimal] = {}
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds, verify=shared_ssl_context()) as client:
                 response = await client.get(f"{base_url}{path}", params={"symbols": symbols_param})
             if response.status_code < 400:
                 result = {str(row["symbol"]).upper(): Decimal(str(row["price"])) for row in response.json()}
@@ -136,7 +137,7 @@ class BinanceKlineFeed:
         if missing and market == "futures":
             thousand_map = {f"1000{s.upper()}": s.upper() for s in missing}
             try:
-                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                async with httpx.AsyncClient(timeout=self.timeout_seconds, verify=shared_ssl_context()) as client:
                     response = await client.get(
                         f"{base_url}{path}",
                         params={"symbols": json.dumps(list(thousand_map), separators=(",", ":"))},
@@ -175,7 +176,7 @@ class BinanceKlineFeed:
             wanted[f"{a.upper()}USDT"] = a.upper()
             wanted[f"1000{a.upper()}USDT"] = a.upper()
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds, verify=shared_ssl_context()) as client:
                 response = await client.get(f"{self.futures_base_url}/fapi/v1/premiumIndex")
             if response.status_code >= 400:
                 return {}

@@ -13,6 +13,7 @@ import httpx
 
 from backend.app.data.market_data.base import ProviderError
 from backend.app.core.logging import get_logger
+from backend.app.core.tls import shared_ssl_context
 from backend.app.data.market_data.cache import TTLCache
 from backend.app.data.market_data.rate_limit import AsyncRateLimiter
 
@@ -119,7 +120,7 @@ class CachedHttpProvider:
         started = perf_counter()
         logger.info("provider_request_started", endpoint=path, **_params_summary(params))
         await self.rate_limiter.acquire()
-        client = self._client or httpx.AsyncClient(timeout=self.timeout_seconds)
+        client = self._client or httpx.AsyncClient(timeout=self.timeout_seconds, verify=shared_ssl_context())
         owns_client = self._client is None
         try:
             response = await client.get(f"{self.base_url}{path}", params=params, headers=headers)

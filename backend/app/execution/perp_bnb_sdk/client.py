@@ -8,6 +8,7 @@ import httpx
 from web3 import Web3
 
 from backend.app.core.config import Settings
+from backend.app.core.tls import shared_ssl_context
 
 
 class TypedDataWallet(Protocol):
@@ -75,7 +76,7 @@ class BnbAgentSdkBridge:
     async def submit_order(self, signed_order: dict[str, Any]) -> dict[str, Any]:
         if not self._settings.perp_order_submit_url:
             raise PerpExecutionError("No official perpetual venue endpoint is configured")
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=15, verify=shared_ssl_context()) as client:
             response = await client.post(self._settings.perp_order_submit_url, json=signed_order)
             response.raise_for_status()
             return response.json()

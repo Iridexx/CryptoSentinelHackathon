@@ -21,6 +21,7 @@ from eth_account import Account
 from eth_account.messages import encode_typed_data
 
 from backend.app.core.logging import get_logger
+from backend.app.core.tls import shared_ssl_context
 
 logger = get_logger("execution.venue.aster")
 
@@ -129,7 +130,7 @@ class AsterClient:
 
         url = f"{self._base_url}{path}"
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=self._timeout, verify=shared_ssl_context()) as client:
                 response = await client.get(url, params=query)
         except httpx.TimeoutException as exc:
             raise AsterError("timeout", code="TIMEOUT") from exc
@@ -152,7 +153,7 @@ class AsterClient:
         """Unsigned: proves the endpoint is reachable before testing credentials."""
         url = f"{self._base_url}/fapi/v3/exchangeInfo"
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=self._timeout, verify=shared_ssl_context()) as client:
                 response = await client.get(url)
         except httpx.TimeoutException as exc:
             raise AsterError("timeout", code="TIMEOUT") from exc

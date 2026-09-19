@@ -24,6 +24,7 @@ from backend.app.api.routes.mobile_agent import apply_mobile_settings_to_config,
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import configure_logging, get_logger
 from backend.app.core.security.headers import add_security_headers
+from backend.app.core.tls import shared_ssl_context
 from backend.app.notifications.price_checker import price_checker_loop
 from backend.app.persistence.backup import backup_db
 from backend.app.persistence.database import close_db, get_session_factory, init_db
@@ -115,6 +116,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop backend runtime tasks."""
 
     heartbeat.beat("startup")
+
+    # Il contesto TLS condiviso costa ~2 s la prima volta: lo si costruisce ora, fuori dal
+    # thread dell'event loop, cosi' le prime richieste non restano in attesa.
+    await asyncio.to_thread(shared_ssl_context)
 
     await init_db(settings.database_url, echo=settings.database_echo)
     init_sync_db(settings.database_url, echo=settings.database_echo)

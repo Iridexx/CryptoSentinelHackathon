@@ -21,6 +21,7 @@ import httpx
 from backend.app.core.config import Settings
 from backend.app.core.logging import get_logger
 from backend.app.execution.models import GasDecision
+from backend.app.core.tls import shared_ssl_context
 
 logger = get_logger("execution.spot_twak")
 
@@ -227,7 +228,7 @@ class TwakClient:
                     json=body,
                 )
             else:
-                async with httpx.AsyncClient(timeout=30.0) as client:
+                async with httpx.AsyncClient(timeout=30.0, verify=shared_ssl_context()) as client:
                     response = await client.request(
                         method,
                         url,

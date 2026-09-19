@@ -12,6 +12,7 @@ import httpx
 from backend.app.agent.brain.models import BrainDecision, BrainUsage
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
+from backend.app.core.tls import shared_ssl_context
 
 logger = get_logger("agent.brain")
 
@@ -46,7 +47,7 @@ class ClaudeMetaController:
         )
         try:
             payload = self._build_payload(signal, risk)
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=20.0, verify=shared_ssl_context()) as client:
                 response = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={

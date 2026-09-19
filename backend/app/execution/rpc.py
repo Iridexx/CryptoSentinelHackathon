@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import httpx
 
 from backend.app.core.logging import get_logger
+from backend.app.core.tls import shared_ssl_context
 
 logger = get_logger("execution.rpc")
 
@@ -42,7 +43,7 @@ class MultiRpcClient:
         errors: list[str] = []
         if self._client is not None:
             return await self._call_with_client(self._client, method, params, errors)
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async with httpx.AsyncClient(timeout=self._timeout, verify=shared_ssl_context()) as client:
             return await self._call_with_client(client, method, params, errors)
 
     async def _call_with_client(

@@ -18,6 +18,7 @@ from decimal import Decimal
 import httpx
 
 from backend.app.core.logging import get_logger
+from backend.app.core.tls import shared_ssl_context
 
 logger = get_logger("execution.perp_fees")
 
@@ -67,7 +68,7 @@ async def fetch_perp_fees(
         try:
             symbol_dash  = f"{asset.upper()}-USDT"
             symbol_plain = f"{asset.upper()}USDT"
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=_TIMEOUT, verify=shared_ssl_context()) as client:
                 resp = await client.get(f"{base_url}{_TICKERS_PATH}")
                 resp.raise_for_status()
                 payload = resp.json()
