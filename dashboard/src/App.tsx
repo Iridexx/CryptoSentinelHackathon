@@ -182,6 +182,12 @@ const settingFields = [
   'perp_regime_derisk_trail_mult',
   'perp_regime_derisk_freeze_rebuy',
   'perp_regime_derisk_require_contrarian',
+  'perp_direction_risk_cap_enabled',
+  'perp_direction_risk_cap_mode',
+  'perp_direction_risk_cap_loss_pct',
+  'perp_direction_risk_cap_pct',
+  'perp_direction_risk_cap_safety_mult',
+  'perp_direction_risk_cap_recent_stops_minutes',
 ];
 
 const AUTO_REFRESH_MS = 45_000;
@@ -2788,6 +2794,18 @@ const SETTING_LABELS: Record<string, string> = {
   perp_regime_derisk_trail_mult: 'De-risk — stretta dello stop (×ATR)',
   perp_regime_derisk_freeze_rebuy: 'De-risk — congela i rebuy smart SL',
   perp_regime_derisk_require_contrarian: 'De-risk — solo posizioni contro il regime',
+  perp_direction_risk_cap_enabled: 'Tetto rischio direzionale perp',
+  perp_direction_risk_cap_mode: 'Tetto direzionale — quando agisce',
+  perp_direction_risk_cap_loss_pct: 'Tetto direzionale — soglia perdita % (solo in perdita)',
+  perp_direction_risk_cap_pct: 'Tetto direzionale — rischio max % (sempre)',
+  perp_direction_risk_cap_safety_mult: 'Tetto direzionale — margine di sicurezza ×',
+  perp_direction_risk_cap_recent_stops_minutes: 'Tetto direzionale — stop recenti (min, 0 = off)',
+};
+
+// Impostazioni testuali con valori ammessi: select invece di testo libero (un valore
+// sbagliato farebbe rifiutare il salvataggio dal backend).
+const SETTING_OPTIONS: Record<string, string[]> = {
+  perp_direction_risk_cap_mode: ['solo_in_perdita', 'sempre'],
 };
 
 function SettingsPanel({
@@ -2816,6 +2834,13 @@ function SettingsPanel({
                 checked={Boolean(draft[field])}
                 onChange={(event) => setDraft({ ...draft, [field]: event.target.checked })}
               />
+            ) : SETTING_OPTIONS[field] ? (
+              <select
+                value={String(draft[field] ?? '')}
+                onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
+              >
+                {SETTING_OPTIONS[field].map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
             ) : (
               <input
                 value={String(draft[field] ?? '')}
