@@ -174,7 +174,6 @@ SECTION_FIELD_MAP: dict[str, dict[str, str]] = {
         "max_drawdown_pct": "risk_max_drawdown_pct",
         "min_pool_liquidity_usd": "risk_min_pool_liquidity_usd",
         "max_slippage_pct": "risk_max_slippage_pct",
-        "correlation_limit": "risk_correlation_limit",
         "cooldown_minutes": "risk_cooldown_minutes",
         "bnb_gas_reserve_pct": "bnb_gas_reserve_pct",
         "bnb_gas_reserve_min": "bnb_gas_reserve_min",
@@ -678,7 +677,6 @@ class Settings(BaseSettings):
     risk_max_drawdown_pct: float = Field(default=-15.0, alias="RISK_MAX_DRAWDOWN_PCT")
     risk_min_pool_liquidity_usd: float = Field(default=50000.0, alias="RISK_MIN_POOL_LIQUIDITY_USD")
     risk_max_slippage_pct: float = Field(default=1.0, alias="RISK_MAX_SLIPPAGE_PCT")
-    risk_correlation_limit: float = Field(default=0.8, alias="RISK_CORRELATION_LIMIT")
     risk_cooldown_minutes: int = Field(default=30, alias="RISK_COOLDOWN_MINUTES")
 
     spot_confidence_threshold: float = Field(default=0.55, alias="SPOT_CONFIDENCE_THRESHOLD")
