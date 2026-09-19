@@ -21,8 +21,6 @@ const CATEGORY_ICON: Record<string, string> = {
   summary: '\u{1F4CA}',
 };
 
-let _nextId = 1;
-
 export default function ToastHost({
   newItems,
   onDismiss,
@@ -35,24 +33,33 @@ export default function ToastHost({
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => {
-    if (newItems.length === 0) return;
-    const entries: ToastEntry[] = newItems.map((item) => ({
-      ...item,
-      _id: _nextId++,
-      _progress: 100,
-      _paused: false,
-    }));
-    setToasts((prev) => [...entries, ...prev].slice(0, MAX_VISIBLE));
-
-    if (soundEnabled) {
-      const hasCritical = newItems.some((i) => i.severity === 'critical');
-      if (hasCritical) playSound(audioRef);
+  // I nuovi eventi diventano toast aggiornando lo stato durante il render (pattern React
+  // per lo stato derivato da una prop) invece che con setState dentro un effect.
+  const [seenItems, setSeenItems] = useState<FeedEventItem[]>([]);
+  const [nextId, setNextId] = useState(1);
+  if (newItems !== seenItems) {
+    setSeenItems(newItems);
+    if (newItems.length > 0) {
+      const entries: ToastEntry[] = newItems.map((item, index) => ({
+        ...item,
+        _id: nextId + index,
+        _progress: 100,
+        _paused: false,
+      }));
+      setNextId(nextId + entries.length);
+      setToasts((prev) => [...entries, ...prev].slice(0, MAX_VISIBLE));
     }
+  }
+
+  // Il suono e' un effetto verso l'esterno (audio): resta in un effect.
+  useEffect(() => {
+    if (!soundEnabled || newItems.length === 0) return;
+    if (newItems.some((i) => i.severity === 'critical')) playSound(audioRef);
   }, [newItems, soundEnabled]);
 
+  const hasToasts = toasts.length > 0;
   useEffect(() => {
-    if (toasts.length === 0) return;
+    if (!hasToasts) return;
     const TICK = 50;
     const decrement = (TICK / TOAST_DURATION_MS) * 100;
     const timer = setInterval(() => {
@@ -66,7 +73,7 @@ export default function ToastHost({
       });
     }, TICK);
     return () => clearInterval(timer);
-  }, [toasts.length > 0]);
+  }, [hasToasts]);
 
   const dismiss = useCallback(
     (id: number, eventId: string) => {

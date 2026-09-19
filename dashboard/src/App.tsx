@@ -213,7 +213,7 @@ function normalizedStoredBackendUrl() {
 export default function App() {
   const [tab, setTab] = useState<Tab>('overview');
   const [session, setSession] = useState<DashboardSession>(() => ({
-    baseUrl: normalizedStoredBackendUrl(),
+    baseUrl: normalizeBackendBaseUrl(normalizedStoredBackendUrl()),
     readToken: localStorage.getItem('cs.dashboard.readToken') || import.meta.env.VITE_API_READ_TOKEN || '',
     adminToken: localStorage.getItem('cs.dashboard.adminToken') || import.meta.env.VITE_API_ADMIN_TOKEN || '',
   }));
@@ -267,6 +267,8 @@ export default function App() {
   useEffect(() => {
     if (!canRead) return;
     fetchToastPrefs(session).then((r) => setToastPrefs(r.preferences)).catch(() => {});
+    // Volutamente senza `session` intero: il token admin non influisce sulle preferenze toast.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canRead, session.baseUrl, session.readToken]);
 
   useEffect(() => {
@@ -279,13 +281,6 @@ export default function App() {
   }, [notifications.unreadCount]);
 
   useEffect(() => {
-    setSession((current) => {
-      const normalized = normalizeBackendBaseUrl(current.baseUrl);
-      return normalized === current.baseUrl ? current : { ...current, baseUrl: normalized };
-    });
-  }, []);
-
-  useEffect(() => {
     localStorage.setItem('cs.dashboard.baseUrl', session.baseUrl);
     localStorage.setItem('cs.dashboard.readToken', session.readToken);
     localStorage.setItem('cs.dashboard.adminToken', session.adminToken);
@@ -293,6 +288,8 @@ export default function App() {
 
   useEffect(() => {
     void refreshCore();
+    // Solo al mount: refreshCore e' una closure ricreata a ogni render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch della sola curva equity quando cambia il range (24h/7g/Tutto).
@@ -301,6 +298,8 @@ export default function App() {
     if (!equityInitialized.current) { equityInitialized.current = true; return; }
     if (!canRead) return;
     void silentLoad(setEquity, () => fetchEquityCurve(session, 'global', equityRange));
+    // Riparte solo al cambio di range, non a ogni cambio di sessione o di canRead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [equityRange]);
 
   useEffect(() => {
@@ -308,6 +307,8 @@ export default function App() {
       void refreshCore(true);
     }, AUTO_REFRESH_MS);
     return () => window.clearInterval(timer);
+    // L'intervallo si ricrea solo quando cambia il backend o il token di lettura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.baseUrl, session.readToken]);
 
   async function load<T>(setter: (value: LoadState<T>) => void, task: () => Promise<T>) {
@@ -1098,8 +1099,9 @@ function BankPanel({ session, canAdmin }: { session: DashboardSession; canAdmin:
 
   useEffect(() => {
     const id = window.setInterval(() => { void load(); }, 30_000);
-    void load();
-    return () => window.clearInterval(id);
+    // Primo caricamento dopo il mount: load imposta lo stato di caricamento in modo sincrono.
+    const first = window.setTimeout(() => { void load(); }, 0);
+    return () => { window.clearTimeout(first); window.clearInterval(id); };
   }, [load]);
 
   async function act(fn: () => Promise<unknown>) {
@@ -1450,7 +1452,7 @@ function AnalyticsPanel({
     await loadDetail(setDetail, () => onTradeDetail(tradeId));
   }
 
-  const allItems = decisions.data?.items ?? [];
+  const allItems = useMemo(() => decisions.data?.items ?? [], [decisions.data]);
 
   const uniqueAssets = useMemo(() => [...new Set(allItems.map(i => i.asset ?? '').filter(Boolean))].sort(), [allItems]);
   const uniqueMarkets = useMemo(() => [...new Set(allItems.map(i => i.market))].sort(), [allItems]);
@@ -2997,8 +2999,7 @@ function Metric({ label, value, tone = '' }: { label: string; value: string; ton
   );
 }
 
-const HISTORY_PAGE_OPTIONS = [20, 50, 100, 'all'] as const;
-type HistoryPageSize = (typeof HISTORY_PAGE_OPTIONS)[number];
+type HistoryPageSize = 20 | 50 | 100 | 'all';
 
 type SpotHistoryItem = SpotView['history'][number];
 type PerpHistoryItem = PerpView['history'][number];
@@ -3333,10 +3334,9 @@ function EquityChart({ equity, range, onRange }: {
 
 function EquityLineChart({ points }: { points: { pct: number; label: string; equity?: string | number; btc?: number | null }[] }) {
   const n = points.length;
-  if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
-
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
 
   const PNL_COLOR = '#F0B90B';
   const BTC_COLOR = '#3B82F6';

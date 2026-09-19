@@ -36,9 +36,12 @@ export function useNotifications(
   const cursorRef = useRef<string | null>(null);
   const initialLoadDone = useRef(false);
   const dndRef = useRef(dnd);
-  dndRef.current = dnd;
   const toastPrefsRef = useRef(toastPrefs);
-  toastPrefsRef.current = toastPrefs;
+  // I ref si aggiornano dopo il commit, non durante il render.
+  useEffect(() => {
+    dndRef.current = dnd;
+    toastPrefsRef.current = toastPrefs;
+  }, [dnd, toastPrefs]);
 
   const applyFresh = useCallback((fresh: FeedEventItem[], unread: number) => {
     if (fresh.length === 0) {
@@ -86,7 +89,9 @@ export function useNotifications(
   }, [session]);
 
   useEffect(() => {
-    doInitialLoad();
+    // Parte dopo il mount: doInitialLoad imposta lo stato di caricamento in modo sincrono.
+    const first = setTimeout(() => { void doInitialLoad(); }, 0);
+    return () => clearTimeout(first);
   }, [doInitialLoad]);
 
   // SSE with polling fallback

@@ -43,7 +43,6 @@ export type DashboardSession = {
 
 const DASHBOARD_PORT = '5176';
 const BACKEND_PORT = '8001';
-const LEGACY_BACKEND_URL = 'http://127.0.0.1:8000';
 const LOCAL_BACKEND_URL = 'http://127.0.0.1:8001';
 
 type TokenKind = 'read' | 'admin' | 'none';
