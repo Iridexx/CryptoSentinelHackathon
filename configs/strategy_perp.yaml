@@ -91,3 +91,12 @@ perp:
   smart_sl_tp_recovery_delta_pct: 7    # delta extra % oltre copertura perdite (guadagno minimo)
   smart_sl_confirmation_candles: 2   # candele 5min di conferma (sell e rebuy above_entry)
   smart_sl_max_reentries: 1          # max cicli sell→rebuy
+  # Tetto di rischio direzionale: nessun nuovo ingresso nella stessa direzione quando le
+  # posizioni gia' aperte stanno perdendo (le alt si muovono insieme a BTC: 4 long = 1 scommessa
+  # con size x4). Agisce solo all'apertura, non chiude nulla.
+  direction_risk_cap_enabled: true
+  direction_risk_cap_mode: solo_in_perdita   # solo_in_perdita | sempre
+  direction_risk_cap_loss_pct: 0.5           # solo_in_perdita: blocca se PnL non realizz. < -0.5% equity
+  direction_risk_cap_pct: 6.0                # sempre: tetto sul rischio a stop, % equity
+  direction_risk_cap_safety_mult: 1.3        # sempre: margine di sicurezza su slippage/fee
+  direction_risk_cap_recent_stops_minutes: 0 # solo_in_perdita: somma anche gli stop chiusi negli ultimi N min (0 = off)

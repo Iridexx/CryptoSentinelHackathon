@@ -442,6 +442,12 @@ export interface AgentMobileSettings {
   perp_max_slippage_pct: number;
   perp_fixed_margin_enabled: boolean;
   perp_fixed_margin_usd: number;
+  perp_direction_risk_cap_enabled: boolean;
+  perp_direction_risk_cap_mode: 'solo_in_perdita' | 'sempre';
+  perp_direction_risk_cap_loss_pct: number;
+  perp_direction_risk_cap_pct: number;
+  perp_direction_risk_cap_safety_mult: number;
+  perp_direction_risk_cap_recent_stops_minutes: number;
   // Legacy (backward compat)
   capital_per_trade_pct: number;
   per_trade_pct: number;

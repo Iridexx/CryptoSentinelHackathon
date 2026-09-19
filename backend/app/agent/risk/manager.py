@@ -42,6 +42,36 @@ class SignalIntent:
     quality: Decimal
     quote_equity: Decimal
     liquidity_usd: Decimal | None = None
+    leverage: int | None = None
+
+
+def _price_pnl_usd(position: PerpPosition) -> Decimal:
+    """PnL non realizzato solo sul prezzo, senza fee ne' funding.
+
+    `pnl_unrealized` e' gia' al netto della fee di apertura: una posizione appena aperta
+    parte in negativo e falserebbe la soglia del tetto direzionale.
+    """
+    current = position.current_price or position.entry_price
+    diff = current - position.entry_price if position.side == "long" else position.entry_price - current
+    return diff * position.size
+
+
+def _stop_risk_usd(position: PerpPosition) -> Decimal:
+    """Perdita rispetto all'entrata se la posizione tocca lo stop attuale, sulla size attuale.
+
+    Uno stop a breakeven o in profitto vale zero. Senza stop il rischio e' il margine intero.
+    """
+    stop = position.stop_loss
+    trailing = position.trailing_stop
+    if trailing is not None and trailing > 0:
+        if stop is None or stop <= 0:
+            stop = trailing
+        else:
+            stop = max(stop, trailing) if position.side == "long" else min(stop, trailing)
+    if stop is None or stop <= 0:
+        return position.entry_price * position.size / Decimal(max(int(position.leverage or 1), 1))
+    loss_per_unit = position.entry_price - stop if position.side == "long" else stop - position.entry_price
+    return max(Decimal("0"), loss_per_unit) * position.size
 
 
 class RiskManager:
@@ -82,6 +112,7 @@ class RiskManager:
         open_spot_positions: list[SpotPosition],
         open_perp_positions: list[PerpPosition],
         ms: AgentMobileSettings | None = None,
+        recent_same_direction_loss_usd: Decimal = Decimal("0"),
     ) -> RiskDecision:
         if self.kill_switch == KillSwitchState.HARD_STOP:
             return RiskDecision(False, "hard_stop_enabled")
@@ -193,6 +224,18 @@ class RiskManager:
         if exposure_after > Decimal(str(max_exposure)):
             return RiskDecision(False, "max_total_exposure_guard", exposure_after_pct=exposure_after)
 
+        if is_perp and ms is not None and ms.perp_direction_risk_cap_enabled:
+            cap_decision = self._direction_risk_cap_check(
+                intent,
+                open_perp_positions,
+                ms,
+                equity=equity,
+                margin_usd=risk_size,
+                recent_loss_usd=recent_same_direction_loss_usd,
+            )
+            if cap_decision is not None:
+                return cap_decision
+
         scaled = False
         if self.settings.execution_mode == "live":
             scale = Decimal(str(self.settings.test_scaling_pct)) / Decimal("100")
@@ -214,3 +257,65 @@ class RiskManager:
             exposure_after_pct=exposure_after,
             scaled_for_execution_mode=scaled,
         )
+
+    def _direction_risk_cap_check(
+        self,
+        intent: SignalIntent,
+        open_perp_positions: list[PerpPosition],
+        ms: AgentMobileSettings,
+        *,
+        equity: Decimal,
+        margin_usd: Decimal,
+        recent_loss_usd: Decimal,
+    ) -> RiskDecision | None:
+        """Tetto di rischio direzionale: None se l'ingresso e' consentito.
+
+        Le alt si muovono insieme a BTC: 4 long aperti nella stessa ora sono una sola
+        scommessa con size x4. Agisce solo all'apertura, non tocca le posizioni aperte.
+        """
+        if equity <= Decimal("0"):
+            return None
+        same_side = [p for p in open_perp_positions if p.side == intent.side]
+
+        if ms.perp_direction_risk_cap_mode == "sempre":
+            open_risk = sum((_stop_risk_usd(p) for p in same_side), Decimal("0"))
+            if intent.stop_loss is not None and intent.price > Decimal("0") and intent.leverage:
+                stop_distance_pct = abs(intent.price - intent.stop_loss) / intent.price
+                new_risk = margin_usd * Decimal(intent.leverage) * stop_distance_pct
+            else:
+                new_risk = margin_usd  # senza stop o leva: tutto il margine e' a rischio
+            safety = Decimal(str(ms.perp_direction_risk_cap_safety_mult))
+            total_risk_pct = (open_risk + new_risk) * safety / equity * Decimal("100")
+            if total_risk_pct > Decimal(str(ms.perp_direction_risk_cap_pct)):
+                logger.info(
+                    "direction_risk_cap_blocked",
+                    mode="sempre",
+                    asset=intent.asset,
+                    side=intent.side,
+                    open_positions=len(same_side),
+                    risk_pct=float(total_risk_pct),
+                    cap_pct=ms.perp_direction_risk_cap_pct,
+                )
+                return RiskDecision(False, "direction_risk_cap_guard", exposure_after_pct=total_risk_pct)
+            return None
+
+        # solo_in_perdita: si guarda il PnL delle posizioni gia' aperte (e, se attivo, gli stop
+        # chiusi da poco). Senza niente di aperto o chiuso di recente non c'e' nulla da valutare.
+        recent_loss = max(recent_loss_usd, Decimal("0"))
+        if not same_side and recent_loss <= Decimal("0"):
+            return None
+        pnl = sum((_price_pnl_usd(p) for p in same_side), Decimal("0")) - recent_loss
+        pnl_pct = pnl / equity * Decimal("100")
+        if pnl_pct < -Decimal(str(ms.perp_direction_risk_cap_loss_pct)):
+            logger.info(
+                "direction_risk_cap_blocked",
+                mode="solo_in_perdita",
+                asset=intent.asset,
+                side=intent.side,
+                open_positions=len(same_side),
+                pnl_pct=float(pnl_pct),
+                loss_pct=ms.perp_direction_risk_cap_loss_pct,
+                recent_loss_usd=float(recent_loss),
+            )
+            return RiskDecision(False, "direction_risk_cap_guard", exposure_after_pct=pnl_pct)
+        return None

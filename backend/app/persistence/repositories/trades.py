@@ -265,6 +265,23 @@ class PerpTradeRepository:
         val = result.scalar_one_or_none()
         return Decimal(str(val)) if val is not None else Decimal("0")
 
+    async def sum_recent_losses(self, user_id: str, side: str, since: datetime) -> Decimal:
+        """Somma (positiva) delle sole perdite realizzate dai close perp di una direzione dal `since`.
+
+        Usata dal tetto di rischio direzionale per vedere gli stop appena chiusi: una posizione
+        stoppata sparisce dalle aperte e non sarebbe piu' visibile al guard.
+        """
+        result = await self._session.execute(
+            select(func.sum(PerpTrade.pnl_usd))
+            .where(PerpTrade.user_id == user_id)
+            .where(PerpTrade.direction == "close")
+            .where(PerpTrade.side == side)
+            .where(PerpTrade.pnl_usd < 0)
+            .where(PerpTrade.timestamp_utc >= since)
+        )
+        val = result.scalar_one_or_none()
+        return -Decimal(str(val)) if val is not None else Decimal("0")
+
     async def sum_fees(self, user_id: str, *, since: datetime | None = None) -> Decimal:
         """Somma fees_quote dei trade perp (fee pagate). `since` filtra per giorno."""
         stmt = (

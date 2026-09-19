@@ -202,6 +202,12 @@ const defaultSettings: AgentMobileSettings = {
   perp_max_slippage_pct: 0.5,
   perp_fixed_margin_enabled: false,
   perp_fixed_margin_usd: 50,
+  perp_direction_risk_cap_enabled: true,
+  perp_direction_risk_cap_mode: 'solo_in_perdita',
+  perp_direction_risk_cap_loss_pct: 0.5,
+  perp_direction_risk_cap_pct: 6,
+  perp_direction_risk_cap_safety_mult: 1.3,
+  perp_direction_risk_cap_recent_stops_minutes: 0,
   capital_per_trade_pct: 6,
   per_trade_pct: 1.5,
   max_open_positions: 3,
@@ -2119,6 +2125,30 @@ const SetupPane: FC<{
               <ToggleInput label="Margine fisso Perp" showHelp={h} help="Usa sempre lo stesso margine in dollari per ogni trade, invece di calcolarlo in percentuale sul capitale." checked={settings.perp_fixed_margin_enabled} onChange={(perp_fixed_margin_enabled) => patch({ perp_fixed_margin_enabled })} />
               <NumberInput label="Margine fisso $" showHelp={h} help={'Il margine fisso in dollari per ogni operazione, quando l\'opzione qui sopra è accesa.'} value={settings.perp_fixed_margin_usd} onChange={(perp_fixed_margin_usd) => patch({ perp_fixed_margin_usd })} />
             </div>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="px-1 text-xs font-semibold uppercase text-gray-500">Perp — tetto rischio direzionale</h3>
+            <ToggleInput label="Tetto rischio direzionale" showHelp={h} help={'Le altcoin si muovono quasi tutte insieme a BTC: quattro long aperti nella stessa ora sono in pratica una sola scommessa con la size quadruplicata. Questo tetto impedisce di aprire un nuovo trade nella stessa direzione quando quelli già aperti stanno andando male. Agisce solo all\'apertura: non chiude mai posizioni già aperte.'} checked={settings.perp_direction_risk_cap_enabled} onChange={(perp_direction_risk_cap_enabled) => patch({ perp_direction_risk_cap_enabled })} />
+            {settings.perp_direction_risk_cap_enabled && (
+              <div className="grid grid-cols-2 gap-3">
+                <SelectInput label="Quando agisce" showHelp={h} help={'Solo in perdita — blocca un nuovo ingresso solo se le posizioni già aperte nella stessa direzione sono in perdita oltre la soglia. Nel verde non ti taglia i guadagni.\n\nSempre — blocca ogni volta che la perdita massima possibile (se tutte toccano lo stop) supera il tetto, anche quando sei in guadagno.'} value={settings.perp_direction_risk_cap_mode} onChange={(v) => patch({ perp_direction_risk_cap_mode: v as 'solo_in_perdita' | 'sempre' })} options={[
+                  { value: 'solo_in_perdita', label: 'Solo in perdita' },
+                  { value: 'sempre', label: 'Sempre' },
+                ]} />
+                {settings.perp_direction_risk_cap_mode === 'solo_in_perdita' ? (
+                  <>
+                    <NumberInput label="Soglia perdita % capitale" showHelp={h} help="Blocca il nuovo ingresso se le posizioni già aperte nella stessa direzione perdono, in totale, più di questa percentuale del capitale (solo variazione di prezzo, senza fee)." value={settings.perp_direction_risk_cap_loss_pct} step={0.1} onChange={(perp_direction_risk_cap_loss_pct) => patch({ perp_direction_risk_cap_loss_pct })} />
+                    <NumberInput label="Stop recenti (min)" showHelp={h} help="Conta anche le perdite degli stop chiusi negli ultimi N minuti nella stessa direzione: una posizione stoppata sparisce dalle aperte e altrimenti il bot riparte subito. 0 = spento." value={settings.perp_direction_risk_cap_recent_stops_minutes} onChange={(perp_direction_risk_cap_recent_stops_minutes) => patch({ perp_direction_risk_cap_recent_stops_minutes: Math.round(perp_direction_risk_cap_recent_stops_minutes) })} />
+                  </>
+                ) : (
+                  <>
+                    <NumberInput label="Tetto rischio % capitale" showHelp={h} help="Perdita massima totale, in percentuale del capitale, se tutte le posizioni nella stessa direzione (compresa la nuova) toccano lo stop." value={settings.perp_direction_risk_cap_pct} step={0.5} onChange={(perp_direction_risk_cap_pct) => patch({ perp_direction_risk_cap_pct })} />
+                    <NumberInput label="Margine di sicurezza ×" showHelp={h} help="Moltiplicatore sul rischio calcolato, per coprire slippage, fee e stop saltati dalle mèche. 1.3 = +30%." value={settings.perp_direction_risk_cap_safety_mult} step={0.1} onChange={(perp_direction_risk_cap_safety_mult) => patch({ perp_direction_risk_cap_safety_mult })} />
+                  </>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="space-y-3">

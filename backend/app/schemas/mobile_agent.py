@@ -104,6 +104,20 @@ class AgentMobileSettings(BaseModel):
     perp_max_slippage_pct: float = Field(default=0.5, gt=0.0, le=20.0)
     perp_fixed_margin_enabled: bool = False
     perp_fixed_margin_usd: float = Field(default=50.0, gt=0.0, le=100000.0)
+    # Tetto di rischio direzionale: limita le ondate di ingressi correlati nella stessa
+    # direzione (le alt si muovono insieme a BTC). Agisce solo all'apertura.
+    # solo_in_perdita: blocca se il PnL non realizzato (solo prezzo) delle posizioni gia'
+    #   aperte nella stessa direzione e' sotto -loss_pct dell'equity.
+    # sempre: blocca se (rischio a stop di quelle aperte + della nuova) * safety_mult
+    #   supera cap_pct dell'equity.
+    perp_direction_risk_cap_enabled: bool = True
+    perp_direction_risk_cap_mode: str = Field(default="solo_in_perdita", pattern=r"^(solo_in_perdita|sempre)$")
+    perp_direction_risk_cap_loss_pct: float = Field(default=0.5, ge=0.0, le=20.0)
+    perp_direction_risk_cap_pct: float = Field(default=6.0, gt=0.0, le=100.0)
+    perp_direction_risk_cap_safety_mult: float = Field(default=1.3, ge=1.0, le=5.0)
+    # Solo modalita' solo_in_perdita: conta anche le perdite degli stop chiusi negli ultimi N
+    # minuti nella stessa direzione (0 = spento).
+    perp_direction_risk_cap_recent_stops_minutes: int = Field(default=0, ge=0, le=1440)
 
     # --- Campi legacy (mantenuti per backward-compat con settings salvati prima del refactor) ---
     capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

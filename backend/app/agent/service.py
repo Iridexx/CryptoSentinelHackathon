@@ -152,6 +152,14 @@ class AgentService:
             perp_max_slippage_pct=slippage,
             perp_fixed_margin_enabled=False,
             perp_fixed_margin_usd=50.0,
+            perp_direction_risk_cap_enabled=getattr(self.settings, "perp_direction_risk_cap_enabled", True),
+            perp_direction_risk_cap_mode=getattr(self.settings, "perp_direction_risk_cap_mode", "solo_in_perdita"),
+            perp_direction_risk_cap_loss_pct=getattr(self.settings, "perp_direction_risk_cap_loss_pct", 0.5),
+            perp_direction_risk_cap_pct=getattr(self.settings, "perp_direction_risk_cap_pct", 6.0),
+            perp_direction_risk_cap_safety_mult=getattr(self.settings, "perp_direction_risk_cap_safety_mult", 1.3),
+            perp_direction_risk_cap_recent_stops_minutes=getattr(
+                self.settings, "perp_direction_risk_cap_recent_stops_minutes", 0
+            ),
             spot_time_stop_enabled=getattr(self.settings, "spot_time_stop_enabled", False),
             perp_time_stop_enabled=getattr(self.settings, "perp_time_stop_enabled", False),
             spot_market_reversal_filter_enabled=getattr(self.settings, "spot_market_reversal_filter_enabled", True),
@@ -2728,12 +2736,26 @@ class AgentService:
             if depth is not None:
                 signal["liquidity_usd"] = depth
         intent = _intent_from_signal(signal, portfolio_total=Decimal(str(getattr(portfolio, "total_equity_usd", 0) or 0)))
+        recent_same_direction_loss = Decimal("0")
+        ms = self._ms
+        if (
+            signal.get("market") == "perp"
+            and ms.perp_direction_risk_cap_enabled
+            and ms.perp_direction_risk_cap_mode == "solo_in_perdita"
+            and ms.perp_direction_risk_cap_recent_stops_minutes > 0
+        ):
+            recent_same_direction_loss = await PerpTradeRepository(session).sum_recent_losses(
+                user_id,
+                intent.side,
+                now - timedelta(minutes=ms.perp_direction_risk_cap_recent_stops_minutes),
+            )
         risk_decision = self.risk.evaluate(
             intent,
             portfolio=portfolio,
             open_spot_positions=spot_positions,
             open_perp_positions=perp_positions,
             ms=self._ms,
+            recent_same_direction_loss_usd=recent_same_direction_loss,
         )
         brain_decision = await self._brain_decision(session, signal, risk_decision)
         decision = await self._record_decision(session, signal, risk_decision, brain_decision)
@@ -3267,6 +3289,7 @@ def _intent_from_signal(signal: dict, *, portfolio_total: Decimal) -> SignalInte
         quality=Decimal(str(signal.get("quality") or "0")),
         quote_equity=Decimal(str(signal.get("quote_equity") or portfolio_total or "0")),
         liquidity_usd=_optional_decimal(signal.get("liquidity_usd")),
+        leverage=int(signal["leverage"]) if signal.get("leverage") else None,
     )
 
 

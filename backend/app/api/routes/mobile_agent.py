@@ -153,6 +153,14 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_max_slippage_pct=slippage,
         perp_fixed_margin_enabled=False,
         perp_fixed_margin_usd=50.0,
+        perp_direction_risk_cap_enabled=getattr(settings, "perp_direction_risk_cap_enabled", True),
+        perp_direction_risk_cap_mode=getattr(settings, "perp_direction_risk_cap_mode", "solo_in_perdita"),
+        perp_direction_risk_cap_loss_pct=getattr(settings, "perp_direction_risk_cap_loss_pct", 0.5),
+        perp_direction_risk_cap_pct=getattr(settings, "perp_direction_risk_cap_pct", 6.0),
+        perp_direction_risk_cap_safety_mult=getattr(settings, "perp_direction_risk_cap_safety_mult", 1.3),
+        perp_direction_risk_cap_recent_stops_minutes=getattr(
+            settings, "perp_direction_risk_cap_recent_stops_minutes", 0
+        ),
         # Legacy
         capital_per_trade_pct=cap,
         per_trade_pct=per_trade,
