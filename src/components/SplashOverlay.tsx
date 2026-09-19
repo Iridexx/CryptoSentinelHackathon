@@ -1,6 +1,6 @@
 import { type FC, useState, useEffect, useRef, useCallback } from 'react';
+import { SPLASH_SESSION_KEY } from './splashSession';
 
-const SESSION_KEY = 'cs_splash_shown';
 const AUTO_DISMISS_MS = 8000;
 
 const SPLASH_BG = '#0a1220';
@@ -17,7 +17,7 @@ const SplashOverlay: FC<Props> = ({ onDone }) => {
   const dismiss = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
-    sessionStorage.setItem(SESSION_KEY, '1');
+    sessionStorage.setItem(SPLASH_SESSION_KEY, '1');
     setVisible(false);
     setTimeout(onDone, 380);
   }, [onDone]);
@@ -53,9 +53,5 @@ const SplashOverlay: FC<Props> = ({ onDone }) => {
     </div>
   );
 };
-
-export function shouldShowSplash(): boolean {
-  return !sessionStorage.getItem(SESSION_KEY);
-}
 
 export default SplashOverlay;

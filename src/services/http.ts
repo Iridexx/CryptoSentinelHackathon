@@ -93,7 +93,7 @@ export async function backendRequest<T>(path: string, options: BackendRequestOpt
     return await response.json() as T;
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`${label}: timeout`);
+      throw new Error(`${label}: timeout`, { cause: err });
     }
     throw err;
   } finally {

@@ -640,16 +640,22 @@ const SettingsTab: FC<Props> = ({
   const priorityLabel = (priority: TicketPriority) =>
     SUPPORT_PRIORITIES.find((item) => item.value === priority)?.label ?? priority;
 
+  // I caricamenti partono dopo il mount/commit: loadSupportTickets imposta stato in modo
+  // sincrono, cosa da evitare nel corpo di un effect.
   useEffect(() => {
-    void loadSupportTickets('user');
+    const first = window.setTimeout(() => { void loadSupportTickets('user'); }, 0);
+    return () => window.clearTimeout(first);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!supportModeRequest || supportModeRequest === supportMode) return;
     if (supportModeRequest === 'admin' && !adminToken) return;
-    setSupportMode(supportModeRequest);
-    void loadSupportTickets(supportModeRequest);
+    const apply = window.setTimeout(() => {
+      setSupportMode(supportModeRequest);
+      void loadSupportTickets(supportModeRequest);
+    }, 0);
+    return () => window.clearTimeout(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supportModeRequest, adminToken]);
 

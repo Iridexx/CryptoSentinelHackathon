@@ -35,10 +35,7 @@ export function useFavoriteCoinsData(
   const favoritesKey = [...favoriteIds].sort().join(',');
 
   useEffect(() => {
-    if (favoriteIds.length === 0) {
-      setFavoriteData(new Map());
-      return;
-    }
+    if (favoriteIds.length === 0) return;
 
     const doFetch = async () => {
       const requestVersion = ++requestVersionRef.current;

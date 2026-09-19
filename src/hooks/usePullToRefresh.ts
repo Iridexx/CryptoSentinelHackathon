@@ -18,7 +18,7 @@ export function usePullToRefresh(onRefresh: () => Promise<void> | void, disabled
   const [isRefreshing, setIsRefreshing] = useState(false);
   const s = useRef({ startY: null as number | null, pullY: 0, refreshing: false });
   const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
+  useEffect(() => { disabledRef.current = disabled; }, [disabled]);
 
   const onTouchStart = useCallback((e: TouchEvent) => {
     const el = containerRef.current;

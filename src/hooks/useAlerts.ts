@@ -153,7 +153,7 @@ export function useAlerts() {
         if (alert.triggered && !alert.keepActiveAfterTrigger) return alert;
 
         const previousPrice = alert.lastObservedPrice;
-        let updated: PriceAlert = alert;
+        let updated: PriceAlert;
 
         if (alert.crossingOnly) {
           if (previousPrice == null || previousPrice <= 0) {

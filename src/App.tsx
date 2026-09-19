@@ -32,7 +32,8 @@ import EnergySavingBanner from './components/EnergySavingBanner';
 import SettingsTab from './components/SettingsTab';
 import FavMovePopup from './components/FavMovePopup';
 import CoinChartSheet from './components/CoinChartSheet';
-import SplashOverlay, { shouldShowSplash } from './components/SplashOverlay';
+import SplashOverlay from './components/SplashOverlay';
+import { shouldShowSplash } from './components/splashSession';
 import AgentTab from './components/AgentTab';
 import { fetchAgentWatchlist, updateAgentWatchlist, fetchSpotView, fetchPerpView, type SpotPositionView, type PerpPositionView } from './services/agentApi';
 import {

@@ -21,7 +21,10 @@ function loadCachedCoins(): Coin[] {
 
 export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page = 1, currency = 'usd') {
   const [coins, setCoins] = useState<Coin[]>(() => page === 1 ? loadCachedCoins() : []);
-  const [loading, setLoading] = useState(true);
+  // 'loading' e' derivato: vero finche' non e' arrivata una risposta per i parametri correnti.
+  const fetchKey = `${perPage}|${page}|${currency}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loading = loadedKey !== fetchKey;
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -63,11 +66,11 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
       }
       setError('Unable to load prices. Showing cached data.');
     } finally {
-      if (requestVersion === requestVersionRef.current) setLoading(false);
+      if (requestVersion === requestVersionRef.current) setLoadedKey(`${perPage}|${page}|${currency}`);
     }
   }, [perPage, page, currency]);
 
-  fetchRef.current = fetchCoins;
+  useEffect(() => { fetchRef.current = fetchCoins; }, [fetchCoins]);
 
   const refresh = useCallback(async () => {
     if (timerRef.current !== null) {
@@ -78,7 +81,6 @@ export function useCryptoData(intervalMs = 30_000, perPage: PerPage = 50, page =
   }, [fetchCoins, intervalMs]);
 
   useEffect(() => {
-    setLoading(true);
     fetchCoins();
     timerRef.current = setInterval(fetchCoins, intervalMs);
     return () => {

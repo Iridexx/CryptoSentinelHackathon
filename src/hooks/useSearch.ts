@@ -2,10 +2,22 @@ import { useState, useEffect, useRef } from 'react';
 import type { Coin } from '../types';
 import { searchMarkets } from '../services/marketData';
 
+interface SearchState {
+  /** Chiave (query + valuta) dell'ultima ricerca conclusa. */
+  key: string | null;
+  results: Coin[];
+  error: string | null;
+}
+
 export function useSearch(query: string, currency = 'usd') {
-  const [results, setResults] = useState<Coin[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const trimmed = query.trim();
+  const searchKey = `${trimmed}|${currency}`;
+  const [state, setState] = useState<SearchState>({ key: null, results: [], error: null });
+  // Query svuotata: i risultati precedenti non devono riapparire alla ricerca successiva
+  // (aggiornamento durante il render, non in un effect).
+  if (!trimmed && (state.key !== null || state.results.length > 0 || state.error !== null)) {
+    setState({ key: null, results: [], error: null });
+  }
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestVersionRef = useRef(0);
@@ -15,32 +27,23 @@ export function useSearch(query: string, currency = 'usd') {
     if (timerRef.current) clearTimeout(timerRef.current);
     abortRef.current?.abort();
 
-    if (!query.trim()) {
-      setResults([]);
-      setSearching(false);
-      setError(null);
-      return;
-    }
-
-    setSearching(true);
+    if (!trimmed) return;
 
     timerRef.current = setTimeout(async () => {
       abortRef.current = new AbortController();
       const { signal } = abortRef.current;
 
       try {
-        const nextResults = await searchMarkets(query.trim(), currency, signal);
+        const nextResults = await searchMarkets(trimmed, currency, signal);
         if (requestVersion !== requestVersionRef.current) return;
-        setResults(nextResults);
-        setError(null);
+        setState({ key: searchKey, results: nextResults, error: null });
       } catch (err) {
         if (requestVersion !== requestVersionRef.current) return;
         if ((err as Error).name !== 'AbortError') {
-          setResults([]);
-          setError((err as Error).message || 'Market data search failed');
+          setState({ key: searchKey, results: [], error: (err as Error).message || 'Market data search failed' });
+        } else {
+          setState((previous) => ({ ...previous, key: searchKey }));
         }
-      } finally {
-        if (requestVersion === requestVersionRef.current) setSearching(false);
       }
     }, 400);
 
@@ -49,7 +52,14 @@ export function useSearch(query: string, currency = 'usd') {
       if (timerRef.current) clearTimeout(timerRef.current);
       abortRef.current?.abort();
     };
-  }, [query, currency]);
+  }, [trimmed, currency, searchKey]);
 
-  return { results, searching, error };
+  // Stato derivato: 'searching' dal momento in cui la query cambia fino alla risposta;
+  // con la query vuota non c'e' nulla da mostrare.
+  const active = trimmed !== '';
+  return {
+    results: active ? state.results : [],
+    searching: active && state.key !== searchKey,
+    error: active ? state.error : null,
+  };
 }

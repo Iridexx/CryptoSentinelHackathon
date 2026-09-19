@@ -31,7 +31,7 @@ const SmoothSlider: FC<SmoothSliderProps> = ({ value, onChange, markerAt }) => {
   };
 
   // Sincronizza React → DOM quando non si sta trascinando
-  useEffect(() => { if (!dragging.current) applyDOM(value); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!dragging.current) applyDOM(value); }, [value]);
 
   const pxToVal = (clientX: number): number => {
     const rect = trackRef.current!.getBoundingClientRect();
