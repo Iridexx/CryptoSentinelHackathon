@@ -113,21 +113,26 @@ export default function App() {
   const [snoozedBuild, setSnoozedBuild] = useState<string | null>(() =>
     localStorage.getItem('cs_snoozed_build')
   );
+  // Istante di riferimento per lo snooze: aggiornato alla scadenza, cosi' il render resta puro.
+  const [now, setNow] = useState(() => Date.now());
   const [snoozedUntil, setSnoozedUntil] = useState<number>(() =>
     Number(localStorage.getItem('cs_snoozed_until') ?? 0)
   );
 
   useEffect(() => {
     if (!snoozedUntil || Date.now() > snoozedUntil) return;
-    const t = setTimeout(() => setSnoozedUntil(0), snoozedUntil - Date.now());
+    const t = setTimeout(() => {
+      setNow(Date.now());
+      setSnoozedUntil(0);
+    }, snoozedUntil - Date.now());
     return () => clearTimeout(t);
   }, [snoozedUntil]);
 
   const isUpdateVisible = useMemo(() =>
     availableUpdate != null &&
     availableUpdate.buildNumber !== dismissedBuild &&
-    (snoozedBuild !== availableUpdate.buildNumber || Date.now() > snoozedUntil),
-    [availableUpdate, dismissedBuild, snoozedBuild, snoozedUntil]
+    (snoozedBuild !== availableUpdate.buildNumber || now > snoozedUntil),
+    [availableUpdate, dismissedBuild, snoozedBuild, snoozedUntil, now]
   );
 
   const handleIgnoreUpdate = useCallback(() => {
@@ -170,6 +175,8 @@ export default function App() {
       }, 15_000);
     }
   }, []);
+
+  const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
 
   useEffect(() => {
     const unsubscribeFavPush = subscribeFavoritePushAlerts(({ alert, openFavorites }) => {
@@ -247,7 +254,6 @@ export default function App() {
     localStorage.setItem(RANK_ANIM_KEY, String(n));
   }, []);
 
-  const [pendingFavAlerts, setPendingFavAlerts] = useState<Map<string, FavAlertData>>(new Map());
   const [selectedFavAlert, setSelectedFavAlert] = useState<FavAlertData | null>(null);
   const [chartCoin, setChartCoin] = useState<Coin | null>(null);
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem(ADMIN_TOKEN_KEY) ?? '');
@@ -266,7 +272,7 @@ export default function App() {
   });
   const [supportModeRequest, setSupportModeRequest] = useState<SupportMode>('user');
   const supportNoticeRef = useRef(supportNotice);
-  supportNoticeRef.current = supportNotice;
+  useEffect(() => { supportNoticeRef.current = supportNotice; }, [supportNotice]);
 
   // Mappa symbol → aiState: spot (blu) > perp long (verde) > perp short (rosso) > analysis (giallo) > inactive
   const aiStateMap = useMemo<Map<string, 'spot' | 'long' | 'short' | 'analysis' | 'inactive'>>(() => {
@@ -366,13 +372,14 @@ export default function App() {
   }, [adminToken]);
 
   useEffect(() => {
-    void refreshSupportNotice();
+    const first = window.setTimeout(() => { void refreshSupportNotice(); }, 0);
     const timer = window.setInterval(() => { if (!document.hidden) void refreshSupportNotice(); }, 60_000);
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refreshSupportNotice();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      window.clearTimeout(first);
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -490,12 +497,12 @@ export default function App() {
     }
 
     if (newDeltas.size === 0) {
-      setRankDeltas(new Map());
-      return;
+      const clear = setTimeout(() => setRankDeltas(new Map()), 0);
+      return () => clearTimeout(clear);
     }
-    setRankDeltas(newDeltas);
+    const apply = setTimeout(() => setRankDeltas(newDeltas), 0);
     const t = setTimeout(() => setRankDeltas(new Map()), 4000);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(apply); clearTimeout(t); };
   }, [coins, rankAnimTopN]);
 
   const { results: searchResults, searching, error: searchError } = useSearch(search, currency);
