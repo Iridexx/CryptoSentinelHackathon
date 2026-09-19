@@ -764,7 +764,11 @@ const NumberInput: FC<{
   onChange: (value: number) => void;
 }> = ({ label, value, step = 1, help, showHelp, onChange }) => {
   const [raw, setRaw] = useState(String(value));
-  useEffect(() => { setRaw(String(value)); }, [value]);
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setRaw(String(value));
+  }
   return (
     <label className="block">
       <span className="text-xs text-gray-500">{label}{showHelp && help && <HelpTip text={help} />}</span>
@@ -1872,9 +1876,9 @@ const SetupPane: FC<{
     setAsterError(null);
     try {
       setAsterReport(await testAsterConnection(adminToken));
-    } catch (err: any) {
+    } catch (err) {
       setAsterReport(null);
-      setAsterError(err?.message ?? 'Errore durante il test');
+      setAsterError(err instanceof Error && err.message ? err.message : 'Errore durante il test');
     } finally {
       setAsterState('idle');
     }
@@ -1883,17 +1887,21 @@ const SetupPane: FC<{
   const equityValid = equityInput.trim() !== '' && Number.isFinite(equityValue) && equityValue !== 0;
   const [setupTab, setSetupTab] = useState<SetupTab>('generale');
 
-  const [adminCheck, setAdminCheck] = useState<'idle' | 'checking' | 'valid' | 'invalid' | 'unreachable'>('idle');
+  // Esito dell'ultima verifica, legato al token verificato: se il token cambia (o manca)
+  // lo stato torna a 'checking' (o 'idle') senza dover impostare stato dentro l'effect.
+  const [adminResult, setAdminResult] = useState<{ token: string; status: 'valid' | 'invalid' | 'unreachable' } | null>(null);
+  const adminCheck: 'idle' | 'checking' | 'valid' | 'invalid' | 'unreachable' = !adminToken
+    ? 'idle'
+    : adminResult?.token === adminToken ? adminResult.status : 'checking';
   useEffect(() => {
-    if (!adminToken) { setAdminCheck('idle'); return; }
-    setAdminCheck('checking');
+    if (!adminToken) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
         const ok = await verifyAdminToken(adminToken);
-        if (!cancelled) setAdminCheck(ok ? 'valid' : 'invalid');
+        if (!cancelled) setAdminResult({ token: adminToken, status: ok ? 'valid' : 'invalid' });
       } catch {
-        if (!cancelled) setAdminCheck('unreachable');
+        if (!cancelled) setAdminResult({ token: adminToken, status: 'unreachable' });
       }
     }, 600);
     return () => { cancelled = true; window.clearTimeout(timer); };
@@ -3051,7 +3059,11 @@ const BankPane: FC<{ adminToken: string }> = ({ adminToken }) => {
     }
   }, []);
 
-  useEffect(() => { void load(); const id = window.setInterval(() => { void load(); }, 30_000); return () => window.clearInterval(id); }, [load]);
+  useEffect(() => {
+    const first = window.setTimeout(() => { void load(); }, 0);
+    const id = window.setInterval(() => { void load(); }, 30_000);
+    return () => { window.clearTimeout(first); window.clearInterval(id); };
+  }, [load]);
   useEffect(() => { fetchReserveHistory(range).then(setHistory).catch(() => {}); }, [range]);
 
   const runAction = useCallback(async (fn: () => Promise<unknown>) => {
@@ -3264,7 +3276,7 @@ const AgentTab: FC<AgentTabProps> = ({
   const [equity, setEquity] = useState<EquityCurveResponse | null>(agentCache.equity);
   const [equityRange, setEquityRange] = useState<EquityRange>(agentCache.equityRange);
   const equityRangeRef = useRef<EquityRange>(equityRange);
-  equityRangeRef.current = equityRange;
+  useEffect(() => { equityRangeRef.current = equityRange; }, [equityRange]);
   const [decisions, setDecisions] = useState<AgentDecisionResponse | null>(agentCache.decisions);
   const [assetBreakdown, setAssetBreakdown] = useState<AssetBreakdownResponse | null>(agentCache.assetBreakdown);
   const [tradeDetail, setTradeDetail] = useState<TradeDetail | null>(null);
@@ -3400,7 +3412,8 @@ const AgentTab: FC<AgentTabProps> = ({
   useEffect(() => {
     // Al primo mount in assoluto mostra l'indicatore; ai rientri (cache popolata)
     // aggiorna in silenzio mantenendo i valori precedenti.
-    refresh(agentCache.loaded);
+    const first = window.setTimeout(() => { void refresh(agentCache.loaded); }, 0);
+    return () => window.clearTimeout(first);
   }, [refresh]);
 
   useEffect(() => {
