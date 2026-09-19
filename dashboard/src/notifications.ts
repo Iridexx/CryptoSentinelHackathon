@@ -34,6 +34,10 @@ export function useNotifications(
   const [hasMore, setHasMore] = useState(true);
 
   const cursorRef = useRef<string | null>(null);
+  // Eventi gia' passati dalla dashboard: alla riconnessione dello stream (es. quando la
+  // scheda torna visibile) il backend puo' rimandare eventi gia' visti, che non devono
+  // diventare di nuovo toast.
+  const seenIdsRef = useRef<Set<string>>(new Set());
   // Stato (non ref): l'effect di stream/polling deve rieseguirsi quando il primo caricamento
   // finisce. Con un ref usciva subito, perche' letto prima che il caricamento fosse concluso,
   // e non ripartiva piu': nessuna notifica dal vivo fino al refresh della pagina.
@@ -46,11 +50,14 @@ export function useNotifications(
     toastPrefsRef.current = toastPrefs;
   }, [dnd, toastPrefs]);
 
-  const applyFresh = useCallback((fresh: FeedEventItem[], unread: number) => {
+  const applyFresh = useCallback((allFresh: FeedEventItem[], unread: number) => {
+    const seen = seenIdsRef.current;
+    const fresh = allFresh.filter((item) => !seen.has(item.event_id));
     if (fresh.length === 0) {
       setUnreadCount(unread);
       return;
     }
+    for (const item of fresh) seen.add(item.event_id);
     setItems(prev => {
       const existingIds = new Set(prev.map(i => i.event_id));
       const deduped = fresh.filter(i => !existingIds.has(i.event_id));
@@ -78,6 +85,7 @@ export function useNotifications(
     try {
       const res = await fetchFeed(session, { limit: 50 });
       setItems(res.items);
+      seenIdsRef.current = new Set(res.items.map((item) => item.event_id));
       setUnreadCount(res.unread_count);
       setHasMore(res.items.length >= 50);
       if (res.items.length > 0) {
@@ -108,10 +116,15 @@ export function useNotifications(
 
     const startSSE = () => {
       const base = normalizeBackendBaseUrl(session.baseUrl);
-      const since = cursorRef.current ? `?since=${encodeURIComponent(cursorRef.current)}` : '';
-      const url = `${base}/api/v1/notifications/feed/stream${since}`;
+      // Ricalcolato a ogni (ri)connessione: la libreria riusa l'URL iniziale e il backend
+      // rimanderebbe tutti gli eventi arrivati dopo il primo cursore.
+      const streamUrl = () => {
+        const since = cursorRef.current ? `?since=${encodeURIComponent(cursorRef.current)}` : '';
+        return `${base}/api/v1/notifications/feed/stream${since}`;
+      };
 
-      fetchEventSource(url, {
+      fetchEventSource(streamUrl(), {
+        fetch: (_input, init) => window.fetch(streamUrl(), init),
         signal: ctrl.signal,
         headers: {
           Authorization: `Bearer ${session.readToken}`,
