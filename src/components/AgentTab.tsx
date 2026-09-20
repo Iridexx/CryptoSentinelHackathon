@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FC } from 'react';
+import AxisZoomOverlay, { type Range } from './AxisZoomOverlay';
 import {
   fetchAgentSettings,
   fetchAgentStatus,
@@ -429,7 +430,11 @@ const EquityChart: FC<{
   const items = equity?.items ?? [];
   const n = items.length;
   const svgRef = useRef<SVGSVGElement>(null);
+  const clipId = useId().replace(/:/g, '');
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  // Zoom manuale trascinando sugli assi: null = scala automatica.
+  const [xSel, setXSel] = useState<Range | null>(null);
+  const [ySel, setYSel] = useState<Range | null>(null);
 
   const hasPortfolio = items.some((i) => i.portfolio_pnl_pct != null);
   const showPortfolio = view === 'portfolio' && hasPortfolio;
@@ -450,12 +455,17 @@ const EquityChart: FC<{
   if (lo === hi) { lo -= 1; hi += 1; }
   const padY = (hi - lo) * 0.12;
   lo -= padY; hi += padY;
+  const yFull: Range = [lo, hi];
+  if (ySel) [lo, hi] = ySel;
+  const xFull: Range = [0, Math.max(1, n - 1)];
+  const xWin = xSel ?? xFull;
 
   const W = 320, H = 170, padL = 40, padR = 14, padT = 10, padB = 22;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
-  const xAt = (idx: number) => (n <= 1 ? padL + plotW / 2 : padL + (idx / (n - 1)) * plotW);
+  const xAt = (idx: number) => (n <= 1 ? padL + plotW / 2 : padL + ((idx - xWin[0]) / (xWin[1] - xWin[0])) * plotW);
   const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
+  const zoomed = xSel != null || ySel != null;
   const y0 = yAt(0);
 
   const polyline = (vals: (number | null)[]) =>
@@ -494,8 +504,10 @@ const EquityChart: FC<{
     const rect = svg.getBoundingClientRect();
     if (rect.width === 0) return;
     const svgX = ((clientX - rect.left) / rect.width) * W;
-    const rawIdx = n <= 1 ? 0 : ((svgX - padL) / plotW) * (n - 1);
-    setHoverIdx(Math.max(0, Math.min(n - 1, Math.round(rawIdx))));
+    const rawIdx = n <= 1 ? 0 : xWin[0] + ((svgX - padL) / plotW) * (xWin[1] - xWin[0]);
+    const first = Math.max(0, Math.ceil(xWin[0] - 1e-6));
+    const last = Math.min(n - 1, Math.floor(xWin[1] + 1e-6));
+    setHoverIdx(Math.max(first, Math.min(last, Math.round(rawIdx))));
   };
   const handlePointerMove = (e: { clientX: number }) => {
     updateHoverFromClientX(e.clientX);
@@ -563,10 +575,11 @@ const EquityChart: FC<{
         <div className="py-6 text-center text-xs text-gray-500">Nessun dato nel periodo selezionato</div>
       ) : (
         <>
+          <div className="relative">
           <svg
             ref={svgRef}
             viewBox={`0 0 ${W} ${H}`}
-            className="w-full"
+            className="block w-full"
             style={{ height: 'auto', touchAction: 'none' }}
             role="img"
             aria-label="Curva PnL nel periodo"
@@ -581,6 +594,9 @@ const EquityChart: FC<{
                 <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.28" />
                 <stop offset="100%" stopColor={PNL_COLOR} stopOpacity="0" />
               </linearGradient>
+              <clipPath id={clipId}>
+                <rect x={padL} y={padT} width={plotW} height={plotH} />
+              </clipPath>
             </defs>
 
             {/* griglia + label Y */}
@@ -593,6 +609,7 @@ const EquityChart: FC<{
               </g>
             ))}
 
+            <g clipPath={`url(#${clipId})`}>
             {/* baseline 0% (breakeven) */}
             <line x1={padL} y1={y0} x2={W - padR} y2={y0} stroke="#9ca3af" strokeOpacity="0.5" strokeWidth="1" strokeDasharray="3 3" />
 
@@ -608,6 +625,7 @@ const EquityChart: FC<{
             {/* dot finali */}
             {hasBtc && lastBtc != null && <circle cx={xAt(n - 1)} cy={yAt(lastBtc)} r="3" fill={BTC_COLOR} />}
             {n > 0 && <circle cx={xAt(n - 1)} cy={yAt(lastPnl)} r="3.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1" />}
+            </g>
 
             {/* crosshair + tooltip (scrub col dito) */}
             {hovIdx != null && hovX != null && hovItem != null && (
@@ -634,10 +652,27 @@ const EquityChart: FC<{
               </g>
             )}
           </svg>
+          <AxisZoomOverlay
+            geom={{ W, H, plotL: padL, plotR: W - padR, plotT: padT, plotB: H - padB }}
+            yDom={[lo, hi]}
+            yFull={yFull}
+            onY={setYSel}
+            xWin={xWin}
+            xFull={xFull}
+            xMinSpan={3}
+            onX={setXSel}
+            yAxis="left"
+          />
+          </div>
 
-          <div className="flex justify-between px-1 text-[10px] text-gray-500">
-            <span>{fmtX(items[0].timestamp_utc)}</span>
-            <span>{fmtX(items[n - 1].timestamp_utc)}</span>
+          <div className="flex items-center justify-between px-1 text-[10px] text-gray-500">
+            <span>{fmtX(items[Math.min(n - 1, Math.max(0, Math.ceil(xWin[0] - 1e-6)))].timestamp_utc)}</span>
+            {zoomed && (
+              <button onClick={() => { setXSel(null); setYSel(null); }} className="font-semibold text-accent-blue">
+                ↺ Ripristina zoom
+              </button>
+            )}
+            <span>{fmtX(items[Math.max(0, Math.min(n - 1, Math.floor(xWin[1] + 1e-6)))].timestamp_utc)}</span>
           </div>
         </>
       )}
@@ -2598,6 +2633,10 @@ const TradeCandleChart: FC<{
   breakeven?: string | null;
   trailing?: string | null;
 }> = ({ chart, breakeven, trailing }) => {
+  const clipId = useId();
+  // Zoom manuale trascinando sugli assi: null = scala automatica.
+  const [xSel, setXSel] = useState<Range | null>(null);
+  const [ySel, setYSel] = useState<Range | null>(null);
   const candles = chart.candles ?? [];
   const postClose = chart.post_close_candles ?? [];
   const allCandles = [...candles, ...postClose];
@@ -2605,7 +2644,7 @@ const TradeCandleChart: FC<{
     return <p className="text-xs text-gray-500">Grafico non disponibile per questo trade.</p>;
   }
   // Geometria: area di plot + margine destro per i prezzi (Y) e inferiore per gli orari (X).
-  const W = Math.max(340, allCandles.length * 8 + 58);
+  const W = 340;
   const H = 200;
   const padX = 6;
   const padTop = 10;
@@ -2625,10 +2664,17 @@ const TradeCandleChart: FC<{
   let hi = Math.max(...allCandles.map((c) => c.h), ...levels);
   let lo = Math.min(...allCandles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
-  const range = hi - lo;
-  const y = (price: number) => padTop + (1 - (price - lo) / range) * (plotB - padTop);
-  const colW = (plotR - padX) / allCandles.length;
-  const cx = (i: number) => padX + colW * (i + 0.5);
+  const yFull: Range = [lo, hi];
+  const [vLo, vHi] = ySel ?? yFull;
+  const range = vHi - vLo;
+  const y = (price: number) => padTop + (1 - (price - vLo) / range) * (plotB - padTop);
+  const xFull: Range = [0, allCandles.length];
+  const xWin = xSel ?? xFull;
+  const colW = (plotR - padX) / (xWin[1] - xWin[0]);
+  const cx = (i: number) => padX + colW * (i + 0.5 - xWin[0]);
+  const zoomed = xSel != null || ySel != null;
+  const firstVis = Math.max(0, Math.floor(xWin[0]) - 1);
+  const lastVis = Math.min(allCandles.length - 1, Math.ceil(xWin[1]) + 1);
 
   // Marker temporali: candela piu' vicina ad apertura/chiusura sull'intero grafico.
   const ts = (s: string) => new Date(s).getTime();
@@ -2656,18 +2702,22 @@ const TradeCandleChart: FC<{
     if (p >= 0.01) return p.toFixed(4);
     return p.toPrecision(3);
   };
-  const yTicks = [0, 1, 2, 3, 4].map((k) => lo + (range * k) / 4);
+  const yTicks = [0, 1, 2, 3, 4].map((k) => vLo + (range * k) / 4);
 
-  // Etichette asse X (orario).
-  const spanMs = ts(allCandles[allCandles.length - 1].t) - ts(allCandles[0].t);
+  // Etichette asse X (orario): calcolate sulla porzione visibile.
+  const spanMs = ts(allCandles[lastVis].t) - ts(allCandles[firstVis].t);
   const fmtAxisTime = (iso: string) => {
     const d = new Date(iso);
     return spanMs > 24 * 3600 * 1000
       ? d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
       : d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
   };
-  const last = allCandles.length - 1;
-  const xTickIdx = [0, Math.round(last / 3), Math.round((2 * last) / 3), last];
+  const visLo = Math.max(0, Math.ceil(xWin[0] - 0.5));
+  const visHi = Math.min(allCandles.length - 1, Math.floor(xWin[1] - 0.5));
+  const visSpan = Math.max(0, visHi - visLo);
+  const xTickIdx = visSpan < 3
+    ? Array.from({ length: visSpan + 1 }, (_, k) => visLo + k)
+    : [0, 1, 2, 3].map((k) => visLo + Math.round((visSpan * k) / 3));
 
   const levelLine = (price: number | null, color: string, dash: string) =>
     price == null || Number.isNaN(price) ? null : (
@@ -2696,9 +2746,18 @@ const TradeCandleChart: FC<{
   // Linea verticale tratteggiata subito dopo la candela di chiusura.
   const closeLineX = postClose.length > 0 ? cx(exitIdx + 0.5) : null;
 
+  const clip = clipId.replace(/:/g, '');
+  const closeRectX = closeLineX != null ? Math.max(closeLineX, padX) : null;
+
   return (
-    <div className="overflow-x-auto pb-1">
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: `${W}px`, minWidth: '100%', height: 'auto' }}>
+    <div className="pb-1">
+    <div className="relative">
+    <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ height: 'auto' }}>
+      <defs>
+        <clipPath id={clip}>
+          <rect x={padX} y={padTop} width={plotR - padX} height={plotB - padTop} />
+        </clipPath>
+      </defs>
       {/* griglia + etichette asse Y */}
       {yTicks.map((p, k) => (
         <g key={`yt${k}`}>
@@ -2722,12 +2781,14 @@ const TradeCandleChart: FC<{
           {fmtAxisTime(allCandles[i].t)}
         </text>
       ))}
+      <g clipPath={`url(#${clip})`}>
       {/* sfondo post-close */}
-      {closeLineX != null && (
-        <rect x={closeLineX} y={padTop} width={plotR - closeLineX} height={plotB - padTop} fill="#111827" opacity="0.4" />
+      {closeRectX != null && plotR > closeRectX && (
+        <rect x={closeRectX} y={padTop} width={plotR - closeRectX} height={plotB - padTop} fill="#111827" opacity="0.4" />
       )}
       {/* Candles outside the active trade window are contextual and muted. */}
       {allCandles.map((c, i) => {
+        if (i < firstVis || i > lastVis) return null;
         const isPost = i >= candles.length;
         const isPreEntry = i < entryIdx;
         const up = c.c >= c.o;
@@ -2735,7 +2796,7 @@ const TradeCandleChart: FC<{
         const opacity = isPost || isPreEntry ? 0.55 : 1;
         const bodyTop = y(Math.max(c.o, c.c));
         const bodyBot = y(Math.min(c.o, c.c));
-        const bw = Math.max(1, colW * 0.6);
+        const bw = Math.min(14, Math.max(1, colW * 0.6));
         return (
           <g key={i} opacity={opacity}>
             <line x1={cx(i)} x2={cx(i)} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth="1" />
@@ -2765,7 +2826,28 @@ const TradeCandleChart: FC<{
       {/* marker ingresso/uscita */}
       <circle cx={cx(entryIdx)} cy={y(entry)} r="3.5" fill="#e5e7eb" stroke="#0b0e11" strokeWidth="1" />
       <circle cx={cx(exitIdx)} cy={y(exit)} r="3.5" fill={exitGood ? '#22c55e' : '#ef4444'} stroke="#0b0e11" strokeWidth="1" />
+      </g>
     </svg>
+    <AxisZoomOverlay
+      geom={{ W, H, plotL: padX, plotR, plotT: padTop, plotB }}
+      yDom={[vLo, vHi]}
+      yFull={yFull}
+      onY={setYSel}
+      xWin={xWin}
+      xFull={xFull}
+      xMinSpan={5}
+      onX={setXSel}
+      pan
+    />
+    </div>
+    {zoomed && (
+      <button
+        onClick={() => { setXSel(null); setYSel(null); }}
+        className="mt-1 text-[10px] font-semibold text-accent-blue"
+      >
+        ↺ Ripristina zoom
+      </button>
+    )}
     </div>
   );
 };
@@ -2998,6 +3080,10 @@ const BankChart: FC<{
   history: ReserveHistoryResponse | null;
   mode: 'pct' | 'usd';
 }> = ({ history, mode }) => {
+  const clipId = useId().replace(/:/g, '');
+  // Zoom manuale trascinando sugli assi: null = scala automatica.
+  const [xSel, setXSel] = useState<Range | null>(null);
+  const [ySel, setYSel] = useState<Range | null>(null);
   const items = history?.items ?? [];
   if (items.length < 2) {
     return <div className="py-6 text-center text-xs text-gray-500">Storico insufficiente per il grafico</div>;
@@ -3021,32 +3107,63 @@ const BankChart: FC<{
   let hi = pool.length ? Math.max(...pool) : 1;
   if (lo === hi) { lo -= 1; hi += 1; }
   const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const yFull: Range = [lo, hi];
+  if (ySel) [lo, hi] = ySel;
+  const xFull: Range = [0, n - 1];
+  const xWin = xSel ?? xFull;
+  const zoomed = xSel != null || ySel != null;
 
-  const xAt = (idx: number) => (n <= 1 ? padL + plotW / 2 : padL + (idx / (n - 1)) * plotW);
+  const xAt = (idx: number) => padL + ((idx - xWin[0]) / (xWin[1] - xWin[0])) * plotW;
   const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
   const poly = (vals: (number | null)[]) =>
     vals.map((v, i) => (v == null ? null : `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`)).filter(Boolean).join(' ');
 
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }} role="img" aria-label="Andamento riserva">
-        {mode === 'pct' && (
-          <line x1={padL} y1={yAt(0)} x2={W - padR} y2={yAt(0)} stroke="#9ca3af" strokeOpacity="0.4" strokeDasharray="3 3" />
-        )}
+      <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" style={{ height: 'auto' }} role="img" aria-label="Andamento riserva">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={padL} y={padT} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
         {[hi, (hi + lo) / 2, lo].map((v, i) => (
           <text key={i} x={padL - 4} y={yAt(v) + 3} textAnchor="end" fontSize="10" fill="#9ca3af">
             {mode === 'usd' ? `$${v.toFixed(0)}` : `${v.toFixed(1)}%`}
           </text>
         ))}
+        <g clipPath={`url(#${clipId})`}>
+        {mode === 'pct' && (
+          <line x1={padL} y1={yAt(0)} x2={W - padR} y2={yAt(0)} stroke="#9ca3af" strokeOpacity="0.4" strokeDasharray="3 3" />
+        )}
         {series.map((s) => {
           const pts = poly(s.vals);
           return pts ? <polyline key={s.key} points={pts} fill="none" stroke={s.color} strokeWidth={s.key === 'r' || s.key === 'v' ? 2.6 : 2} strokeLinejoin="round" strokeLinecap="round" /> : null;
         })}
+        </g>
       </svg>
+      <AxisZoomOverlay
+        geom={{ W, H, plotL: padL, plotR: W - padR, plotT: padT, plotB: H - padB }}
+        yDom={[lo, hi]}
+        yFull={yFull}
+        onY={setYSel}
+        xWin={xWin}
+        xFull={xFull}
+        xMinSpan={3}
+        onX={setXSel}
+        pan
+        yAxis="left"
+      />
+      </div>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
         {series.map((s) => (
           <span key={s.key}><span style={{ color: s.color }}>●</span> {s.label}</span>
         ))}
+        {zoomed && (
+          <button onClick={() => { setXSel(null); setYSel(null); }} className="ml-auto font-semibold text-accent-blue">
+            ↺ Ripristina zoom
+          </button>
+        )}
       </div>
     </div>
   );

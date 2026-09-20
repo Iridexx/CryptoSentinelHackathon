@@ -148,8 +148,15 @@ const CoinChartSheet: FC<Props> = ({
           timeVisible: DAYS[tf] <= 7,
           secondsVisible: false,
         },
-        handleScroll: false,
-        handleScale: false,
+        // Trascinando sugli assi: prezzo (su = zoom, giu = riduzione) e tempo. Doppio tap = reset.
+        // Scroll orizzontale abilitato per potersi muovere nel tempo dopo lo zoom.
+        handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: {
+          mouseWheel: false,
+          pinch: false,
+          axisPressedMouseMove: { time: true, price: true },
+          axisDoubleClickReset: { time: true, price: true },
+        },
         width: w,
         height: h,
       });
@@ -351,7 +358,13 @@ const CoinChartSheet: FC<Props> = ({
           </div>
 
           {/* Chart container */}
-          <div className="mx-5 rounded-xl overflow-hidden bg-[#0f1929] relative" style={{ height: 220 }}>
+          {/* I tocchi sul grafico non devono innescare lo swipe-down che chiude la sheet. */}
+          <div
+            className="mx-5 rounded-xl overflow-hidden bg-[#0f1929] relative"
+            style={{ height: 220 }}
+            onTouchStart={e => e.stopPropagation()}
+            onTouchEnd={e => e.stopPropagation()}
+          >
             <div ref={containerRef} className="w-full h-full" />
             {(loading || error) && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0f1929]">
