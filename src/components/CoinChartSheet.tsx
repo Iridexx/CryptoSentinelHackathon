@@ -150,7 +150,7 @@ const CoinChartSheet: FC<Props> = ({
         },
         // Trascinando sugli assi: prezzo (su = zoom, giu = riduzione) e tempo. Doppio tap = reset.
         // Scroll orizzontale abilitato per potersi muovere nel tempo dopo lo zoom.
-        handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+        handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
         handleScale: {
           mouseWheel: false,
           pinch: false,

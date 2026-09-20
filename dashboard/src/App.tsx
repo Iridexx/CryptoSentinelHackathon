@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   addExecutionWallet,
@@ -58,6 +58,7 @@ import {
 } from './api';
 import { useNotifications } from './notifications';
 import NotificationsPanel from './NotificationsPanel';
+import AxisZoomOverlay, { type Range } from './AxisZoomOverlay';
 import ToastHost from './ToastHost';
 import type {
   AgentDecisionResponse,
@@ -1004,6 +1005,10 @@ const BANK_ERROR_LABELS: Record<string, string> = {
 };
 
 function ReserveBenchmarkChart({ history, mode }: { history: ReserveHistoryResponse | null; mode: 'pct' | 'usd' }) {
+  const clipId = useId().replace(/:/g, '');
+  // Zoom manuale trascinando sugli assi: null = scala automatica.
+  const [xSel, setXSel] = useState<Range | null>(null);
+  const [ySel, setYSel] = useState<Range | null>(null);
   const items = history?.items ?? [];
   if (items.length < 2) {
     return <p className="muted">Storico insufficiente per il grafico (servono almeno 2 snapshot).</p>;
@@ -1027,24 +1032,41 @@ function ReserveBenchmarkChart({ history, mode }: { history: ReserveHistoryRespo
   let hi = pool.length ? Math.max(...pool) : 1;
   if (lo === hi) { lo -= 1; hi += 1; }
   const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const yFull: Range = [lo, hi];
+  if (ySel) [lo, hi] = ySel;
+  const xFull: Range = [0, n - 1];
+  const xWin = xSel ?? xFull;
+  const zoomed = xSel != null || ySel != null;
 
-  const xAt = (idx: number) => (n <= 1 ? padL + plotW / 2 : padL + (idx / (n - 1)) * plotW);
+  const xAt = (idx: number) => padL + ((idx - xWin[0]) / (xWin[1] - xWin[0])) * plotW;
   const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
   const poly = (vals: (number | null)[]) =>
     vals.map((v, i) => (v == null ? null : `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`)).filter(Boolean).join(' ');
 
   const fmtY = (v: number) => (mode === 'usd' ? `$${v.toFixed(0)}` : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`);
-  const xIdxs = n <= 4 ? items.map((_, i) => i) : [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
+  const visLo = Math.max(0, Math.ceil(xWin[0] - 1e-6));
+  const visHi = Math.min(n - 1, Math.floor(xWin[1] + 1e-6));
+  const visSpan = Math.max(0, visHi - visLo);
+  const xIdxs = visSpan < 3
+    ? Array.from({ length: visSpan + 1 }, (_, k) => visLo + k)
+    : [0, 1, 2, 3].map((k) => visLo + Math.round((visSpan * k) / 3));
 
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="Andamento riserva vs benchmark">
+      <div style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', height: 'auto' }} role="img" aria-label="Andamento riserva vs benchmark">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={padL} y={padT} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
         {[hi, (hi + lo) / 2, lo].map((v, i) => (
           <g key={i}>
             <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke="#ffffff" strokeOpacity="0.07" />
             <text x={padL - 5} y={yAt(v) + 3} textAnchor="end" fontSize="9" fill="#6b7280">{fmtY(v)}</text>
           </g>
         ))}
+        <g clipPath={`url(#${clipId})`}>
         {mode === 'pct' && lo < 0 && hi > 0 && (
           <line x1={padL} y1={yAt(0)} x2={W - padR} y2={yAt(0)} stroke="#9ca3af" strokeOpacity="0.5" strokeDasharray="4 3" />
         )}
@@ -1054,16 +1076,35 @@ function ReserveBenchmarkChart({ history, mode }: { history: ReserveHistoryRespo
             <polyline key={s.key} points={pts} fill="none" stroke={s.color} strokeWidth={s.wide ? 2.2 : 1.6} strokeLinejoin="round" strokeLinecap="round" />
           ) : null;
         })}
+        </g>
         {xIdxs.map((idx) => (
           <text key={idx} x={xAt(idx)} y={H - 5} textAnchor="middle" fontSize="9" fill="#6b7280">
             {new Date(items[idx].timestamp_utc).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}
           </text>
         ))}
       </svg>
+      <AxisZoomOverlay
+        geom={{ W, H, plotL: padL, plotR: W - padR, plotT: padT, plotB: H - padB }}
+        yDom={[lo, hi]}
+        yFull={yFull}
+        onY={setYSel}
+        xWin={xWin}
+        xFull={xFull}
+        xMinSpan={3}
+        onX={setXSel}
+        pan
+        yAxis="left"
+      />
+      </div>
       <div className="equity-legend" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
         {series.map((s) => (
           <span key={s.key}><span style={{ color: s.color }}>●</span> {s.label}</span>
         ))}
+        {zoomed && (
+          <button style={{ marginLeft: 'auto', background: 'none', border: 'none', padding: 0, color: '#3B82F6', cursor: 'pointer', fontWeight: 600 }} onClick={() => { setXSel(null); setYSel(null); }}>
+            ↺ Ripristina zoom
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1648,13 +1689,17 @@ function AnalyticsPanel({
 }
 
 function TradeCandleChart({ chart }: { chart: TradeChart }) {
+  const clipId = useId().replace(/:/g, '');
+  // Zoom manuale trascinando sugli assi: null = scala automatica.
+  const [xSel, setXSel] = useState<Range | null>(null);
+  const [ySel, setYSel] = useState<Range | null>(null);
   const candles = chart.candles ?? [];
   const postClose = chart.post_close_candles ?? [];
   const allCandles = [...candles, ...postClose];
   if (allCandles.length < 2) {
     return <p className="muted">Grafico non disponibile per questo trade.</p>;
   }
-  const W = Math.max(520, allCandles.length * 8 + 64);
+  const W = 720;
   const H = 230;
   const padL = 8;
   const padR = 48;
@@ -1672,10 +1717,17 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
   let hi = Math.max(...allCandles.map((c) => c.h), ...levels);
   let lo = Math.min(...allCandles.map((c) => c.l), ...levels);
   if (hi === lo) { hi += 1; lo -= 1; }
-  const range = hi - lo;
-  const y = (price: number) => padT + (1 - (price - lo) / range) * plotH;
-  const colW = plotW / allCandles.length;
-  const cx = (i: number) => padL + colW * (i + 0.5);
+  const yFull: Range = [lo, hi];
+  const [vLo, vHi] = ySel ?? yFull;
+  const range = vHi - vLo;
+  const y = (price: number) => padT + (1 - (price - vLo) / range) * plotH;
+  const xFull: Range = [0, allCandles.length];
+  const xWin = xSel ?? xFull;
+  const colW = plotW / (xWin[1] - xWin[0]);
+  const cx = (i: number) => padL + colW * (i + 0.5 - xWin[0]);
+  const zoomed = xSel != null || ySel != null;
+  const firstVis = Math.max(0, Math.floor(xWin[0]) - 1);
+  const lastVis = Math.min(allCandles.length - 1, Math.ceil(xWin[1]) + 1);
 
   const ts = (s: string) => new Date(s).getTime();
   const nearest = (target: number, pool: typeof allCandles) => {
@@ -1726,19 +1778,31 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
     if (a >= 0.01) return v.toFixed(4);
     return v.toExponential(1);
   };
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => lo + range * f);
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => vLo + range * f);
   const fmtClock = (s: string) => new Date(s).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  const last = allCandles.length - 1;
-  const xTickIdx = last <= 3
-    ? allCandles.map((_, i) => i)
-    : [0, Math.floor(last / 3), Math.floor((2 * last) / 3), last];
+  // Orari sull'asse X: solo sulla porzione visibile.
+  const visLo = Math.max(0, Math.ceil(xWin[0] - 0.5));
+  const visHi = Math.min(allCandles.length - 1, Math.floor(xWin[1] - 0.5));
+  const visSpan = Math.max(0, visHi - visLo);
+  const xTickIdx = visSpan < 3
+    ? Array.from({ length: visSpan + 1 }, (_, k) => visLo + k)
+    : [0, 1, 2, 3].map((k) => visLo + Math.round((visSpan * k) / 3));
+  const firstTick = xTickIdx[0];
+  const lastTick = xTickIdx[xTickIdx.length - 1];
 
   // Linea verticale subito dopo la candela di chiusura.
-  const closeLineX = postClose.length > 0 ? padL + colW * (exitIdx + 1) : null;
+  const closeLineX = postClose.length > 0 ? padL + colW * (exitIdx + 1 - xWin[0]) : null;
+  const closeRectX = closeLineX != null ? Math.max(closeLineX, padL) : null;
 
   return (
-    <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: `${W}px`, minWidth: '100%', height: 'auto' }}>
+    <div style={{ paddingBottom: 4 }}>
+    <div style={{ position: 'relative' }}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', width: '100%', height: 'auto' }}>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={padL} y={padT} width={plotW} height={plotH} />
+        </clipPath>
+      </defs>
       {/* griglia + prezzo (Y) a destra */}
       {yTicks.map((p, i) => (
         <g key={`y${i}`}>
@@ -1746,19 +1810,21 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
           <text x={W - padR + 4} y={y(p) + 3} fontSize="8" fill="#6b7280">{axisPrice(p)}</text>
         </g>
       ))}
+      <g clipPath={`url(#${clipId})`}>
       {/* sfondo post-close */}
-      {closeLineX != null && (
-        <rect x={closeLineX} y={padT} width={W - padR - closeLineX} height={plotH} fill="#111827" opacity="0.45" />
+      {closeRectX != null && W - padR > closeRectX && (
+        <rect x={closeRectX} y={padT} width={W - padR - closeRectX} height={plotH} fill="#111827" opacity="0.45" />
       )}
       {/* candele */}
       {allCandles.map((c, i) => {
+        if (i < firstVis || i > lastVis) return null;
         const isPost = i >= candles.length;
         const isPreEntry = i < entryIdx;
         const up = c.c >= c.o;
         const color = isPost ? (up ? '#166534' : '#7f1d1d') : (up ? '#22c55e' : '#ef4444');
         const bodyTop = y(Math.max(c.o, c.c));
         const bodyBot = y(Math.min(c.o, c.c));
-        const bw = Math.max(1, colW * 0.6);
+        const bw = Math.min(16, Math.max(1, colW * 0.6));
         return (
           <g key={i} opacity={isPost || isPreEntry ? 0.55 : 1}>
             <line x1={cx(i)} x2={cx(i)} y1={y(c.h)} y2={y(c.l)} stroke={color} strokeWidth="1" />
@@ -1785,6 +1851,7 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
       {levelLine(entry, '#9ca3af', '1 0')}
       <circle cx={cx(entryIdx)} cy={y(entry)} r="4" fill="#e5e7eb" stroke="#0b0e11" strokeWidth="1" />
       <circle cx={cx(exitIdx)} cy={y(exit)} r="4" fill={exitGood ? '#22c55e' : '#ef4444'} stroke="#0b0e11" strokeWidth="1" />
+      </g>
       {/* orario (X) in basso */}
       {xTickIdx.map((idx) => (
         <text
@@ -1793,12 +1860,29 @@ function TradeCandleChart({ chart }: { chart: TradeChart }) {
           y={H - 6}
           fontSize="8"
           fill="#6b7280"
-          textAnchor={idx === 0 ? 'start' : idx === last ? 'end' : 'middle'}
+          textAnchor={idx === firstTick && xTickIdx.length > 1 ? 'start' : idx === lastTick && xTickIdx.length > 1 ? 'end' : 'middle'}
         >
           {fmtClock(allCandles[idx].t)}
         </text>
       ))}
     </svg>
+    <AxisZoomOverlay
+      geom={{ W, H, plotL: padL, plotR: W - padR, plotT: padT, plotB: padT + plotH }}
+      yDom={[vLo, vHi]}
+      yFull={yFull}
+      onY={setYSel}
+      xWin={xWin}
+      xFull={xFull}
+      xMinSpan={5}
+      onX={setXSel}
+      pan
+    />
+    </div>
+    {zoomed && (
+      <button style={{ marginTop: 4, fontSize: 11, background: 'none', border: 'none', padding: 0, color: '#3B82F6', cursor: 'pointer', fontWeight: 600 }} onClick={() => { setXSel(null); setYSel(null); }}>
+        ↺ Ripristina zoom
+      </button>
+    )}
     </div>
   );
 }
@@ -3366,6 +3450,10 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
   const n = points.length;
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const clipId = useId().replace(/:/g, '');
+  // Zoom manuale trascinando sugli assi: null = scala automatica.
+  const [xSel, setXSel] = useState<Range | null>(null);
+  const [ySel, setYSel] = useState<Range | null>(null);
   if (n < 2) return <p className="muted">Dati insufficienti per il grafico.</p>;
 
   const PNL_COLOR = '#F0B90B';
@@ -3382,8 +3470,13 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
   if (lo === hi) { lo -= 1; hi += 1; }
   const pad = (hi - lo) * 0.12;
   lo -= pad; hi += pad;
+  const yFull: Range = [lo, hi];
+  if (ySel) [lo, hi] = ySel;
+  const xFull: Range = [0, n - 1];
+  const xWin = xSel ?? xFull;
+  const zoomed = xSel != null || ySel != null;
 
-  const xAt = (i: number) => padL + (i / (n - 1)) * plotW;
+  const xAt = (i: number) => padL + ((i - xWin[0]) / (xWin[1] - xWin[0])) * plotW;
   const yAt = (v: number) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
   const y0 = yAt(0);
 
@@ -3397,19 +3490,24 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
     ` L ${xAt(n - 1).toFixed(1)},${y0.toFixed(1)} Z`;
 
   const gridVals = [hi, (hi + lo) / 2, lo];
-  const xIdxs = n <= 4 ? points.map((_, i) => i) : [0, Math.floor(n / 3), Math.floor((2 * n) / 3), n - 1];
+  const visLo = Math.max(0, Math.ceil(xWin[0] - 1e-6));
+  const visHi = Math.min(n - 1, Math.floor(xWin[1] + 1e-6));
+  const visSpan = Math.max(0, visHi - visLo);
+  const xIdxs = visSpan < 3
+    ? Array.from({ length: visSpan + 1 }, (_, k) => visLo + k)
+    : [0, 1, 2, 3].map((k) => visLo + Math.round((visSpan * k) / 3));
   const lastPct = vals[n - 1];
 
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const updateHover = (clientX: number | null) => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (clientX == null || !svg) { setHoverIdx(null); return; }
     const rect = svg.getBoundingClientRect();
     const scaleX = W / rect.width;
-    const svgX = (e.clientX - rect.left) * scaleX;
-    const rawIdx = (svgX - padL) / plotW * (n - 1);
-    const idx = Math.max(0, Math.min(n - 1, Math.round(rawIdx)));
-    setHoverIdx(idx);
+    const svgX = (clientX - rect.left) * scaleX;
+    const rawIdx = xWin[0] + (svgX - padL) / plotW * (xWin[1] - xWin[0]);
+    setHoverIdx(Math.max(visLo, Math.min(visHi, Math.round(rawIdx))));
   };
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => updateHover(e.clientX);
 
   const hov = hoverIdx !== null ? points[hoverIdx] : null;
   const hovX = hoverIdx !== null ? xAt(hoverIdx) : null;
@@ -3419,10 +3517,12 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
   const tooltipLeft = hovX !== null && hovX > W * 0.65;
 
   return (
+    <div>
+    <div style={{ position: 'relative' }}>
     <svg
       ref={svgRef}
       viewBox={`0 0 ${W} ${H}`}
-      style={{ width: '100%', height: 'auto', cursor: 'crosshair' }}
+      style={{ display: 'block', width: '100%', height: 'auto', cursor: 'crosshair' }}
       role="img"
       aria-label="Equity curve"
       onMouseMove={handleMouseMove}
@@ -3433,6 +3533,9 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
           <stop offset="0%" stopColor={PNL_COLOR} stopOpacity="0.25" />
           <stop offset="100%" stopColor={PNL_COLOR} stopOpacity="0" />
         </linearGradient>
+        <clipPath id={clipId}>
+          <rect x={padL} y={padT} width={plotW} height={plotH} />
+        </clipPath>
       </defs>
       {gridVals.map((v, i) => (
         <g key={i}>
@@ -3442,11 +3545,13 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
           </text>
         </g>
       ))}
+      <g clipPath={`url(#${clipId})`}>
       <line x1={padL} y1={y0} x2={W - padR} y2={y0} stroke="#9ca3af" strokeOpacity="0.5" strokeWidth="1" strokeDasharray="4 3" />
       <path d={areaPath} fill="url(#dashPnlFill)" />
       {btcLine && <polyline points={btcLine} fill="none" stroke={BTC_COLOR} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />}
       <polyline points={pnlLine} fill="none" stroke={PNL_COLOR} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       <circle cx={xAt(n - 1)} cy={yAt(lastPct)} r="3.5" fill={PNL_COLOR} stroke="#0b0e14" strokeWidth="1.5" />
+      </g>
       {xIdxs.map((idx) => (
         <text key={idx} x={xAt(idx)} y={H - 4} textAnchor="middle" fontSize="9" fill="#6b7280">
           {points[idx].label}
@@ -3474,6 +3579,26 @@ function EquityLineChart({ points }: { points: { pct: number; label: string; equ
         </g>
       )}
     </svg>
+    <AxisZoomOverlay
+      geom={{ W, H, plotL: padL, plotR: W - padR, plotT: padT, plotB: H - padB }}
+      yDom={[lo, hi]}
+      yFull={yFull}
+      onY={setYSel}
+      xWin={xWin}
+      xFull={xFull}
+      xMinSpan={3}
+      onX={setXSel}
+      onHover={updateHover}
+      pan
+      yAxis="left"
+    />
+    </div>
+    {zoomed && (
+      <button style={{ marginTop: 4, fontSize: 11, background: 'none', border: 'none', padding: 0, color: '#3B82F6', cursor: 'pointer', fontWeight: 600 }} onClick={() => { setXSel(null); setYSel(null); }}>
+        ↺ Ripristina zoom
+      </button>
+    )}
+    </div>
   );
 }
 
