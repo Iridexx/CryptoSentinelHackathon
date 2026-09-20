@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
 from backend.app.core.config import Settings
+from backend.app.data.market_data.aliases import coingecko_id_for_app_id
 from backend.app.data.market_data.base import (
     AssetIdentity,
     MarketAsset,
@@ -18,6 +20,10 @@ from backend.app.data.market_data.base import (
     ProviderRuntimeStatus,
 )
 from backend.app.data.market_data.http import CachedHttpProvider
+
+
+def _identity_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
 def _timestamp_ms(value: int | float) -> datetime:
@@ -46,27 +52,68 @@ class CoinGeckoProvider(CachedHttpProvider, MarketDataProvider):
         del identity_hints
         if not asset_ids:
             return []
+        provider_ids = [coingecko_id_for_app_id(asset_id) for asset_id in asset_ids]
         payload = await self._request_json(
             "/coins/markets",
             params={
                 "vs_currency": "usd",
-                "ids": ",".join(asset_ids),
+                "ids": ",".join(provider_ids),
                 "order": "market_cap_desc",
-                "per_page": min(len(asset_ids), 250),
+                "per_page": min(len(provider_ids), 250),
                 "page": 1,
                 "sparkline": "false",
             },
             cache_ttl_seconds=86_400,
         )
-        return [
-            AssetIdentity(
-                app_id=str(item["id"]),
-                provider_id=str(item["id"]),
-                symbol=str(item.get("symbol", "")).upper(),
-                name=str(item.get("name", item["id"])),
+        found = {str(item["id"]): item for item in payload}
+        identities: list[AssetIdentity] = []
+        for asset_id, provider_id in zip(asset_ids, provider_ids):
+            item = found.get(provider_id)
+            if item is None:
+                continue
+            identities.append(
+                AssetIdentity(
+                    app_id=asset_id,
+                    provider_id=provider_id,
+                    symbol=str(item.get("symbol", "")).upper(),
+                    name=str(item.get("name", provider_id)),
+                )
             )
-            for item in payload
+        resolved = {identity.app_id for identity in identities}
+        for asset_id in asset_ids:
+            if asset_id not in resolved:
+                identity = await self._search_identity(asset_id)
+                if identity is not None:
+                    identities.append(identity)
+        return identities
+
+    async def _search_identity(self, asset_id: str) -> AssetIdentity | None:
+        """Resolve an ID unknown to CoinGecko (e.g. a CMC slug) by exact name match.
+
+        Only a name equal to the slug is accepted, so a fuzzy hit never maps an
+        alert onto the wrong asset; among homonyms the best-ranked one wins.
+        """
+
+        wanted = _identity_key(asset_id)
+        payload = await self._request_json(
+            "/search",
+            params={"query": asset_id.replace("-", " ")},
+            cache_ttl_seconds=86_400,
+        )
+        candidates = [
+            coin
+            for coin in payload.get("coins", [])
+            if _identity_key(str(coin.get("name", ""))) == wanted
         ]
+        if not candidates:
+            return None
+        best = min(candidates, key=lambda coin: coin.get("market_cap_rank") or 10**9)
+        return AssetIdentity(
+            app_id=asset_id,
+            provider_id=str(best["id"]),
+            symbol=str(best.get("symbol", "")).upper(),
+            name=str(best.get("name", best["id"])),
+        )
 
     @staticmethod
     def _asset(item: dict[str, Any], currency: str) -> MarketAsset:

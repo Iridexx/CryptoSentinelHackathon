@@ -24,6 +24,24 @@ APP_ID_BY_CMC_SLUG: dict[str, str] = {
 }
 
 
+# Con CMC come provider dell'app, i coin non presenti nella tabella sopra
+# vengono salvati (preferiti, allarmi) con lo slug CMC. Il checker degli
+# allarmi usa CoinGecko, dove quegli slug non esistono: senza traduzione il
+# prezzo non arriva mai e l'allarme non scatta. Solo id noti come diversi.
+COINGECKO_ID_BY_APP_ID: dict[str, str] = {
+    "aster": "aster-2",
+    "enjin-coin": "enjincoin",
+    "pancakeswap": "pancakeswap-token",
+}
+
+
+def coingecko_id_for_app_id(asset_id: str) -> str:
+    """Translate a stable application ID to the CoinGecko ID when it differs."""
+
+    normalized = asset_id.lower()
+    return COINGECKO_ID_BY_APP_ID.get(normalized, normalized)
+
+
 def cmc_slug_for_app_id(asset_id: str) -> str:
     """Translate a stable application ID to the CMC slug when it differs."""
 

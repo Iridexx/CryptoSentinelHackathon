@@ -130,13 +130,17 @@ async def run_price_check(registry: MarketDataRegistry | None = None) -> None:
             requested_count=len(union_coins),
         )
         return
-    logger.info(
+    missing_ids = [coin_id for coin_id in union_coins if coin_id not in prices]
+    # Un id senza prezzo significa allarmi che non possono scattare mai: deve
+    # emergere come warning, non come dettaglio di un info.
+    log_prices = logger.warning if missing_ids else logger.info
+    log_prices(
         "price_check_prices_loaded",
         provider=(registry or get_alert_market_data_registry()).active_name.value,
         device_count=len(units),
         requested_count=len(union_coins),
         returned_count=len(prices),
-        missing_ids=[coin_id for coin_id in union_coins if coin_id not in prices],
+        missing_ids=missing_ids,
     )
 
     for store, config, tokens in units:

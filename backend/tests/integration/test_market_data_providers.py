@@ -1013,3 +1013,61 @@ def test_notification_checker_depends_on_registry() -> None:
     source = (root / "backend/app/notifications/price_checker.py").read_text(encoding="utf-8")
     assert "get_alert_market_data_registry" in source
     assert "api.coingecko.com" not in source
+
+
+@pytest.mark.asyncio
+async def test_coingecko_prices_resolve_cmc_slugs_used_by_alerts() -> None:
+    """Un allarme salvato con lo slug CMC ('pancakeswap') deve ricevere il prezzo
+    dal checker, che usa CoinGecko dove l'id e' 'pancakeswap-token'."""
+
+    price_requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/coins/markets"):
+            ids = request.url.params["ids"].split(",")
+            known = {"pancakeswap-token": ("CAKE", "PancakeSwap"), "bitcoin": ("BTC", "Bitcoin")}
+            return httpx.Response(
+                200,
+                json=[
+                    {"id": i, "symbol": known[i][0].lower(), "name": known[i][1]}
+                    for i in ids
+                    if i in known
+                ],
+            )
+        if path.endswith("/search"):
+            # Nessun alias statico: 'brand-new-coin' si trova solo per nome esatto.
+            return httpx.Response(
+                200,
+                json={
+                    "coins": [
+                        {"id": "brand-new-coin-fake", "name": "Brand New Coin Fake", "symbol": "FAKE", "market_cap_rank": 5},
+                        {"id": "bnc-2", "name": "Brand New Coin", "symbol": "BNC", "market_cap_rank": 900},
+                        {"id": "bnc", "name": "Brand New Coin", "symbol": "BNC", "market_cap_rank": 300},
+                    ]
+                },
+            )
+        if path.endswith("/simple/price"):
+            price_requests.append(request.url.params["ids"])
+            return httpx.Response(
+                200,
+                json={
+                    "pancakeswap-token": {"usd": 2.6},
+                    "bnc": {"usd": 1.5},
+                    "bitcoin": {"usd": 80000.0},
+                },
+            )
+        raise AssertionError(path)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        gecko = CoinGeckoProvider(settings(), client)
+        registry = MarketDataRegistry(
+            settings(market_data_provider="cmc", market_data_alert_provider="coingecko"),
+            providers={ProviderName.CMC: StubProvider(ProviderName.CMC), ProviderName.COINGECKO: gecko},
+            active_override=ProviderName.COINGECKO,
+        )
+        quotes = await registry.get_prices(["pancakeswap", "brand-new-coin", "bitcoin"], ["usd"])
+
+    prices = {quote.asset_id: quote.price for quote in quotes}
+    assert prices == {"pancakeswap": 2.6, "brand-new-coin": 1.5, "bitcoin": 80000.0}
+    assert set(price_requests[0].split(",")) == {"pancakeswap-token", "bnc", "bitcoin"}
