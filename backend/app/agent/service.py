@@ -2342,7 +2342,7 @@ class AgentService:
                     reason = "instant_exit"
                     logger.info(
                         "instant_exit_triggered",
-                        asset=pos.asset, side=pos.side, level=float(instant_level),
+                        asset=pos.asset, side=pos.side, level_price=float(instant_level),
                         price=float(price), level_pct=float(instant_exit_pct),
                     )
 
