@@ -83,6 +83,33 @@ async def test_btc_1h_klines_caches_and_serves_stale(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_btc_1h_klines_paginates_beyond_1000_hours(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Oltre ~41 giorni una sola pagina appiattiva la curva BTC: serve paginare."""
+    view_routes._BTC_KLINES_CACHE.clear()
+    t0 = datetime(2026, 7, 1, tzinfo=UTC)
+    calls: list[datetime | None] = []
+
+    class _Feed:
+        async def fetch(self, *, limit, start_time=None, **kw):
+            calls.append(start_time)
+            first = int((start_time - t0).total_seconds() // 3600)
+            return [
+                type("C", (), {"close": "1", "timestamp": t0 + timedelta(hours=first + i)})()
+                for i in range(limit)
+            ]
+
+    monkeypatch.setattr(
+        "backend.app.agent.signals.perp.binance_klines.BinanceKlineFeed", lambda *a, **k: _Feed()
+    )
+    candles = await view_routes._btc_1h_klines(1300)
+    assert len(calls) == 2 and all(c is not None for c in calls)
+    assert len(candles) >= 1300
+    stamps = [c.timestamp for c in candles]
+    assert stamps == sorted(set(stamps))  # nessun buco né duplicato tra le pagine
+    view_routes._BTC_KLINES_CACHE.clear()
+
+
+@pytest.mark.asyncio
 async def test_btc_benchmark_aligns_reserve_snapshots_by_hourly_offset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -729,21 +729,49 @@ _BTC_KLINES_TTL_S = 300.0
 _BTC_KLINES_TIMEOUT_S = 12.0
 
 
+#: Binance restituisce al massimo 1000 candele per richiesta; oltre si pagina con
+#: startTime. Tetto di sicurezza: ~208 giorni di storico orario.
+_BTC_KLINES_PAGE = 1000
+_BTC_KLINES_MAX = 5000
+
+
 async def _btc_1h_klines(limit: int) -> list:
     import time
+    from datetime import timedelta
 
     from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 
-    bucket = min(1000, ((limit // 24) + 2) * 24)  # round up to whole days so near ranges share
+    limit = min(_BTC_KLINES_MAX, limit)
+    bucket = min(_BTC_KLINES_MAX, ((limit // 24) + 2) * 24)  # round up to whole days so near ranges share
     now = time.monotonic()
     hit = _BTC_KLINES_CACHE.get(bucket)
     if hit is not None and now - hit[0] < _BTC_KLINES_TTL_S:
         return hit[1]
+
+    async def _pull() -> list:
+        feed = BinanceKlineFeed()
+        if bucket <= _BTC_KLINES_PAGE:
+            return await feed.fetch(symbol="BTCUSDT", interval="1h", limit=bucket, market="spot")
+        # Storico oltre 1000 ore (~41 giorni): pagina in avanti da (adesso - bucket ore).
+        # Con una sola pagina la curva BTC si appiattiva dopo la 1000ª ora, perche'
+        # gli offset oltre l'ultima candela venivano clampati all'ultimo prezzo.
+        start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=bucket)
+        out: list = []
+        while len(out) < bucket:
+            page = await feed.fetch(
+                symbol="BTCUSDT", interval="1h", limit=_BTC_KLINES_PAGE, market="spot", start_time=start
+            )
+            if not page:
+                break
+            out.extend(page)
+            if len(page) < _BTC_KLINES_PAGE:
+                break
+            start = page[-1].timestamp + timedelta(hours=1)
+        return out
+
+    pages = -(-bucket // _BTC_KLINES_PAGE)
     try:
-        candles = await asyncio.wait_for(
-            BinanceKlineFeed().fetch(symbol="BTCUSDT", interval="1h", limit=bucket, market="spot"),
-            timeout=_BTC_KLINES_TIMEOUT_S,
-        )
+        candles = await asyncio.wait_for(_pull(), timeout=_BTC_KLINES_TIMEOUT_S * pages)
     except Exception:
         return hit[1] if hit is not None else []
     if candles:
@@ -768,7 +796,7 @@ async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
     span_hours = int(round((last_ts - first_ts).total_seconds() / 3600))
     if span_hours < 1:
         span_hours = 1
-    limit = min(1000, span_hours + 2)
+    limit = min(_BTC_KLINES_MAX, span_hours + 2)
     candles = await _btc_1h_klines(limit)
     candles = candles[-limit:]  # keep "most recent N" alignment regardless of cache bucket
     if not candles:
