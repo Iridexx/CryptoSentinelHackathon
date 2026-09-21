@@ -38,6 +38,10 @@ perp:
   # Range leva modulata sull'ATR in apertura (bassa vol → max, alta vol → min).
   min_leverage: 4
   max_leverage: 40
+  # Come si sceglie la leva: "atr" (sopra, dalla volatilità) | "stop" (dalla distanza dello
+  # stop: la perdita a stop pieno resta ~risk_at_stop_pct % del margine, sempre tra min e max).
+  leverage_mode: atr
+  risk_at_stop_pct: 20
   leverage_atr_period: 72          # periodo ATR per la leva
   leverage_atr_baseline_hours: 120 # baseline storica per atr_min/atr_max (~5gg, cap 1500 candele)
   volume_profile_window_hours: 24

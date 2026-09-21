@@ -381,6 +381,30 @@ Default mobile/config:
 
 Il segnale calcola una leva preliminare, ma `AgentService.evaluate_perp` la sovrascrive con i mobile settings correnti.
 
+### Modalita' di scelta della leva
+
+`perp_leverage_mode` seleziona come si sceglie la leva in apertura (default `atr`, comportamento sopra):
+
+- `atr`: dalla volatilita', come descritto in questa sezione. Con `min == max` la leva e' fissa.
+- `stop`: dalla distanza dello stop, cosi' la perdita a stop pieno resta ~costante.
+
+In modalita' `stop`:
+
+```text
+leva = perp_risk_at_stop_pct / (distanza stop % + costo andata e ritorno %)
+```
+
+arrotondata per difetto e limitata a `[perp_min_leverage, perp_max_leverage]`. Stop vicino -> leva alta, stop lontano -> leva bassa. Il costo andata e ritorno e' 0,10% (fee taker + slippage), costante `STOP_RISK_ROUND_TRIP_COST_PCT`.
+
+Non e' un filtro d'ingresso: se anche alla leva minima la perdita a stop pieno supera il rischio scelto, il trade si apre comunque a leva minima e nel log compare `perp_leverage_from_stop` con `clamped_at_min_leverage=true`. Senza entry/stop validi la leva e' quella minima.
+
+| Parametro | Default |
+|---|---:|
+| `perp_leverage_mode` | `atr` |
+| `perp_risk_at_stop_pct` | 20 |
+
+Con `min == max` (per esempio 28 e 28) la modalita' `stop` non puo' variare la leva: serve un intervallo (per esempio 3 e 28). Il moltiplicatore del trailing scala fra minima e massima leva, quindi con leva variabile diventa piu' stretto sui trade a leva alta.
+
 ---
 
 ## 15. Margine, Size E Fixed Margin

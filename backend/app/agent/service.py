@@ -15,7 +15,11 @@ from backend.app.agent.brain import BrainDecision, ClaudeMetaController, MetaCon
 from backend.app.agent.heartbeat import heartbeat
 from backend.app.agent.risk import KillSwitchState, RiskDecision, RiskManager, SignalIntent
 from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed, BinanceMarket, get_kline_cache_entry
-from backend.app.agent.signals.perp.volume_profile import VolumeProfileSignal, _atr_range_leverage as _perp_atr_range_leverage
+from backend.app.agent.signals.perp.volume_profile import (
+    VolumeProfileSignal,
+    _atr_range_leverage as _perp_atr_range_leverage,
+    _stop_risk_leverage as _perp_stop_risk_leverage,
+)
 from backend.app.agent.signals.spot.momentum import MIN_SPOT_CANDLES, SpotMomentumSignal
 from backend.app.agent.watchlist import selected_watchlist, selected_spot_watchlist, selected_perp_watchlist
 from backend.app.core.config import Settings, get_settings
@@ -199,6 +203,8 @@ class AgentService:
             perp_smart_sl_max_reentries=getattr(self.settings, "perp_smart_sl_max_reentries", 1),
             perp_instant_exit_enabled=getattr(self.settings, "perp_instant_exit_enabled", False),
             perp_instant_exit_level_pct=getattr(self.settings, "perp_instant_exit_level_pct", 25.0),
+            perp_leverage_mode=getattr(self.settings, "perp_leverage_mode", "atr"),
+            perp_risk_at_stop_pct=getattr(self.settings, "perp_risk_at_stop_pct", 20.0),
             # Legacy (backward compat)
             capital_per_trade_pct=cap,
             per_trade_pct=self.settings.risk_per_trade_pct,
@@ -955,19 +961,42 @@ class AgentService:
         if signal.get("action") != "skip":
             ms = self._ms
             components = signal.get("components") or {}
-            atr_now = components.get("atr_lev")
-            # Baseline storica più lunga per atr_min/atr_max (vol corrente vs storico ampio):
-            # così la leva è graduata e il minimo è riservato alle vere anomalie.
-            atr_min, atr_max = await self._perp_leverage_atr_baseline(
-                signal.get("asset"), payload, atr_now
-            )
-            signal["leverage"] = _perp_atr_range_leverage(
-                min_lev=ms.perp_min_leverage,
-                max_lev=ms.perp_max_leverage,
-                atr_value=atr_now,
-                atr_min=atr_min,
-                atr_max=atr_max,
-            )
+            if getattr(ms, "perp_leverage_mode", "atr") == "stop":
+                # Leva dalla distanza dello stop: la perdita a stop pieno resta ~costante.
+                # Non è un filtro: se il minimo è troppo alto il trade apre comunque.
+                entry_d = _optional_decimal(signal.get("price"))
+                stop_d = _optional_decimal(signal.get("stop_loss"))
+                leverage, clamped_min = _perp_stop_risk_leverage(
+                    min_lev=ms.perp_min_leverage,
+                    max_lev=ms.perp_max_leverage,
+                    entry=float(entry_d) if entry_d is not None else None,
+                    stop=float(stop_d) if stop_d is not None else None,
+                    risk_pct=getattr(ms, "perp_risk_at_stop_pct", 20.0),
+                )
+                signal["leverage"] = leverage
+                components["leverage_mode"] = "stop"
+                signal["components"] = components
+                logger.info(
+                    "perp_leverage_from_stop",
+                    asset=signal.get("asset"), leverage=leverage,
+                    risk_at_stop_pct=getattr(ms, "perp_risk_at_stop_pct", 20.0),
+                    entry_price=signal.get("price"), stop_loss=signal.get("stop_loss"),
+                    clamped_at_min_leverage=clamped_min,
+                )
+            else:
+                atr_now = components.get("atr_lev")
+                # Baseline storica più lunga per atr_min/atr_max (vol corrente vs storico ampio):
+                # così la leva è graduata e il minimo è riservato alle vere anomalie.
+                atr_min, atr_max = await self._perp_leverage_atr_baseline(
+                    signal.get("asset"), payload, atr_now
+                )
+                signal["leverage"] = _perp_atr_range_leverage(
+                    min_lev=ms.perp_min_leverage,
+                    max_lev=ms.perp_max_leverage,
+                    atr_value=atr_now,
+                    atr_min=atr_min,
+                    atr_max=atr_max,
+                )
         return await self._handle_signal(signal, session)
 
     async def _perp_leverage_atr_baseline(

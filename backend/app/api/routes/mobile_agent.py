@@ -159,6 +159,8 @@ def _settings_from_config(settings: SettingsDep) -> AgentMobileSettings:
         perp_direction_risk_cap_pct=getattr(settings, "perp_direction_risk_cap_pct", 6.0),
         perp_instant_exit_enabled=getattr(settings, "perp_instant_exit_enabled", False),
         perp_instant_exit_level_pct=getattr(settings, "perp_instant_exit_level_pct", 25.0),
+        perp_leverage_mode=getattr(settings, "perp_leverage_mode", "atr"),
+        perp_risk_at_stop_pct=getattr(settings, "perp_risk_at_stop_pct", 20.0),
         perp_direction_risk_cap_safety_mult=getattr(settings, "perp_direction_risk_cap_safety_mult", 1.3),
         perp_direction_risk_cap_recent_stops_minutes=getattr(
             settings, "perp_direction_risk_cap_recent_stops_minutes", 0

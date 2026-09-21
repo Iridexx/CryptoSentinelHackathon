@@ -152,6 +152,8 @@ const settingFields = [
   'spot_trailing_distance_pct',
   'perp_min_leverage',
   'perp_max_leverage',
+  'perp_leverage_mode',
+  'perp_risk_at_stop_pct',
   'perp_trailing_pnl_pct',
   'spot_tp1_close_pct',
   'perp_tp1_close_pct',
@@ -2904,12 +2906,15 @@ const SETTING_LABELS: Record<string, string> = {
   perp_direction_risk_cap_recent_stops_minutes: 'Tetto direzionale — stop recenti (min, 0 = off)',
   perp_instant_exit_enabled: 'Uscita totale istantanea perp (sospende lo Smart SL)',
   perp_instant_exit_level_pct: 'Uscita istantanea — livello % dello stop',
+  perp_leverage_mode: 'Leva perp — scelta in base a (atr / stop)',
+  perp_risk_at_stop_pct: 'Leva da stop — perdita a stop pieno % margine',
 };
 
 // Impostazioni testuali con valori ammessi: select invece di testo libero (un valore
 // sbagliato farebbe rifiutare il salvataggio dal backend).
 const SETTING_OPTIONS: Record<string, string[]> = {
   perp_direction_risk_cap_mode: ['solo_in_perdita', 'sempre'],
+  perp_leverage_mode: ['atr', 'stop'],
 };
 
 function SettingsPanel({

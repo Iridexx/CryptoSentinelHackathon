@@ -415,6 +415,8 @@ export interface AgentMobileSettings {
   perp_smart_sl_max_reentries: number;
   perp_instant_exit_enabled: boolean;
   perp_instant_exit_level_pct: number;
+  perp_leverage_mode: string;
+  perp_risk_at_stop_pct: number;
   perp_smart_sl_tp_adjust_after_rebuy: boolean;
   perp_smart_sl_tp_recovery_delta_pct: number;
   spot_breakeven_mode: string;

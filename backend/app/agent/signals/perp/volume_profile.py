@@ -266,6 +266,40 @@ def _atr_range_leverage(
     return max(lo, min(hi, int(round(leverage))))
 
 
+# Costo andata e ritorno (fee taker 2x4 bps + slippage) sommato alla distanza dello stop:
+# con stop vicini pesa, con stop lontani e' trascurabile. Stesso ordine di grandezza di
+# `perp_breakeven_buffer_pct`, che copre le stesse fee.
+STOP_RISK_ROUND_TRIP_COST_PCT = 0.10
+
+
+def _stop_risk_leverage(
+    *,
+    min_lev: int,
+    max_lev: int,
+    entry: float | None,
+    stop: float | None,
+    risk_pct: float,
+) -> tuple[int, bool]:
+    """Leva che fa perdere `risk_pct` % del margine se lo stop scatta a pieno.
+
+    leva = risk_pct / (distanza stop % + costo andata e ritorno %), arrotondata per difetto
+    e limitata a [min_lev, max_lev]: stop vicino → leva alta, stop lontano → leva bassa.
+    Non e' un filtro d'ingresso: se il minimo e' piu' alto di quanto servirebbe, il trade si
+    apre comunque a leva minima (il secondo valore restituito e' True e il chiamante lo logga).
+    Senza entry/stop validi ritorna la leva minima (conservativo).
+    """
+    lo = max(1, min(min_lev, max_lev))
+    hi = max(1, max(min_lev, max_lev))
+    if not entry or entry <= 0 or stop is None:
+        return lo, False
+    distance_pct = abs(entry - stop) / entry * 100.0
+    if distance_pct <= 0:
+        return lo, False
+    raw = risk_pct / (distance_pct + STOP_RISK_ROUND_TRIP_COST_PCT)
+    leverage = max(lo, min(hi, int(raw)))
+    return leverage, raw < lo
+
+
 def _skip(payload: SignalPayload, reason: str) -> SignalResult:
     return {
         "signal_id": payload.get("signal_id"),

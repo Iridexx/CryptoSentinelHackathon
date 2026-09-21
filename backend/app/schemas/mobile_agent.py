@@ -89,6 +89,11 @@ class AgentMobileSettings(BaseModel):
     # Stop Loss perp e' sospeso automaticamente (il suo valore salvato non viene toccato).
     perp_instant_exit_enabled: bool = False
     perp_instant_exit_level_pct: float = Field(default=25.0, ge=5.0, le=90.0)
+    # Come si sceglie la leva in apertura: "atr" = dalla volatilita' (min/max leva),
+    # "stop" = dalla distanza dello stop, cosi' la perdita a stop pieno e' ~costante
+    # (`perp_risk_at_stop_pct` % del margine), sempre entro [min, max] leva.
+    perp_leverage_mode: str = Field(default="atr", pattern="^(atr|stop)$")
+    perp_risk_at_stop_pct: float = Field(default=20.0, ge=1.0, le=100.0)
 
     # --- Parametri SPOT ---
     spot_capital_per_trade_pct: float = Field(default=6.0, gt=0.0, le=100.0)

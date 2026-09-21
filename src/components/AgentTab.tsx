@@ -178,6 +178,8 @@ const defaultSettings: AgentMobileSettings = {
   perp_smart_sl_max_reentries: 1,
   perp_instant_exit_enabled: false,
   perp_instant_exit_level_pct: 25,
+  perp_leverage_mode: 'atr' as const,
+  perp_risk_at_stop_pct: 20,
   perp_smart_sl_tp_adjust_after_rebuy: true,
   perp_smart_sl_tp_recovery_delta_pct: 7,
   spot_breakeven_mode: 'atr' as const,
@@ -2207,8 +2209,15 @@ const SetupPane: FC<{
                 { value: 'short_only', label: 'Short' },
                 { value: 'long_short', label: 'Both' },
               ]} />
-              <NumberInput label="Leva min (alta vol.)" showHelp={h} help="Leva usata quando la volatilità è alta. Mercato agitato, leva bassa: si rischia meno su movimenti ampi." value={settings.perp_min_leverage} onChange={(perp_min_leverage) => patch({ perp_min_leverage })} />
-              <NumberInput label="Leva max (bassa vol.)" showHelp={h} help="Leva usata quando la volatilità è bassa. Mercato calmo, leva alta: serve più leva per un guadagno sensato." value={settings.perp_max_leverage} onChange={(perp_max_leverage) => patch({ perp_max_leverage })} />
+              <SelectInput label="Leva scelta in base a" showHelp={h} help={'Come il bot sceglie la leva all\'apertura:\n\nATR — dalla volatilità: mercato calmo leva alta, agitato leva bassa\nStop loss — dalla distanza dello stop: stop vicino leva alta, stop lontano leva bassa, così se lo stop scatta perdi sempre più o meno la stessa quota di margine\n\nIn entrambi i casi la leva resta tra minima e massima. Il bot entra sempre: non è un filtro.'} value={settings.perp_leverage_mode} onChange={(v) => patch({ perp_leverage_mode: v as 'atr' | 'stop' })} options={[
+                { value: 'atr', label: 'ATR (volatilità)' },
+                { value: 'stop', label: 'Stop loss (rischio fisso)' },
+              ]} />
+              {settings.perp_leverage_mode === 'stop' && (
+                <NumberInput label="Perdita a stop pieno (% margine)" showHelp={h} help="Quanta parte del margine perdi se lo stop scatta a pieno. 20 con 50$ di margine vuol dire circa 10$. La leva viene calcolata di conseguenza (comprese le commissioni)." value={settings.perp_risk_at_stop_pct} step={1} onChange={(perp_risk_at_stop_pct) => patch({ perp_risk_at_stop_pct: Math.min(100, Math.max(1, perp_risk_at_stop_pct)) })} />
+              )}
+              <NumberInput label={settings.perp_leverage_mode === 'stop' ? 'Leva min (stop lontano)' : 'Leva min (alta vol.)'} showHelp={h} help={settings.perp_leverage_mode === 'stop' ? 'Leva più bassa che il bot può usare, quando lo stop è molto lontano. Se serve meno di così, il trade si apre comunque a questa leva e la perdita a stop pieno sarà più alta di quella scelta.' : 'Leva usata quando la volatilità è alta. Mercato agitato, leva bassa: si rischia meno su movimenti ampi.'} value={settings.perp_min_leverage} onChange={(perp_min_leverage) => patch({ perp_min_leverage })} />
+              <NumberInput label={settings.perp_leverage_mode === 'stop' ? 'Leva max (stop vicino)' : 'Leva max (bassa vol.)'} showHelp={h} help={settings.perp_leverage_mode === 'stop' ? 'Leva più alta che il bot può usare, quando lo stop è molto vicino.' : 'Leva usata quando la volatilità è bassa. Mercato calmo, leva alta: serve più leva per un guadagno sensato.'} value={settings.perp_max_leverage} onChange={(perp_max_leverage) => patch({ perp_max_leverage })} />
               <NumberInput label="Value area %" showHelp={h} help={'Quanta parte del volume definisce la zona di prezzo dove il mercato ha scambiato di più. Il segnale nasce ai bordi di questa zona.'} value={settings.perp_value_area_pct} onChange={(perp_value_area_pct) => patch({ perp_value_area_pct })} />
               <NumberInput label="ATR stop" showHelp={h} help={'Distanza dello stop dall\'ingresso in ATR, quando lo stop è di tipo ATR. Più alto, stop più largo.'} value={settings.perp_atr_stop_multiplier} step={0.1} onChange={(perp_atr_stop_multiplier) => patch({ perp_atr_stop_multiplier })} />
               <NumberInput label="Buffer Min/Max20 %" showHelp={h} help="Cuscinetto oltre il minimo (o massimo) recente, quando lo stop è strutturale. Evita di farsi prendere lo stop per un soffio." value={settings.perp_structural_stop_buffer_pct} step={0.1} onChange={(perp_structural_stop_buffer_pct) => patch({ perp_structural_stop_buffer_pct })} />
