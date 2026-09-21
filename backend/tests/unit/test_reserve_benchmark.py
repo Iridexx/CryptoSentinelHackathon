@@ -108,6 +108,13 @@ async def test_btc_1h_klines_paginates_beyond_1000_hours(monkeypatch: pytest.Mon
     assert stamps == sorted(set(stamps))  # nessun buco né duplicato tra le pagine
     view_routes._BTC_KLINES_CACHE.clear()
 
+    # Nessun tetto: oltre 5000 ore si continua a paginare (prima si troncava e
+    # la curva tornava piatta).
+    calls.clear()
+    candles = await view_routes._btc_1h_klines(6200)
+    assert len(calls) == 7 and len(candles) >= 6200
+    view_routes._BTC_KLINES_CACHE.clear()
+
 
 @pytest.mark.asyncio
 async def test_btc_benchmark_aligns_reserve_snapshots_by_hourly_offset(

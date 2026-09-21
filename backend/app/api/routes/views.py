@@ -730,9 +730,10 @@ _BTC_KLINES_TIMEOUT_S = 12.0
 
 
 #: Binance restituisce al massimo 1000 candele per richiesta; oltre si pagina con
-#: startTime. Tetto di sicurezza: ~208 giorni di storico orario.
+#: startTime. Nessun tetto sullo storico: un tetto riporterebbe la curva BTC piatta
+#: (offset clampati all'ultima candela) e sfaserebbe la base. Il costo e' limitato
+#: dalla cache (una richiesta ogni _BTC_KLINES_TTL_S) e dal timeout per pagina.
 _BTC_KLINES_PAGE = 1000
-_BTC_KLINES_MAX = 5000
 
 
 async def _btc_1h_klines(limit: int) -> list:
@@ -741,8 +742,7 @@ async def _btc_1h_klines(limit: int) -> list:
 
     from backend.app.agent.signals.perp.binance_klines import BinanceKlineFeed
 
-    limit = min(_BTC_KLINES_MAX, limit)
-    bucket = min(_BTC_KLINES_MAX, ((limit // 24) + 2) * 24)  # round up to whole days so near ranges share
+    bucket = ((limit // 24) + 2) * 24  # round up to whole days so near ranges share
     now = time.monotonic()
     hit = _BTC_KLINES_CACHE.get(bucket)
     if hit is not None and now - hit[0] < _BTC_KLINES_TTL_S:
@@ -775,6 +775,10 @@ async def _btc_1h_klines(limit: int) -> list:
     except Exception:
         return hit[1] if hit is not None else []
     if candles:
+        # Il bucket cresce di un giorno alla volta sui range lunghi: scarta le
+        # voci vecchie di un giorno per non accumulare serie obsolete.
+        for key in [k for k, (ts, _) in _BTC_KLINES_CACHE.items() if now - ts > 86400.0]:
+            del _BTC_KLINES_CACHE[key]
         _BTC_KLINES_CACHE[bucket] = (now, candles)
         return candles
     return hit[1] if hit is not None else []
@@ -796,7 +800,7 @@ async def _btc_benchmark(snapshots: list[PnlSnapshot]) -> dict[str, Decimal]:
     span_hours = int(round((last_ts - first_ts).total_seconds() / 3600))
     if span_hours < 1:
         span_hours = 1
-    limit = min(_BTC_KLINES_MAX, span_hours + 2)
+    limit = span_hours + 2
     candles = await _btc_1h_klines(limit)
     candles = candles[-limit:]  # keep "most recent N" alignment regardless of cache bucket
     if not candles:
