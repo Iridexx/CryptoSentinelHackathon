@@ -24,8 +24,9 @@ interface Props {
   xMinSpan: number;
   onX: (r: Range | null) => void;
   /**
-   * Pan del grafico. Mouse: trascinando. Touch: trascinando in orizzontale, oppure tenendo premuto
-   * un istante e poi trascinando in qualsiasi direzione (cosi' lo scroll verticale della pagina resta libero).
+   * Pan del grafico. Mouse: trascinando. Touch: a grafico zoomato trascinando in qualsiasi direzione;
+   * a grafico intero in orizzontale, oppure tenendo premuto un istante e poi trascinando in qualsiasi
+   * direzione (cosi' lo scroll verticale della pagina resta libero finche' non serve il pan).
    */
   pan?: boolean;
   /** Puntatore (mouse) che si muove sul grafico senza premere: serve a chi mostra un crosshair. */
@@ -37,7 +38,8 @@ interface Props {
 const SENS = 0.008; // ~ x2 di zoom ogni 87px di trascinamento
 const TAP_MS = 350;
 const TAP_MOVE_PX = 6;
-const HOLD_MS = 250;
+const HOLD_MS = 200;
+const HOLD_JITTER_PX = 10;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
@@ -56,6 +58,8 @@ type Drag =
  */
 const AxisZoomOverlay: FC<Props> = ({ geom, yDom, yFull, onY, xWin, xFull, xMinSpan, onX, pan = false, onHover, yAxis = 'right' }) => {
   const { W, H, plotL, plotR, plotT, plotB } = geom;
+  // A grafico zoomato il pan touch e' libero da subito: il grafico si prende il gesto (touch-action: none).
+  const zoomedNow = xWin[0] !== xFull[0] || xWin[1] !== xFull[1] || yDom[0] !== yFull[0] || yDom[1] !== yFull[1];
   const drag = useRef<Drag | null>(null);
   const lastTap = useRef<{ kind: string; t: number }>({ kind: '', t: 0 });
   const [active, setActive] = useState<'y' | 'x' | 'pan' | null>(null);
@@ -96,8 +100,8 @@ const AxisZoomOverlay: FC<Props> = ({ geom, yDom, yFull, onY, xWin, xFull, xMinS
       const touch = e.pointerType === 'touch';
       drag.current = { kind, sx, sy, a: xWin[0], b: xWin[1], lo: yDom[0], hi: yDom[1], touch };
       window.clearTimeout(holdTimer.current);
-      holdRef.current = !touch;
-      if (touch) {
+      holdRef.current = !touch || zoomedNow;
+      if (touch && !zoomedNow) {
         holdTimer.current = window.setTimeout(() => {
           holdRef.current = true;
           setHeld(true);
@@ -126,7 +130,7 @@ const AxisZoomOverlay: FC<Props> = ({ geom, yDom, yFull, onY, xWin, xFull, xMinS
       onX([a, a + span]);
     } else {
       // Un movimento prima della pressione lunga e' uno swipe: niente hold, lo scroll verticale resta alla pagina.
-      if (d.touch && !holdRef.current && Math.hypot(dx, dy) > TAP_MOVE_PX) window.clearTimeout(holdTimer.current);
+      if (d.touch && !holdRef.current && Math.hypot(dx, dy) > HOLD_JITTER_PX) window.clearTimeout(holdTimer.current);
       const rect = e.currentTarget.getBoundingClientRect();
       const span = d.b - d.a;
       const a = clamp(d.a - (dx / rect.width) * span, xFull[0], xFull[1] - span);
@@ -191,7 +195,7 @@ const AxisZoomOverlay: FC<Props> = ({ geom, yDom, yFull, onY, xWin, xFull, xMinS
 
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {pan && strip('pan', plotL, plotT, plotR - plotL, plotB - plotT, 'pan-y', 'grab')}
+      {pan && strip('pan', plotL, plotT, plotR - plotL, plotB - plotT, zoomedNow ? 'none' : 'pan-y', 'grab')}
       {yAxis === 'left'
         ? strip('y', 0, plotT, plotL, plotB - plotT, 'none', 'ns-resize')
         : strip('y', plotR, plotT, W - plotR, plotB - plotT, 'none', 'ns-resize')}
